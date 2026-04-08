@@ -1,0 +1,24 @@
+# Go
+/go-cli
+*.exe
+*.test
+*.out
+
+# TUI
+tui/node_modules/
+tui/dist/
+tui/.tsbuildinfo
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Sessions and artifacts (local data)
+.go-cli/
