@@ -59,7 +59,7 @@
 
 ### `internal/agent/`
 - [x] `context_inject.go` — Two-layer injection implemented
-- [ ] Wire context injection into query loop (per-turn refresh)
+- [x] Wire context injection into query loop (per-turn refresh)
 
 ### `internal/cost/`
 - [x] `tracker.go` — Per-model token/cost/duration tracking, thread-safe Snapshot

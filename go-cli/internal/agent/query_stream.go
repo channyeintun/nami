@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"iter"
+	"strings"
 	"time"
 
 	"github.com/channyeintun/go-cli/internal/api"
@@ -45,6 +46,10 @@ type QueryDeps struct {
 // QueryState tracks iteration state within a query.
 type QueryState struct {
 	Messages      []api.Message
+	BasePrompt    string
+	SystemPrompt  string
+	SystemContext SystemContext
+	TurnContext   TurnContext
 	Mode          ExecutionMode
 	Profile       ExecutionProfile
 	TurnCount     int
@@ -56,10 +61,13 @@ type QueryState struct {
 // NewQueryState creates initial state from a request.
 func NewQueryState(req QueryRequest) *QueryState {
 	return &QueryState{
-		Messages: req.Messages,
-		Mode:     req.Mode,
-		Profile:  ProfileForMode(req.Mode),
-		MaxTurns: 50,
+		Messages:      req.Messages,
+		BasePrompt:    req.SystemPrompt,
+		SystemPrompt:  req.SystemPrompt,
+		SystemContext: LoadSystemContext(),
+		Mode:          req.Mode,
+		Profile:       ProfileForMode(req.Mode),
+		MaxTurns:      50,
 	}
 }
 
@@ -109,6 +117,8 @@ func runIteration(
 	yield func(ipc.StreamEvent, error) bool,
 ) error {
 	state.TurnCount++
+	state.TurnContext = LoadTurnContext()
+	state.SystemPrompt = composeSystemPrompt(state.BasePrompt, state.SystemContext, state.TurnContext)
 
 	// Phase 1: Setup — apply result budgets, compact if needed
 	if deps.ApplyResultBudget != nil {
@@ -128,4 +138,16 @@ func runIteration(
 	// (check stop_reason, continuation tracker, mode policy)
 
 	return nil
+}
+
+func composeSystemPrompt(basePrompt string, sys SystemContext, turn TurnContext) string {
+	contextPrompt := strings.TrimSpace(FormatContextPrompt(sys, turn))
+	basePrompt = strings.TrimSpace(basePrompt)
+	if basePrompt == "" {
+		return contextPrompt
+	}
+	if contextPrompt == "" {
+		return basePrompt
+	}
+	return basePrompt + "\n\n" + contextPrompt
 }
