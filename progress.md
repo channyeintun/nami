@@ -29,7 +29,7 @@
 - [x] `token_budget.go` — ContinuationTracker with diminishing returns logic
 - [x] `context_inject.go` — SystemContext (session-stable) + TurnContext (per-turn refresh)
 - [x] `loop.go` — Wire real model calls into the 5-phase iteration
-- [ ] `planner.go` — Plan creation + enforcement before writes
+- [x] `planner.go` — Plan creation + enforcement before writes
 
 ### `internal/tools/` — Tool Execution
 
@@ -203,4 +203,4 @@
 | Ink TUI        | ✅                   | ❌ (not built)                                                                  |
 | CLI Entrypoint | ✅                   | ✅ (live stdio engine)                                                          |
 
-**Current state:** All four provider clients, the Bash tool, and the file read/write/edit/glob/grep/web_search/web_fetch/git tools are implemented, along with the streaming executor needed to overlap safe tool calls. The stdio engine now persists and restores transcript + session metadata, supports runtime `/model` switching, exposes `/plan`, `/fast`, `/compact`, `/model`, `/cost`, `/usage`, and `/resume` over the stdio command path, emits markdown-backed implementation-plan/tool-log artifacts during planning and oversized tool execution, and the Ink TUI now tracks artifact events to render implementation plans and recent artifact previews. The next concrete task is planner enforcement or deeper compaction work beyond the current manual trigger.
+**Current state:** All four provider clients, the Bash tool, and the file read/write/edit/glob/grep/web_search/web_fetch/git tools are implemented, along with the streaming executor needed to overlap safe tool calls. The stdio engine now persists and restores transcript + session metadata, supports runtime `/model` switching, exposes `/plan`, `/fast`, `/compact`, `/model`, `/cost`, `/usage`, and `/resume` over the stdio command path, emits markdown-backed implementation-plan/tool-log artifacts during planning and oversized tool execution, keeps plan mode read-only through planner enforcement, and the Ink TUI now tracks artifact events to render implementation plans and recent artifact previews. The next concrete task is deeper compaction work beyond the current manual trigger.

@@ -178,9 +178,19 @@ func runStdioEngine(ctx context.Context, cfg config.Config) error {
 			})
 			messagesBeforeQuery := len(messages)
 			planArtifactID := ""
-			if mode == agent.ModePlan {
-				planArtifactID, err = ensurePlanArtifact(ctx, bridge, artifactManager, sessionID, payload.Text)
-				if err != nil {
+			planner := agent.NewPlanner(mode, sessionID, artifactManager)
+			if update, beginErr := planner.BeginTurn(ctx, payload.Text); beginErr != nil {
+				if emitErr := bridge.EmitError(fmt.Sprintf("persist implementation plan artifact: %v", beginErr), true); emitErr != nil {
+					return emitErr
+				}
+			} else if update != nil {
+				planArtifactID = update.Artifact.ID
+				if update.Created {
+					if err := emitArtifactCreated(bridge, update.Artifact); err != nil {
+						return err
+					}
+				}
+				if err := emitArtifactUpdated(bridge, update.Artifact, update.Content); err != nil {
 					return err
 				}
 			}
@@ -190,7 +200,7 @@ func runStdioEngine(ctx context.Context, cfg config.Config) error {
 					return trackModelStream(callCtx, bridge, tracker, client, req)
 				},
 				ExecuteToolBatch: func(callCtx context.Context, calls []api.ToolCall) ([]api.ToolResult, error) {
-					return executeToolCalls(callCtx, bridge, registry, permissionCtx, tracker, artifactManager, sessionID, calls)
+					return executeToolCalls(callCtx, bridge, registry, permissionCtx, tracker, planner, artifactManager, sessionID, calls)
 				},
 				CompactMessages: func(callCtx context.Context, current []api.Message, reason agent.CompactReason) ([]api.Message, error) {
 					pipeline := compact.NewPipeline(client.Capabilities().MaxContextWindow, nil)
@@ -242,9 +252,20 @@ func runStdioEngine(ctx context.Context, cfg config.Config) error {
 				}
 			}
 
-			if mode == agent.ModePlan && !queryFailed {
-				if err := finalizePlanArtifact(ctx, bridge, artifactManager, planArtifactID, sessionID, payload.Text, messages, messagesBeforeQuery); err != nil {
-					return err
+			if !queryFailed {
+				if update, finalizeErr := planner.FinalizeTurn(ctx, planArtifactID, payload.Text, messages, messagesBeforeQuery); finalizeErr != nil {
+					if emitErr := bridge.EmitError(fmt.Sprintf("update implementation plan artifact: %v", finalizeErr), true); emitErr != nil {
+						return emitErr
+					}
+				} else if update != nil {
+					if update.Created {
+						if err := emitArtifactCreated(bridge, update.Artifact); err != nil {
+							return err
+						}
+					}
+					if err := emitArtifactUpdated(bridge, update.Artifact, update.Content); err != nil {
+						return err
+					}
 				}
 			}
 		case ipc.MsgSlashCommand:
@@ -390,7 +411,7 @@ func defaultSystemPrompt() string {
 func systemPromptForMode(mode agent.ExecutionMode) string {
 	prompt := defaultSystemPrompt()
 	if mode == agent.ModePlan {
-		return prompt + "\n\nWhen plan mode is active, respond with a concrete markdown implementation plan before proposing file mutations. Keep the plan actionable and review-friendly."
+		return prompt + "\n\nWhen plan mode is active, respond with a concrete markdown implementation plan before proposing file mutations. Keep the plan actionable and review-friendly. " + agent.PlanModePromptHint()
 	}
 	return prompt
 }
@@ -401,6 +422,7 @@ func executeToolCalls(
 	registry *toolpkg.Registry,
 	permissionCtx *permissions.Context,
 	tracker *costpkg.Tracker,
+	planner *agent.Planner,
 	artifactManager *artifactspkg.Manager,
 	sessionID string,
 	calls []api.ToolCall,
@@ -429,6 +451,13 @@ func executeToolCalls(
 		}
 
 		pendingCall := toolpkg.PendingCall{Index: index, Tool: tool, Input: input}
+		if err := planner.ValidateTool(ctx, pendingCall.Tool.Name(), pendingCall.Tool.Permission()); err != nil {
+			results[index] = api.ToolResult{ToolCallID: call.ID, Output: err.Error(), IsError: true}
+			if emitErr := bridge.Emit(ipc.EventToolError, ipc.ToolErrorPayload{ToolID: call.ID, Error: err.Error()}); emitErr != nil {
+				return nil, emitErr
+			}
+			continue
+		}
 		allowed, denyReason, err := authorizeToolCall(ctx, bridge, permissionCtx, pendingCall)
 		if err != nil {
 			return nil, err
@@ -955,93 +984,6 @@ func emitTextResponse(bridge *ipc.Bridge, text string) error {
 	return bridge.Emit(ipc.EventTurnComplete, ipc.TurnCompletePayload{StopReason: "end_turn"})
 }
 
-func ensurePlanArtifact(
-	ctx context.Context,
-	bridge *ipc.Bridge,
-	artifactManager *artifactspkg.Manager,
-	sessionID string,
-	userRequest string,
-) (string, error) {
-	content := artifactspkg.DraftImplementationPlanMarkdown(userRequest)
-	artifact, _, created, err := artifactManager.UpsertSessionMarkdown(ctx, artifactspkg.MarkdownRequest{
-		Kind:    artifactspkg.KindImplementationPlan,
-		Scope:   artifactspkg.ScopeSession,
-		Title:   "Implementation Plan",
-		Source:  "planner",
-		Content: content,
-		Metadata: map[string]any{
-			"mode": "plan",
-		},
-	}, sessionID, "active")
-	if err != nil {
-		if emitErr := bridge.EmitError(fmt.Sprintf("persist implementation plan artifact: %v", err), true); emitErr != nil {
-			return "", emitErr
-		}
-		return "", nil
-	}
-	if created {
-		if err := emitArtifactCreated(bridge, artifact); err != nil {
-			return "", err
-		}
-	}
-	if err := emitArtifactUpdated(bridge, artifact, content); err != nil {
-		return "", err
-	}
-	return artifact.ID, nil
-}
-
-func finalizePlanArtifact(
-	ctx context.Context,
-	bridge *ipc.Bridge,
-	artifactManager *artifactspkg.Manager,
-	artifactID string,
-	sessionID string,
-	userRequest string,
-	messages []api.Message,
-	fromIndex int,
-) error {
-	plan := latestAssistantMessageSince(messages, fromIndex)
-	if strings.TrimSpace(plan) == "" {
-		return nil
-	}
-
-	content := artifactspkg.RenderImplementationPlanMarkdown(userRequest, plan)
-	request := artifactspkg.MarkdownRequest{
-		ID:      artifactID,
-		Kind:    artifactspkg.KindImplementationPlan,
-		Scope:   artifactspkg.ScopeSession,
-		Title:   "Implementation Plan",
-		Source:  "planner",
-		Content: content,
-		Metadata: map[string]any{
-			"mode": "plan",
-		},
-	}
-
-	var (
-		artifact artifactspkg.Artifact
-		created  bool
-		err      error
-	)
-	if strings.TrimSpace(artifactID) == "" {
-		artifact, _, created, err = artifactManager.UpsertSessionMarkdown(ctx, request, sessionID, "active")
-	} else {
-		artifact, _, created, err = artifactManager.SaveMarkdown(ctx, request)
-	}
-	if err != nil {
-		if emitErr := bridge.EmitError(fmt.Sprintf("update implementation plan artifact: %v", err), true); emitErr != nil {
-			return emitErr
-		}
-		return nil
-	}
-	if created {
-		if err := emitArtifactCreated(bridge, artifact); err != nil {
-			return err
-		}
-	}
-	return emitArtifactUpdated(bridge, artifact, content)
-}
-
 func emitArtifactCreated(bridge *ipc.Bridge, artifact artifactspkg.Artifact) error {
 	return bridge.Emit(ipc.EventArtifactCreated, ipc.ArtifactCreatedPayload{
 		ID:    artifact.ID,
@@ -1055,26 +997,6 @@ func emitArtifactUpdated(bridge *ipc.Bridge, artifact artifactspkg.Artifact, con
 		ID:      artifact.ID,
 		Content: content,
 	})
-}
-
-func latestAssistantMessageSince(messages []api.Message, fromIndex int) string {
-	if fromIndex < 0 {
-		fromIndex = 0
-	}
-	if fromIndex > len(messages) {
-		fromIndex = len(messages)
-	}
-	for index := len(messages) - 1; index >= fromIndex; index-- {
-		message := messages[index]
-		if message.Role != api.RoleAssistant {
-			continue
-		}
-		if strings.TrimSpace(message.Content) == "" {
-			continue
-		}
-		return message.Content
-	}
-	return ""
 }
 
 func budgetToolOutput(
