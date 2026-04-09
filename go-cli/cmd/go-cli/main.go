@@ -24,6 +24,7 @@ import (
 	"github.com/channyeintun/go-cli/internal/config"
 	costpkg "github.com/channyeintun/go-cli/internal/cost"
 	"github.com/channyeintun/go-cli/internal/ipc"
+	"github.com/channyeintun/go-cli/internal/localmodel"
 	"github.com/channyeintun/go-cli/internal/permissions"
 	"github.com/channyeintun/go-cli/internal/session"
 	skillspkg "github.com/channyeintun/go-cli/internal/skills"
@@ -1083,6 +1084,7 @@ type compactionSummarizer struct {
 	bridge  *ipc.Bridge
 	tracker *costpkg.Tracker
 	client  api.LLMClient
+	router  *localmodel.Router
 }
 
 func newCompactionPipeline(bridge *ipc.Bridge, tracker *costpkg.Tracker, client api.LLMClient) *compact.Pipeline {
@@ -1090,10 +1092,17 @@ func newCompactionPipeline(bridge *ipc.Bridge, tracker *costpkg.Tracker, client 
 		bridge:  bridge,
 		tracker: tracker,
 		client:  client,
+		router:  localmodel.NewRouter(client),
 	})
 }
 
 func (s compactionSummarizer) Summarize(ctx context.Context, messages []api.Message) (string, error) {
+	if summary, usedLocal, err := s.summarizeWithLocal(messages); usedLocal {
+		if err == nil && strings.TrimSpace(summary) != "" {
+			return compact.NormalizeSummary(summary), nil
+		}
+	}
+
 	stream, err := s.client.Stream(ctx, api.ModelRequest{
 		Messages:     messages,
 		SystemPrompt: compact.CompactionPromptTemplate,
@@ -1135,6 +1144,56 @@ func (s compactionSummarizer) Summarize(ctx context.Context, messages []api.Mess
 	}
 
 	return compact.NormalizeSummary(builder.String()), nil
+}
+
+func (s compactionSummarizer) summarizeWithLocal(messages []api.Message) (string, bool, error) {
+	if s.router == nil {
+		return "", false, nil
+	}
+
+	prompt := renderCompactionPrompt(messages)
+	if strings.TrimSpace(prompt) == "" {
+		return "", false, nil
+	}
+
+	return s.router.TryLocal(localmodel.TaskCompaction, prompt, 2048)
+}
+
+func renderCompactionPrompt(messages []api.Message) string {
+	var builder strings.Builder
+	builder.WriteString(compact.CompactionPromptTemplate)
+	builder.WriteString("\n\nConversation:\n")
+
+	for _, message := range messages {
+		content := strings.TrimSpace(message.Content)
+		if content == "" && len(message.ToolCalls) == 0 && message.ToolResult == nil {
+			continue
+		}
+
+		builder.WriteString("\n[")
+		builder.WriteString(strings.ToUpper(string(message.Role)))
+		builder.WriteString("]\n")
+
+		if content != "" {
+			builder.WriteString(content)
+			builder.WriteString("\n")
+		}
+		for _, call := range message.ToolCalls {
+			builder.WriteString("Tool call ")
+			builder.WriteString(call.Name)
+			builder.WriteString(": ")
+			builder.WriteString(call.Input)
+			builder.WriteString("\n")
+		}
+		if message.ToolResult != nil && strings.TrimSpace(message.ToolResult.Output) != "" {
+			builder.WriteString("Tool result: ")
+			builder.WriteString(strings.TrimSpace(message.ToolResult.Output))
+			builder.WriteString("\n")
+		}
+	}
+
+	builder.WriteString("\nSummary:\n")
+	return builder.String()
 }
 
 func persistSessionState(store *session.Store, params sessionStateParams) error {

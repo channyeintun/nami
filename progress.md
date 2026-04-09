@@ -165,8 +165,8 @@
 
 - [x] `runner.go` — Ollama auto-detection, NewLocalModel
 - [x] `router.go` — Task-based routing (compaction/scoring/title → local, reasoning → remote)
-- [ ] Implement Query() method (POST to Ollama /api/generate)
-- [ ] Wire into compact/summarize.go
+- [x] Implement Query() method (POST to Ollama /api/generate)
+- [x] Wire into compact/summarize.go
 - [ ] Wire into session title generation
 
 ---
@@ -199,7 +199,7 @@
 | Session        | ✅                   | ✅ (live save + restore wired for transcript, mode, model, cwd)                 |
 | Config         | ✅                   | ✅                                                                              |
 | Skills         | ✅                   | ✅ (auto-select matching skills and inject their markdown instructions per turn) |
-| Local Model    | ✅                   | ❌ (not wired)                                                                  |
+| Local Model    | ✅                   | ✅ (Ollama Query + compaction routing wired; session title generation remains follow-up) |
 | Ink TUI        | ✅                   | ❌ (not built)                                                                  |
 | CLI Entrypoint | ✅                   | ✅ (live stdio engine)                                                          |
 

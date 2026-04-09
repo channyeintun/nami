@@ -6,11 +6,11 @@ import "github.com/channyeintun/go-cli/internal/api"
 type TaskType int
 
 const (
-	TaskCompaction   TaskType = iota // prefer local
-	TaskScoring                      // prefer local
-	TaskTitleGen                     // prefer local
-	TaskIntentDetect                 // prefer local
-	TaskMainReasoning                // always remote
+	TaskCompaction    TaskType = iota // prefer local
+	TaskScoring                       // prefer local
+	TaskTitleGen                      // prefer local
+	TaskIntentDetect                  // prefer local
+	TaskMainReasoning                 // always remote
 )
 
 // Router decides whether to use local or remote model for a task.
@@ -55,4 +55,18 @@ func (r *Router) ShouldUseLocal(task TaskType) bool {
 	default:
 		return false
 	}
+}
+
+// TryLocal runs a task on the local model when routing allows it.
+// The returned bool reports whether a local attempt was made.
+func (r *Router) TryLocal(task TaskType, prompt string, maxTokens int) (string, bool, error) {
+	if !r.ShouldUseLocal(task) || r.local == nil {
+		return "", false, nil
+	}
+
+	response, err := r.local.Query(prompt, maxTokens)
+	if err != nil {
+		return "", true, err
+	}
+	return response, true, nil
 }
