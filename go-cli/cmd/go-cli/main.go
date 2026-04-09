@@ -26,6 +26,7 @@ import (
 	"github.com/channyeintun/go-cli/internal/ipc"
 	"github.com/channyeintun/go-cli/internal/permissions"
 	"github.com/channyeintun/go-cli/internal/session"
+	skillspkg "github.com/channyeintun/go-cli/internal/skills"
 	toolpkg "github.com/channyeintun/go-cli/internal/tools"
 )
 
@@ -176,6 +177,7 @@ func runStdioEngine(ctx context.Context, cfg config.Config) error {
 				Role:    api.RoleUser,
 				Content: payload.Text,
 			})
+			availableSkills, _ := skillspkg.LoadAll(cwd)
 			messagesBeforeQuery := len(messages)
 			planArtifactID := ""
 			planner := agent.NewPlanner(mode, sessionID, artifactManager)
@@ -234,6 +236,7 @@ func runStdioEngine(ctx context.Context, cfg config.Config) error {
 				SystemPrompt: systemPromptForMode(mode),
 				Mode:         mode,
 				SessionID:    sessionID,
+				Skills:       availableSkills,
 				Tools:        registry.Definitions(),
 				MaxTokens:    client.Capabilities().MaxOutputTokens,
 			}, deps)

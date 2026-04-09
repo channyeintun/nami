@@ -8,6 +8,7 @@ import (
 
 	"github.com/channyeintun/go-cli/internal/api"
 	"github.com/channyeintun/go-cli/internal/ipc"
+	skillspkg "github.com/channyeintun/go-cli/internal/skills"
 )
 
 // QueryRequest holds everything needed to start a query.
@@ -16,6 +17,7 @@ type QueryRequest struct {
 	SystemPrompt string
 	Mode         ExecutionMode
 	SessionID    string
+	Skills       []skillspkg.Skill
 	Tools        []api.ToolDefinition
 	MaxTokens    int
 }
@@ -49,6 +51,7 @@ type QueryState struct {
 	TurnContext   TurnContext
 	Mode          ExecutionMode
 	Profile       ExecutionProfile
+	Skills        []skillspkg.Skill
 	Tools         []api.ToolDefinition
 	MaxTokens     int
 	TurnCount     int
@@ -66,6 +69,7 @@ func NewQueryState(req QueryRequest) *QueryState {
 		SystemContext: LoadSystemContext(),
 		Mode:          req.Mode,
 		Profile:       ProfileForMode(req.Mode),
+		Skills:        req.Skills,
 		Tools:         req.Tools,
 		MaxTokens:     req.MaxTokens,
 		MaxTurns:      50,
@@ -113,16 +117,21 @@ func QueryStream(ctx context.Context, req QueryRequest, deps QueryDeps) iter.Seq
 	}
 }
 
-func composeSystemPrompt(basePrompt string, sys SystemContext, turn TurnContext) string {
+func composeSystemPrompt(basePrompt string, sys SystemContext, turn TurnContext, skillPrompt string) string {
 	contextPrompt := strings.TrimSpace(FormatContextPrompt(sys, turn))
+	skillPrompt = strings.TrimSpace(skillPrompt)
 	basePrompt = strings.TrimSpace(basePrompt)
-	if basePrompt == "" {
-		return contextPrompt
+	parts := make([]string, 0, 3)
+	if basePrompt != "" {
+		parts = append(parts, basePrompt)
 	}
-	if contextPrompt == "" {
-		return basePrompt
+	if skillPrompt != "" {
+		parts = append(parts, skillPrompt)
 	}
-	return basePrompt + "\n\n" + contextPrompt
+	if contextPrompt != "" {
+		parts = append(parts, contextPrompt)
+	}
+	return strings.Join(parts, "\n\n")
 }
 
 func persistMessages(messages []api.Message, persist func([]api.Message)) {

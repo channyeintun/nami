@@ -10,6 +10,7 @@ import (
 	"github.com/channyeintun/go-cli/internal/api"
 	"github.com/channyeintun/go-cli/internal/compact"
 	"github.com/channyeintun/go-cli/internal/ipc"
+	skillspkg "github.com/channyeintun/go-cli/internal/skills"
 )
 
 type modelTurn struct {
@@ -27,7 +28,13 @@ func runIteration(
 ) error {
 	state.TurnCount++
 	state.TurnContext = LoadTurnContext()
-	state.SystemPrompt = composeSystemPrompt(state.BasePrompt, state.SystemContext, state.TurnContext)
+	selectedSkills := skillspkg.SelectRelevant(state.Skills, latestUserPrompt(state.Messages))
+	state.SystemPrompt = composeSystemPrompt(
+		state.BasePrompt,
+		state.SystemContext,
+		state.TurnContext,
+		skillspkg.FormatPromptSection(selectedSkills),
+	)
 
 	if deps.ApplyResultBudget != nil {
 		state.Messages = deps.ApplyResultBudget(state.Messages)
@@ -189,6 +196,15 @@ func normalizeStopReason(reason string) string {
 		return "end_turn"
 	}
 	return reason
+}
+
+func latestUserPrompt(messages []api.Message) string {
+	for i := len(messages) - 1; i >= 0; i-- {
+		if messages[i].Role == api.RoleUser {
+			return messages[i].Content
+		}
+	}
+	return ""
 }
 
 func newEvent(eventType ipc.EventType, payload any) ipc.StreamEvent {

@@ -114,7 +114,7 @@
 
 - [x] `loader.go` — Two-directory discovery (~/.config/go-cli/agents/ + .agents/)
 - [x] `frontmatter.go` — YAML frontmatter parser
-- [ ] Wire skills into system prompt injection
+- [x] Wire skills into system prompt injection
 
 ### `internal/hooks/`
 
@@ -198,9 +198,9 @@
 | Artifacts      | ✅                   | ✅ (markdown-backed plan artifacts + tool-log spillover wired)                  |
 | Session        | ✅                   | ✅ (live save + restore wired for transcript, mode, model, cwd)                 |
 | Config         | ✅                   | ✅                                                                              |
-| Skills         | ✅                   | ❌ (not wired)                                                                  |
+| Skills         | ✅                   | ✅ (auto-select matching skills and inject their markdown instructions per turn) |
 | Local Model    | ✅                   | ❌ (not wired)                                                                  |
 | Ink TUI        | ✅                   | ❌ (not built)                                                                  |
 | CLI Entrypoint | ✅                   | ✅ (live stdio engine)                                                          |
 
-**Current state:** All four provider clients, the Bash tool, and the file read/write/edit/glob/grep/web_search/web_fetch/git tools are implemented, along with the streaming executor needed to overlap safe tool calls. The stdio engine now persists and restores transcript + session metadata, supports runtime `/model` switching, exposes `/plan`, `/fast`, `/compact`, `/model`, `/cost`, `/usage`, and `/resume` over the stdio command path, emits markdown-backed implementation-plan/tool-log artifacts during planning and oversized tool execution, keeps plan mode read-only through planner enforcement, and the Ink TUI now tracks artifact events to render implementation plans and recent artifact previews. The next concrete task is deeper compaction work beyond the current manual trigger.
+**Current state:** All four provider clients, the Bash tool, and the file read/write/edit/glob/grep/web_search/web_fetch/git tools are implemented, along with the streaming executor needed to overlap safe tool calls. The stdio engine now persists and restores transcript + session metadata, supports runtime `/model` switching, exposes `/plan`, `/fast`, `/compact`, `/model`, `/cost`, `/usage`, and `/resume` over the stdio command path, emits markdown-backed implementation-plan/tool-log artifacts during planning and oversized tool execution, keeps plan mode read-only through planner enforcement, auto-selects matching markdown skills into the per-turn system prompt, and the Ink TUI now tracks artifact events to render implementation plans and recent artifact previews. The next concrete task is deeper compaction work beyond the current manual trigger.
