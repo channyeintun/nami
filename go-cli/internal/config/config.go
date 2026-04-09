@@ -66,6 +66,9 @@ func Load() Config {
 	if v := os.Getenv("GOCLI_API_KEY"); v != "" {
 		cfg.APIKey = v
 	}
+	if v := os.Getenv("GOCLI_PERMISSION_MODE"); v != "" {
+		cfg.PermissionMode = v
+	}
 
 	return cfg
 }

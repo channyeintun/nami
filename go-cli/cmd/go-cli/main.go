@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"syscall"
 	"time"
@@ -19,6 +20,7 @@ import (
 	"github.com/channyeintun/go-cli/internal/compact"
 	"github.com/channyeintun/go-cli/internal/config"
 	"github.com/channyeintun/go-cli/internal/ipc"
+	"github.com/channyeintun/go-cli/internal/permissions"
 	toolpkg "github.com/channyeintun/go-cli/internal/tools"
 )
 
@@ -106,6 +108,7 @@ func runStdioEngine(ctx context.Context, cfg config.Config) error {
 	}
 	messages := make([]api.Message, 0, 32)
 	mode := parseExecutionMode(cfg.DefaultMode)
+	permissionCtx := newPermissionContext(cfg.PermissionMode)
 
 	// Emit ready event
 	if err := bridge.EmitReady(); err != nil {
@@ -147,7 +150,7 @@ func runStdioEngine(ctx context.Context, cfg config.Config) error {
 					return client.Stream(callCtx, req)
 				},
 				ExecuteToolBatch: func(callCtx context.Context, calls []api.ToolCall) ([]api.ToolResult, error) {
-					return executeToolCalls(callCtx, bridge, registry, calls)
+					return executeToolCalls(callCtx, bridge, registry, permissionCtx, calls)
 				},
 				CompactMessages: func(callCtx context.Context, current []api.Message, reason agent.CompactReason) ([]api.Message, error) {
 					pipeline := compact.NewPipeline(client.Capabilities().MaxContextWindow, nil)
@@ -240,21 +243,14 @@ func executeToolCalls(
 	ctx context.Context,
 	bridge *ipc.Bridge,
 	registry *toolpkg.Registry,
+	permissionCtx *permissions.Context,
 	calls []api.ToolCall,
 ) ([]api.ToolResult, error) {
 	results := make([]api.ToolResult, len(calls))
-	pending := make([]toolpkg.PendingCall, 0, len(calls))
+	approved := make([]toolpkg.PendingCall, 0, len(calls))
 	budget := toolpkg.DefaultResultBudget(filepath.Join(os.TempDir(), "go-cli-session"))
 
 	for index, call := range calls {
-		if err := bridge.Emit(ipc.EventToolStart, ipc.ToolStartPayload{
-			ToolID: call.ID,
-			Name:   call.Name,
-			Input:  call.Input,
-		}); err != nil {
-			return nil, err
-		}
-
 		tool, err := registry.Get(call.Name)
 		if err != nil {
 			results[index] = api.ToolResult{ToolCallID: call.ID, Output: err.Error(), IsError: true}
@@ -273,10 +269,30 @@ func executeToolCalls(
 			continue
 		}
 
-		pending = append(pending, toolpkg.PendingCall{Index: index, Tool: tool, Input: input})
+		pendingCall := toolpkg.PendingCall{Index: index, Tool: tool, Input: input}
+		allowed, denyReason, err := authorizeToolCall(ctx, bridge, permissionCtx, pendingCall)
+		if err != nil {
+			return nil, err
+		}
+		if !allowed {
+			results[index] = api.ToolResult{ToolCallID: call.ID, Output: denyReason, IsError: true}
+			if emitErr := bridge.Emit(ipc.EventToolError, ipc.ToolErrorPayload{ToolID: call.ID, Error: denyReason}); emitErr != nil {
+				return nil, emitErr
+			}
+			continue
+		}
+
+		if err := bridge.Emit(ipc.EventToolStart, ipc.ToolStartPayload{
+			ToolID: call.ID,
+			Name:   call.Name,
+			Input:  call.Input,
+		}); err != nil {
+			return nil, err
+		}
+		approved = append(approved, pendingCall)
 	}
 
-	for _, batch := range toolpkg.PartitionBatches(pending) {
+	for _, batch := range toolpkg.PartitionBatches(approved) {
 		for _, result := range toolpkg.ExecuteBatch(ctx, batch) {
 			call := calls[result.Index]
 			toolResult := api.ToolResult{ToolCallID: call.ID}
@@ -325,6 +341,150 @@ func executeToolCalls(
 	}
 
 	return results, nil
+}
+
+func newPermissionContext(mode string) *permissions.Context {
+	ctx := permissions.NewContext()
+	switch permissions.Mode(mode) {
+	case permissions.ModeBypassPermissions:
+		ctx.Mode = permissions.ModeBypassPermissions
+	case permissions.ModeAutoApprove:
+		ctx.Mode = permissions.ModeAutoApprove
+	default:
+		ctx.Mode = permissions.ModeDefault
+	}
+	return ctx
+}
+
+func authorizeToolCall(
+	ctx context.Context,
+	bridge *ipc.Bridge,
+	permissionCtx *permissions.Context,
+	pending toolpkg.PendingCall,
+) (bool, string, error) {
+	decision := permissionCtx.Check(pending.Tool.Name(), pending.Input, pending.Tool.Permission())
+	switch decision {
+	case permissions.DecisionAllow:
+		return true, "", nil
+	case permissions.DecisionDeny:
+		return false, toolPermissionMessage("denied", pending, "permission policy denied this tool call"), nil
+	case permissions.DecisionAsk:
+		response, err := waitForPermissionDecision(ctx, bridge, pending)
+		if err != nil {
+			return false, "", err
+		}
+		switch response {
+		case "allow":
+			return true, "", nil
+		case "always_allow":
+			if raw := strings.TrimSpace(pending.Input.Raw); raw != "" {
+				if err := permissionCtx.AddAlwaysAllow(pending.Tool.Name(), "^"+regexp.QuoteMeta(raw)+"$"); err != nil {
+					return false, "", err
+				}
+			}
+			return true, "", nil
+		default:
+			return false, toolPermissionMessage("denied", pending, "user denied permission request"), nil
+		}
+	default:
+		return false, toolPermissionMessage("denied", pending, "permission policy denied this tool call"), nil
+	}
+}
+
+func waitForPermissionDecision(
+	ctx context.Context,
+	bridge *ipc.Bridge,
+	pending toolpkg.PendingCall,
+) (string, error) {
+	requestID := fmt.Sprintf("perm-%d", time.Now().UnixNano())
+	if err := bridge.Emit(ipc.EventPermissionRequest, ipc.PermissionRequestPayload{
+		RequestID: requestID,
+		Tool:      pending.Tool.Name(),
+		Command:   summarizePermissionTarget(pending),
+		Risk:      permissionRisk(pending),
+	}); err != nil {
+		return "", err
+	}
+
+	for {
+		msg, err := bridge.ReadMessage(ctx)
+		if err != nil {
+			return "", err
+		}
+
+		switch msg.Type {
+		case ipc.MsgPermissionResponse:
+			var payload ipc.PermissionResponsePayload
+			if err := json.Unmarshal(msg.Payload, &payload); err != nil {
+				return "", fmt.Errorf("decode permission response: %w", err)
+			}
+			if payload.RequestID != requestID {
+				continue
+			}
+			return payload.Decision, nil
+		case ipc.MsgCancel, ipc.MsgShutdown:
+			return "", context.Canceled
+		default:
+			continue
+		}
+	}
+}
+
+func permissionRisk(call toolpkg.PendingCall) string {
+	if call.Tool.Name() == "bash" {
+		command, _ := stringParamFromMap(call.Input.Params, "command")
+		if warning := permissions.CheckDestructive(command); warning != "" {
+			return "destructive"
+		}
+		return "execute"
+	}
+
+	switch call.Tool.Permission() {
+	case toolpkg.PermissionWrite:
+		return "write"
+	case toolpkg.PermissionExecute:
+		return "execute"
+	default:
+		return "read"
+	}
+}
+
+func summarizePermissionTarget(call toolpkg.PendingCall) string {
+	if command, ok := stringParamFromMap(call.Input.Params, "command"); ok && strings.TrimSpace(command) != "" {
+		return command
+	}
+	if filePath, ok := stringParamFromMap(call.Input.Params, "file_path"); ok && strings.TrimSpace(filePath) != "" {
+		return filePath
+	}
+	if url, ok := stringParamFromMap(call.Input.Params, "url"); ok && strings.TrimSpace(url) != "" {
+		return url
+	}
+	if pattern, ok := stringParamFromMap(call.Input.Params, "pattern"); ok && strings.TrimSpace(pattern) != "" {
+		return pattern
+	}
+	if query, ok := stringParamFromMap(call.Input.Params, "query"); ok && strings.TrimSpace(query) != "" {
+		return query
+	}
+	if raw := strings.TrimSpace(call.Input.Raw); raw != "" {
+		return raw
+	}
+	return call.Tool.Name()
+}
+
+func toolPermissionMessage(action string, call toolpkg.PendingCall, reason string) string {
+	if reason == "" {
+		reason = "permission policy requires user approval"
+	}
+	return fmt.Sprintf("tool %q %s: %s", call.Tool.Name(), action, reason)
+}
+
+func stringParamFromMap(params map[string]any, key string) (string, bool) {
+	value, ok := params[key]
+	if !ok {
+		return "", false
+	}
+	stringValue, ok := value.(string)
+	return stringValue, ok
 }
 
 func decodeToolInput(call api.ToolCall) (toolpkg.ToolInput, error) {

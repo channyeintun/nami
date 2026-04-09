@@ -169,10 +169,10 @@
 |---|---|---|
 | IPC Protocol | ✅ | ✅ |
 | API Interfaces | ✅ | ⚠️ (Anthropic + OpenAI-compatible + Gemini + Ollama clients implemented) |
-| Agent Loop | ✅ | ❌ (skeleton only) |
+| Agent Loop | ✅ | ✅ (live turn loop with model streaming and tool handoff) |
 | Tools | ✅ (framework) | ⚠️ (bash + file read/write/edit/glob/grep implemented; remaining tools pending) |
 | Compaction | ✅ (Strategy A done) | ❌ (B+C pending) |
-| Permissions | ✅ | ❌ (not wired) |
+| Permissions | ✅ | ✅ (stdio permission prompts + session allow rules) |
 | Cost Tracking | ✅ | ❌ (not wired) |
 | Hooks | ✅ | ❌ (not wired) |
 | Artifacts | ✅ | ❌ (not wired) |
@@ -180,7 +180,7 @@
 | Config | ✅ | ✅ |
 | Skills | ✅ | ❌ (not wired) |
 | Local Model | ✅ | ❌ (not wired) |
-| Ink TUI | ✅ | ❌ (not built/tested) |
-| CLI Entrypoint | ✅ | ✅ (stub responses) |
+| Ink TUI | ✅ | ❌ (not built) |
+| CLI Entrypoint | ✅ | ✅ (live stdio engine) |
 
-**Current state:** All four provider clients, the Bash tool, and the file read/write/edit/glob/grep/web_search/web_fetch/git tools are implemented, along with the streaming executor needed to overlap safe tool calls. The stdio engine now runs real model turns through the query loop and executes requested tools. The next concrete task is wiring permissions, then layering planner/artifact behavior on top of the live loop.
+**Current state:** All four provider clients, the Bash tool, and the file read/write/edit/glob/grep/web_search/web_fetch/git tools are implemented, along with the streaming executor needed to overlap safe tool calls. The stdio engine now runs real model turns, pauses on permission requests for write and execute tools, and remembers session-scoped `always_allow` approvals. The next concrete task is wiring cost tracking into model calls and tool execution.
