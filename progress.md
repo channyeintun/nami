@@ -34,8 +34,8 @@
 - [x] `orchestration.go` — Dynamic concurrency classification, PartitionBatches, ExecuteBatch
 - [x] `budgeting.go` — ResultBudget, ApplyBudget with disk spillover
 - [x] `bash.go` — Bash tool with security validation
-- [ ] `file_read.go` — File read tool
-- [ ] `file_write.go` — File write tool
+- [x] `file_read.go` — File read tool
+- [x] `file_write.go` — File write tool
 - [ ] `file_edit.go` — File edit tool
 - [ ] `glob.go` — Glob tool
 - [ ] `grep.go` — Ripgrep wrapper tool
@@ -183,4 +183,4 @@
 | Ink TUI | ✅ | ❌ (not built/tested) |
 | CLI Entrypoint | ✅ | ✅ (stub responses) |
 
-**Current state:** All four provider clients and the Bash tool are implemented, and `go build ./...` passes clean after integration. The next concrete tooling task is `file_read.go`, with query-loop wiring still pending behind the tool layer.
+**Current state:** All four provider clients, the Bash tool, the file-read tool, and the file-write tool are implemented, and `go build ./...` passes clean after integration. The next concrete tooling task is `file_edit.go`, with query-loop wiring still pending behind the tool layer.
