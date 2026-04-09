@@ -205,7 +205,7 @@ func runStdioEngine(ctx context.Context, cfg config.Config) error {
 					return executeToolCalls(callCtx, bridge, registry, permissionCtx, tracker, planner, artifactManager, sessionID, calls)
 				},
 				CompactMessages: func(callCtx context.Context, current []api.Message, reason agent.CompactReason) ([]api.Message, error) {
-					pipeline := compact.NewPipeline(client.Capabilities().MaxContextWindow, nil)
+					pipeline := newCompactionPipeline(bridge, tracker, client)
 					result, err := pipeline.Compact(callCtx, current, string(reason))
 					if err != nil {
 						return nil, err
@@ -853,7 +853,7 @@ func handleSlashCommand(
 			return true, sessionID, startedAt, mode, activeModelID, cwd, messages, nil
 		}
 
-		tokensBefore := estimateConversationTokens(messages)
+		tokensBefore := compact.EstimateConversationTokens(messages)
 		if err := bridge.Emit(ipc.EventCompactStart, ipc.CompactStartPayload{
 			Strategy:     string(agent.CompactManual),
 			TokensBefore: tokensBefore,
@@ -861,7 +861,7 @@ func handleSlashCommand(
 			return false, sessionID, startedAt, mode, activeModelID, cwd, messages, err
 		}
 
-		pipeline := compact.NewPipeline((*client).Capabilities().MaxContextWindow, nil)
+		pipeline := newCompactionPipeline(bridge, tracker, *client)
 		result, err := pipeline.Compact(ctx, messages, string(agent.CompactManual))
 		if err != nil {
 			if emitErr := bridge.EmitError(fmt.Sprintf("compact conversation: %v", err), true); emitErr != nil {
@@ -871,7 +871,7 @@ func handleSlashCommand(
 		}
 
 		messages = result.Messages
-		tokensAfter := estimateConversationTokens(messages)
+		tokensAfter := compact.EstimateConversationTokens(messages)
 		if err := persistSessionState(store, sessionStateParams{
 			SessionID: sessionID,
 			CreatedAt: startedAt,
@@ -1059,21 +1059,6 @@ func formatCostSummary(snapshot costpkg.TrackerSnapshot, activeModelID string) s
 	)
 }
 
-func estimateConversationTokens(messages []api.Message) int {
-	total := 0
-	for _, message := range messages {
-		total += compact.EstimateTokens(message.Content)
-		for _, call := range message.ToolCalls {
-			total += compact.EstimateTokens(call.Name)
-			total += compact.EstimateTokens(call.Input)
-		}
-		if message.ToolResult != nil {
-			total += compact.EstimateTokens(message.ToolResult.Output)
-		}
-	}
-	return total
-}
-
 func stringParamFromMap(params map[string]any, key string) (string, bool) {
 	value, ok := params[key]
 	if !ok {
@@ -1092,6 +1077,64 @@ type sessionStateParams struct {
 	Branch    string
 	Tracker   *costpkg.Tracker
 	Messages  []api.Message
+}
+
+type compactionSummarizer struct {
+	bridge  *ipc.Bridge
+	tracker *costpkg.Tracker
+	client  api.LLMClient
+}
+
+func newCompactionPipeline(bridge *ipc.Bridge, tracker *costpkg.Tracker, client api.LLMClient) *compact.Pipeline {
+	return compact.NewPipeline(client.Capabilities().MaxContextWindow, compactionSummarizer{
+		bridge:  bridge,
+		tracker: tracker,
+		client:  client,
+	})
+}
+
+func (s compactionSummarizer) Summarize(ctx context.Context, messages []api.Message) (string, error) {
+	stream, err := s.client.Stream(ctx, api.ModelRequest{
+		Messages:     messages,
+		SystemPrompt: compact.CompactionPromptTemplate,
+		MaxTokens:    2048,
+	})
+	if err != nil {
+		return "", err
+	}
+
+	startedAt := time.Now()
+	var usage api.Usage
+	var builder strings.Builder
+
+	for event, streamErr := range stream {
+		if streamErr != nil {
+			return "", streamErr
+		}
+		switch event.Type {
+		case api.ModelEventToken:
+			builder.WriteString(event.Text)
+		case api.ModelEventUsage:
+			if event.Usage != nil {
+				usage = mergeUsage(usage, *event.Usage)
+			}
+		}
+	}
+
+	s.tracker.RecordAPICall(
+		s.client.ModelID(),
+		usage.InputTokens,
+		usage.OutputTokens,
+		usage.CacheReadTokens,
+		usage.CacheCreationTokens,
+		time.Since(startedAt),
+		costpkg.CalculateUSDCost(s.client.ModelID(), usage),
+	)
+	if err := emitCostUpdate(s.bridge, s.tracker); err != nil {
+		return "", err
+	}
+
+	return compact.NormalizeSummary(builder.String()), nil
 }
 
 func persistSessionState(store *session.Store, params sessionStateParams) error {

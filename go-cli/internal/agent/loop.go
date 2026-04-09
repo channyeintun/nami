@@ -105,7 +105,7 @@ func invokeModelWithRecovery(
 			return modelTurn{}, err
 		}
 
-		before := estimateMessageTokens(state.Messages)
+		before := compact.EstimateConversationTokens(state.Messages)
 		if !yield(newEvent(ipc.EventCompactStart, ipc.CompactStartPayload{
 			Strategy:     string(CompactAuto),
 			TokensBefore: before,
@@ -119,7 +119,7 @@ func invokeModelWithRecovery(
 		}
 		state.Messages = compacted
 
-		after := estimateMessageTokens(state.Messages)
+		after := compact.EstimateConversationTokens(state.Messages)
 		if !yield(newEvent(ipc.EventCompactEnd, ipc.CompactEndPayload{TokensAfter: after}), nil) {
 			return modelTurn{}, context.Canceled
 		}
@@ -174,21 +174,6 @@ func streamModelTurn(
 	}
 
 	return turn, nil
-}
-
-func estimateMessageTokens(messages []api.Message) int {
-	total := 0
-	for _, message := range messages {
-		total += compact.EstimateTokens(message.Content)
-		for _, call := range message.ToolCalls {
-			total += compact.EstimateTokens(call.Name)
-			total += compact.EstimateTokens(call.Input)
-		}
-		if message.ToolResult != nil {
-			total += compact.EstimateTokens(message.ToolResult.Output)
-		}
-	}
-	return total
 }
 
 func normalizeStopReason(reason string) string {

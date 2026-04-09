@@ -1,5 +1,7 @@
 package compact
 
+import "github.com/channyeintun/go-cli/internal/api"
+
 // Token counting and compaction thresholds.
 
 const (
@@ -36,6 +38,22 @@ func EstimateMessagesTokens(messages []string) int {
 	total := 0
 	for _, m := range messages {
 		total += EstimateTokens(m)
+	}
+	return total
+}
+
+// EstimateConversationTokens estimates total tokens across API conversation messages.
+func EstimateConversationTokens(messages []api.Message) int {
+	total := 0
+	for _, message := range messages {
+		total += EstimateTokens(message.Content)
+		for _, call := range message.ToolCalls {
+			total += EstimateTokens(call.Name)
+			total += EstimateTokens(call.Input)
+		}
+		if message.ToolResult != nil {
+			total += EstimateTokens(message.ToolResult.Output)
+		}
 	}
 	return total
 }

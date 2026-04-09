@@ -84,7 +84,7 @@
 - [x] `pipeline.go` — Pipeline skeleton with 3-strategy cascade
 - [x] `tool_truncate.go` — Strategy A: tool result truncation (microcompact)
 - [x] `summarize.go` — 9-section compaction prompt template
-- [ ] Strategy B implementation: call LLM/local model for summarization
+- [x] Strategy B implementation: call LLM/local model for summarization
 - [ ] Strategy C implementation: partial compaction scoped to recent messages
 - [ ] `sliding_window.go` — Sliding window strategy
 - [ ] Auto-compaction trigger logic wired into query loop
@@ -191,7 +191,7 @@
 | API Interfaces | ✅                   | ⚠️ (Anthropic + OpenAI-compatible + Gemini + Ollama clients implemented)        |
 | Agent Loop     | ✅                   | ✅ (live turn loop with model streaming and tool handoff)                       |
 | Tools          | ✅ (framework)       | ⚠️ (bash + file read/write/edit/glob/grep implemented; remaining tools pending) |
-| Compaction     | ✅ (Strategy A done) | ❌ (B+C pending)                                                                |
+| Compaction     | ✅ (Strategies A+B done) | ⚠️ (partial compaction and proactive trigger still pending)                 |
 | Permissions    | ✅                   | ✅ (stdio permission prompts + session allow rules)                             |
 | Cost Tracking  | ✅                   | ✅ (API usage, token totals, tool duration, TUI updates)                        |
 | Hooks          | ✅                   | ❌ (not wired)                                                                  |
@@ -203,4 +203,4 @@
 | Ink TUI        | ✅                   | ❌ (not built)                                                                  |
 | CLI Entrypoint | ✅                   | ✅ (live stdio engine)                                                          |
 
-**Current state:** All four provider clients, the Bash tool, and the file read/write/edit/glob/grep/web_search/web_fetch/git tools are implemented, along with the streaming executor needed to overlap safe tool calls. The stdio engine now persists and restores transcript + session metadata, supports runtime `/model` switching, exposes `/plan`, `/fast`, `/compact`, `/model`, `/cost`, `/usage`, and `/resume` over the stdio command path, emits markdown-backed implementation-plan/tool-log artifacts during planning and oversized tool execution, keeps plan mode read-only through planner enforcement, auto-selects matching markdown skills into the per-turn system prompt, and the Ink TUI now tracks artifact events to render implementation plans and recent artifact previews. The next concrete task is deeper compaction work beyond the current manual trigger.
+**Current state:** All four provider clients, the Bash tool, and the file read/write/edit/glob/grep/web_search/web_fetch/git tools are implemented, along with the streaming executor needed to overlap safe tool calls. The stdio engine now persists and restores transcript + session metadata, supports runtime `/model` switching, exposes `/plan`, `/fast`, `/compact`, `/model`, `/cost`, `/usage`, and `/resume` over the stdio command path, emits markdown-backed implementation-plan/tool-log artifacts during planning and oversized tool execution, keeps plan mode read-only through planner enforcement, auto-selects matching markdown skills into the per-turn system prompt, and now runs summarizer-backed compaction for both manual `/compact` and prompt-too-long recovery while preserving the active user turn. The next concrete task is partial/proactive compaction beyond the current reactive flow.

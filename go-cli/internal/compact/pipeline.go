@@ -2,6 +2,7 @@ package compact
 
 import (
 	"context"
+	"strings"
 
 	"github.com/channyeintun/go-cli/internal/api"
 )
@@ -11,8 +12,8 @@ type Strategy string
 
 const (
 	StrategyToolTruncate Strategy = "tool_truncate" // Strategy A: zero API calls
-	StrategySummarize    Strategy = "summarize"      // Strategy B: LLM call
-	StrategyPartial      Strategy = "partial"        // Strategy C: scope to recent
+	StrategySummarize    Strategy = "summarize"     // Strategy B: LLM call
+	StrategyPartial      Strategy = "partial"       // Strategy C: scope to recent
 )
 
 // CompactResult holds the outcome of a compaction run.
@@ -50,19 +51,47 @@ func (p *Pipeline) Compact(ctx context.Context, messages []api.Message, reason s
 	result := CompactResult{
 		Messages: messages,
 	}
+	result.TokensBefore = EstimateConversationTokens(messages)
 
 	// Strategy A: Tool result truncation
 	result.Messages = TruncateToolResults(result.Messages)
 	result.Strategy = StrategyToolTruncate
+	result.TokensAfter = EstimateConversationTokens(result.Messages)
 
-	// Check if truncation was sufficient
-	// (token estimation will be added when messages carry content)
+	if p.summarizer == nil || !shouldRunSummary(reason, result.TokensBefore, result.TokensAfter, p.contextWindow) {
+		return result, nil
+	}
 
-	// Strategy B: Summarization (if still over threshold)
-	// TODO: call p.summarizer.Summarize when implemented
+	toSummarize, retained := SplitMessagesForSummary(result.Messages)
+	if len(toSummarize) == 0 {
+		return result, nil
+	}
+
+	summary, err := p.summarizer.Summarize(ctx, toSummarize)
+	if err != nil {
+		return CompactResult{}, err
+	}
+	if strings.TrimSpace(summary) == "" {
+		return result, nil
+	}
+
+	result.Messages = BuildSummaryMessages(summary, retained)
+	result.Strategy = StrategySummarize
+	result.TokensAfter = EstimateConversationTokens(result.Messages)
 
 	// Strategy C: Partial compaction (if summarization insufficient)
 	// TODO: implement partial compaction scoped to recent messages
 
 	return result, nil
+}
+
+func shouldRunSummary(reason string, tokensBefore, tokensAfter, contextWindow int) bool {
+	switch strings.ToLower(strings.TrimSpace(reason)) {
+	case "manual", "auto":
+		return true
+	}
+	if tokensAfter >= AutocompactThreshold(contextWindow) {
+		return true
+	}
+	return tokensAfter >= tokensBefore
 }
