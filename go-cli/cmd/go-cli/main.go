@@ -19,6 +19,7 @@ import (
 	"github.com/channyeintun/go-cli/internal/api"
 	"github.com/channyeintun/go-cli/internal/compact"
 	"github.com/channyeintun/go-cli/internal/config"
+	costpkg "github.com/channyeintun/go-cli/internal/cost"
 	"github.com/channyeintun/go-cli/internal/ipc"
 	"github.com/channyeintun/go-cli/internal/permissions"
 	toolpkg "github.com/channyeintun/go-cli/internal/tools"
@@ -109,6 +110,7 @@ func runStdioEngine(ctx context.Context, cfg config.Config) error {
 	messages := make([]api.Message, 0, 32)
 	mode := parseExecutionMode(cfg.DefaultMode)
 	permissionCtx := newPermissionContext(cfg.PermissionMode)
+	tracker := costpkg.NewTracker()
 
 	// Emit ready event
 	if err := bridge.EmitReady(); err != nil {
@@ -147,10 +149,10 @@ func runStdioEngine(ctx context.Context, cfg config.Config) error {
 
 			deps := agent.QueryDeps{
 				CallModel: func(callCtx context.Context, req api.ModelRequest) (iter.Seq2[api.ModelEvent, error], error) {
-					return client.Stream(callCtx, req)
+					return trackModelStream(callCtx, bridge, tracker, client, req)
 				},
 				ExecuteToolBatch: func(callCtx context.Context, calls []api.ToolCall) ([]api.ToolResult, error) {
-					return executeToolCalls(callCtx, bridge, registry, permissionCtx, calls)
+					return executeToolCalls(callCtx, bridge, registry, permissionCtx, tracker, calls)
 				},
 				CompactMessages: func(callCtx context.Context, current []api.Message, reason agent.CompactReason) ([]api.Message, error) {
 					pipeline := compact.NewPipeline(client.Capabilities().MaxContextWindow, nil)
@@ -244,6 +246,7 @@ func executeToolCalls(
 	bridge *ipc.Bridge,
 	registry *toolpkg.Registry,
 	permissionCtx *permissions.Context,
+	tracker *costpkg.Tracker,
 	calls []api.ToolCall,
 ) ([]api.ToolResult, error) {
 	results := make([]api.ToolResult, len(calls))
@@ -293,7 +296,10 @@ func executeToolCalls(
 	}
 
 	for _, batch := range toolpkg.PartitionBatches(approved) {
-		for _, result := range toolpkg.ExecuteBatch(ctx, batch) {
+		batchStart := time.Now()
+		batchResults := toolpkg.ExecuteBatch(ctx, batch)
+		tracker.RecordToolDuration(time.Since(batchStart))
+		for _, result := range batchResults {
 			call := calls[result.Index]
 			toolResult := api.ToolResult{ToolCallID: call.ID}
 
@@ -476,6 +482,67 @@ func toolPermissionMessage(action string, call toolpkg.PendingCall, reason strin
 		reason = "permission policy requires user approval"
 	}
 	return fmt.Sprintf("tool %q %s: %s", call.Tool.Name(), action, reason)
+}
+
+func trackModelStream(
+	ctx context.Context,
+	bridge *ipc.Bridge,
+	tracker *costpkg.Tracker,
+	client api.LLMClient,
+	req api.ModelRequest,
+) (iter.Seq2[api.ModelEvent, error], error) {
+	stream, err := client.Stream(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+
+	return func(yield func(api.ModelEvent, error) bool) {
+		startedAt := time.Now()
+		var usage api.Usage
+
+		for event, streamErr := range stream {
+			if streamErr != nil {
+				yield(api.ModelEvent{}, streamErr)
+				return
+			}
+			if event.Type == api.ModelEventUsage && event.Usage != nil {
+				usage = mergeUsage(usage, *event.Usage)
+			}
+			if !yield(event, nil) {
+				return
+			}
+		}
+
+		tracker.RecordAPICall(
+			client.ModelID(),
+			usage.InputTokens,
+			usage.OutputTokens,
+			usage.CacheReadTokens,
+			usage.CacheCreationTokens,
+			time.Since(startedAt),
+			costpkg.CalculateUSDCost(client.ModelID(), usage),
+		)
+		if err := emitCostUpdate(bridge, tracker); err != nil {
+			yield(api.ModelEvent{}, err)
+		}
+	}, nil
+}
+
+func mergeUsage(current api.Usage, next api.Usage) api.Usage {
+	current.InputTokens += next.InputTokens
+	current.OutputTokens += next.OutputTokens
+	current.CacheReadTokens += next.CacheReadTokens
+	current.CacheCreationTokens += next.CacheCreationTokens
+	return current
+}
+
+func emitCostUpdate(bridge *ipc.Bridge, tracker *costpkg.Tracker) error {
+	snapshot := tracker.Snapshot()
+	return bridge.Emit(ipc.EventCostUpdate, ipc.CostUpdatePayload{
+		TotalUSD:     snapshot.TotalCostUSD,
+		InputTokens:  snapshot.TotalInputTokens,
+		OutputTokens: snapshot.TotalOutputTokens,
+	})
 }
 
 func stringParamFromMap(params map[string]any, key string) (string, bool) {

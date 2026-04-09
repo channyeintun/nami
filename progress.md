@@ -63,8 +63,8 @@
 
 ### `internal/cost/`
 - [x] `tracker.go` — Per-model token/cost/duration tracking, thread-safe Snapshot
-- [ ] Wire into API client (record after every call)
-- [ ] Wire into tool executor (record tool duration)
+- [x] Wire into API client (record after every call)
+- [x] Wire into tool executor (record tool duration)
 
 ---
 
@@ -173,7 +173,7 @@
 | Tools | ✅ (framework) | ⚠️ (bash + file read/write/edit/glob/grep implemented; remaining tools pending) |
 | Compaction | ✅ (Strategy A done) | ❌ (B+C pending) |
 | Permissions | ✅ | ✅ (stdio permission prompts + session allow rules) |
-| Cost Tracking | ✅ | ❌ (not wired) |
+| Cost Tracking | ✅ | ✅ (API usage, token totals, tool duration, TUI updates) |
 | Hooks | ✅ | ❌ (not wired) |
 | Artifacts | ✅ | ❌ (not wired) |
 | Session | ✅ | ❌ (not wired) |
@@ -183,4 +183,4 @@
 | Ink TUI | ✅ | ❌ (not built) |
 | CLI Entrypoint | ✅ | ✅ (live stdio engine) |
 
-**Current state:** All four provider clients, the Bash tool, and the file read/write/edit/glob/grep/web_search/web_fetch/git tools are implemented, along with the streaming executor needed to overlap safe tool calls. The stdio engine now runs real model turns, pauses on permission requests for write and execute tools, and remembers session-scoped `always_allow` approvals. The next concrete task is wiring cost tracking into model calls and tool execution.
+**Current state:** All four provider clients, the Bash tool, and the file read/write/edit/glob/grep/web_search/web_fetch/git tools are implemented, along with the streaming executor needed to overlap safe tool calls. The stdio engine now records API token usage and tool duration into the cost tracker, emits `cost_update` events to the TUI, and uses Claude-family pricing where the source implementation already defines it. The next concrete task is wiring session save into the live query loop.
