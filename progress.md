@@ -55,7 +55,7 @@
 ### `internal/permissions/`
 - [x] `gating.go` — Rule-based permission context (allow/deny/ask), Decision check
 - [x] `bash_rules.go` — ZSH dangerous commands blocklist, destructive command patterns, read-only classifier
-- [ ] Wire permissions into tool executor
+- [x] Wire permissions into tool executor
 
 ### `internal/agent/`
 - [x] `context_inject.go` — Two-layer injection implemented

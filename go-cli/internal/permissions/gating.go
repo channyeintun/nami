@@ -10,14 +10,14 @@ import (
 type Mode string
 
 const (
-	ModeDefault           Mode = "default"          // ask for writes/executes
+	ModeDefault           Mode = "default"           // ask for writes/executes
 	ModeBypassPermissions Mode = "bypassPermissions" // auto-approve everything
 	ModeAutoApprove       Mode = "autoApprove"       // auto-approve with logging
 )
 
 // Rule is a pattern-based permission rule.
 type Rule struct {
-	Pattern *regexp.Regexp
+	Pattern  *regexp.Regexp
 	ToolName string // optional: restrict to specific tool
 }
 
@@ -48,6 +48,9 @@ const (
 // Check evaluates whether a tool call should be allowed, denied, or requires user approval.
 func (c *Context) Check(toolName string, input tools.ToolInput, permLevel tools.PermissionLevel) Decision {
 	if c.Mode == ModeBypassPermissions {
+		return DecisionAllow
+	}
+	if c.Mode == ModeAutoApprove {
 		return DecisionAllow
 	}
 

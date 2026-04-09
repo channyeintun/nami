@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"strconv"
 	"sync"
@@ -28,7 +29,7 @@ type Batch struct {
 
 // PendingCall is a tool call waiting to be executed.
 type PendingCall struct {
-	Index int       // original position in the model's tool_calls array
+	Index int // original position in the model's tool_calls array
 	Tool  Tool
 	Input ToolInput
 }
@@ -101,4 +102,93 @@ type IndexedResult struct {
 	Index  int
 	Output ToolOutput
 	Err    error
+}
+
+// GateDecision is the outcome of a permission gate check.
+type GateDecision int
+
+const (
+	GateAllow GateDecision = iota
+	GateDeny
+	GateAsk
+)
+
+// GateResult is the result of evaluating a PendingCall against a permission gate.
+type GateResult struct {
+	Decision GateDecision
+	Reason   string
+}
+
+// ExecuteOptions configures batch execution behavior.
+type ExecuteOptions struct {
+	PermissionGate func(context.Context, PendingCall) (GateResult, error)
+}
+
+// ExecuteBatchWithOptions runs a batch of tool calls, honoring optional permission gating.
+func ExecuteBatchWithOptions(ctx context.Context, batch Batch, options ExecuteOptions) []IndexedResult {
+	results := make([]IndexedResult, len(batch.Calls))
+
+	if !batch.Concurrent || len(batch.Calls) == 1 {
+		for i, call := range batch.Calls {
+			results[i] = executePendingCall(ctx, call, options)
+		}
+		return results
+	}
+
+	batchCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	maxConc := MaxConcurrency()
+	sem := make(chan struct{}, maxConc)
+	var wg sync.WaitGroup
+
+	for i, call := range batch.Calls {
+		wg.Add(1)
+		go func(idx int, c PendingCall) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
+			results[idx] = executePendingCall(batchCtx, c, options)
+		}(i, call)
+	}
+	wg.Wait()
+	return results
+}
+
+func executePendingCall(ctx context.Context, call PendingCall, options ExecuteOptions) IndexedResult {
+	if options.PermissionGate != nil {
+		decision, err := options.PermissionGate(ctx, call)
+		if err != nil {
+			return IndexedResult{Index: call.Index, Err: err}
+		}
+		switch decision.Decision {
+		case GateDeny:
+			return IndexedResult{
+				Index: call.Index,
+				Output: ToolOutput{
+					Output:  permissionMessage("denied", call, decision.Reason),
+					IsError: true,
+				},
+			}
+		case GateAsk:
+			return IndexedResult{
+				Index: call.Index,
+				Output: ToolOutput{
+					Output:  permissionMessage("not approved", call, decision.Reason),
+					IsError: true,
+				},
+			}
+		}
+	}
+
+	output, err := call.Tool.Execute(ctx, call.Input)
+	return IndexedResult{Index: call.Index, Output: output, Err: err}
+}
+
+func permissionMessage(action string, call PendingCall, reason string) string {
+	if reason == "" {
+		reason = "permission policy requires user approval"
+	}
+	return fmt.Sprintf("tool %q %s: %s", call.Tool.Name(), action, reason)
 }
