@@ -39,7 +39,7 @@
 - [x] `file_edit.go` — File edit tool
 - [x] `glob.go` — Glob tool
 - [x] `grep.go` — Ripgrep wrapper tool
-- [ ] `web_search.go` — Web search tool
+- [x] `web_search.go` — Web search tool (DuckDuckGo-backed with domain filters)
 - [ ] `web_fetch.go` — Web fetch tool
 - [ ] `git.go` — Git operations tool
 - [ ] `streaming_executor.go` — Overlap tool execution with model generation
@@ -183,4 +183,4 @@
 | Ink TUI | ✅ | ❌ (not built/tested) |
 | CLI Entrypoint | ✅ | ✅ (stub responses) |
 
-**Current state:** All four provider clients, the Bash tool, and the file read/write/edit/glob/grep tools are implemented. The default tool registry now includes those built-ins. The next concrete tooling task is `web_search.go`, with query-loop wiring still pending behind the tool layer.
+**Current state:** All four provider clients, the Bash tool, and the file read/write/edit/glob/grep/web_search tools are implemented. The default tool registry now includes those built-ins. The next concrete tooling task is `web_fetch.go`, with query-loop wiring still pending behind the tool layer.

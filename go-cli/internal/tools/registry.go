@@ -25,6 +25,7 @@ func NewRegistry() *Registry {
 	r.Register(NewFileEditTool())
 	r.Register(NewGlobTool())
 	r.Register(NewGrepTool())
+	r.Register(NewWebSearchTool())
 
 	return r
 }
