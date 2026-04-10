@@ -31,7 +31,11 @@ const App: FC<AppProps> = ({ enginePath, model, mode }) => {
       (artifact) => artifact.kind === "implementation-plan",
     ) ?? null;
   const recentArtifacts = uiState.artifacts
-    .filter((artifact) => artifact.kind !== "implementation-plan")
+    .filter(
+      (artifact) =>
+        artifact.kind !== "implementation-plan" &&
+        artifact.kind !== "tool-log",
+    )
     .slice(0, 2);
 
   // Dispatch incoming events to the UI state handler
