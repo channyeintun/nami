@@ -60,11 +60,12 @@ const App: FC<AppProps> = ({ enginePath, model, mode }) => {
     decision: "allow" | "deny" | "always_allow" | "allow_all_session",
   ) => {
     if (uiState.pendingPermission) {
+      beginAssistantTurn();
+      clearPermission();
       engine.sendPermissionResponse(
         uiState.pendingPermission.request_id,
         decision,
       );
-      clearPermission();
     }
   };
 

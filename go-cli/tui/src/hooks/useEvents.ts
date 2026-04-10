@@ -185,7 +185,6 @@ export function useEvents(initialModel: string, initialMode: string) {
         setUIState((s) => ({
           ...s,
           pendingPermission: p,
-          isStreaming: false,
         }));
         break;
       }
