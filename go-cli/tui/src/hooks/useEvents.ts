@@ -105,6 +105,7 @@ export interface EngineUIState {
   transcript: UITranscriptEntry[];
   liveAssistantBlocks: UIAssistantBlock[];
   activeTurnStatus: UIActiveTurnStatus;
+  showPlanPanel: boolean;
   mode: string;
   model: string;
   sessionId: string | null;
@@ -134,6 +135,7 @@ const initialState = (model: string, mode: string): EngineUIState => ({
   transcript: [],
   liveAssistantBlocks: [],
   activeTurnStatus: "idle",
+  showPlanPanel: false,
   mode,
   model,
   sessionId: null,
@@ -425,7 +427,11 @@ export function useEvents(initialModel: string, initialMode: string) {
       }
       case "mode_changed": {
         const p = event.payload as ModeChangedPayload;
-        setUIState((s) => ({ ...s, mode: p.mode }));
+        setUIState((s) => ({
+          ...s,
+          mode: p.mode,
+          showPlanPanel: p.mode === "plan" ? s.showPlanPanel : false,
+        }));
         break;
       }
       case "model_changed": {
@@ -493,6 +499,8 @@ export function useEvents(initialModel: string, initialMode: string) {
         const p = event.payload as ArtifactCreatedPayload;
         setUIState((s) => ({
           ...s,
+          showPlanPanel:
+            p.kind === "implementation-plan" ? false : s.showPlanPanel,
           artifacts: upsertArtifact(s.artifacts, {
             id: p.id,
             kind: p.kind,
@@ -512,6 +520,10 @@ export function useEvents(initialModel: string, initialMode: string) {
           }
           return {
             ...s,
+            showPlanPanel:
+              existing.kind === "implementation-plan" &&
+              p.content.trim().length > 0 &&
+              s.mode === "plan",
             artifacts: upsertArtifact(s.artifacts, {
               id: p.id,
               kind: existing.kind,
@@ -527,6 +539,7 @@ export function useEvents(initialModel: string, initialMode: string) {
         setUIState((s) => ({
           ...s,
           activeTurnStatus: "idle",
+          showPlanPanel: false,
           ready: true,
           mode: p.mode,
           sessionId: p.session_id,
@@ -623,6 +636,7 @@ export function useEvents(initialModel: string, initialMode: string) {
       const message = createUserMessage(text);
       return {
         ...s,
+        showPlanPanel: false,
         messages: [...s.messages, message],
         transcript: appendTranscriptEntry(s.transcript, {
           id: message.id,

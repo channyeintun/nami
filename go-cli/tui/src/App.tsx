@@ -247,7 +247,7 @@ const App: FC<AppProps> = ({ enginePath, model, mode }) => {
           </Box>
         )}
 
-        {planArtifact && (
+        {planArtifact && uiState.showPlanPanel && (
           <PlanPanel
             title={planArtifact.title}
             content={planArtifact.content}
