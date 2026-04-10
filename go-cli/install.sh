@@ -66,8 +66,8 @@ if ! curl -fsSL "$LATEST_URL" -o "$TMPDIR/$ARCHIVE"; then
   echo ""
   echo "If you already have a local build, install manually instead:"
   echo "  mkdir -p \"\$HOME/.local/bin\""
-  echo "  cp gocode gocode-engine \"\$HOME/.local/bin/\""
-  echo "  chmod +x \"\$HOME/.local/bin/gocode\" \"\$HOME/.local/bin/gocode-engine\""
+  echo "  install -m 755 gocode \"\$HOME/.local/bin/gocode\""
+  echo "  install -m 755 gocode-engine \"\$HOME/.local/bin/gocode-engine\""
   echo "  export PATH=\"\$HOME/.local/bin:\$PATH\""
   exit 1
 fi

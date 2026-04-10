@@ -158,6 +158,7 @@
 - [x] `src/components/ArtifactView.tsx` — Render artifact content
 - [x] Conversation transcript retained after submit; live assistant row now shows thinking/responding state instead of clearing the visible prompt
 - [x] Status bar labels mode/model explicitly and tool progress uses a real spinner
+- [x] Install guide now documents `install -m 755` for manual binary installation and explains why it is used
 - [x] `npm install` + TypeScript build verification
 
 ---

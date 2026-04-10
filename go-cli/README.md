@@ -49,15 +49,18 @@ Extract and copy both files to a directory in your `PATH`:
 ```bash
 tar -xzf gocode-darwin-arm64.tar.gz
 cd gocode-darwin-arm64
-sudo cp gocode gocode-engine /usr/local/bin/
+sudo install -m 755 gocode /usr/local/bin/gocode
+sudo install -m 755 gocode-engine /usr/local/bin/gocode-engine
 ```
+
+`install -m 755` is used instead of `cp` so the binary is copied and marked executable in one step.
 
 If you do not want to use `sudo`, install to a user-owned directory instead:
 
 ```bash
 mkdir -p "$HOME/.local/bin"
-cp gocode gocode-engine "$HOME/.local/bin/"
-chmod +x "$HOME/.local/bin/gocode" "$HOME/.local/bin/gocode-engine"
+install -m 755 gocode "$HOME/.local/bin/gocode"
+install -m 755 gocode-engine "$HOME/.local/bin/gocode-engine"
 ```
 
 Then make sure `~/.local/bin` is on your PATH:
@@ -72,8 +75,8 @@ If you are working from a local clone and want to install the current build dire
 cd go-cli/tui
 make release-local
 mkdir -p "$HOME/.local/bin"
-cp release/gocode release/gocode-engine "$HOME/.local/bin/"
-chmod +x "$HOME/.local/bin/gocode" "$HOME/.local/bin/gocode-engine"
+install -m 755 release/gocode "$HOME/.local/bin/gocode"
+install -m 755 release/gocode-engine "$HOME/.local/bin/gocode-engine"
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
