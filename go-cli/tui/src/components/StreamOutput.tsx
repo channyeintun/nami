@@ -1,5 +1,5 @@
-import React, { type FC, useMemo, useRef } from "react";
-import { Box, Text } from "ink";
+import React, { type FC, useEffect, useMemo, useRef, useState } from "react";
+import { Box, Text, useInput } from "ink";
 import type {
   UIAssistantBlock,
   UIAssistantMessage,
@@ -49,6 +49,9 @@ const StreamOutput: FC<StreamOutputProps> = ({
   isStreaming,
   model,
 }) => {
+  const [sliceStartOverride, setSliceStartOverride] = useState<number | null>(
+    null,
+  );
   const messageById = useMemo(
     () => new Map(messages.map((message) => [message.id, message])),
     [messages],
@@ -62,17 +65,80 @@ const StreamOutput: FC<StreamOutputProps> = ({
     [messageById, toolCallById, transcript],
   );
   const sliceAnchorRef = useRef<TranscriptSliceAnchor>(null);
-  const visibleTranscriptBlocks = useMemo(() => {
-    const sliceStart = computeTranscriptSliceStart(
-      transcriptBlocks,
-      sliceAnchorRef,
-    );
-    return sliceStart > 0
-      ? transcriptBlocks.slice(sliceStart)
-      : transcriptBlocks;
-  }, [transcriptBlocks]);
-  const hiddenBlockCount =
-    transcriptBlocks.length - visibleTranscriptBlocks.length;
+  const latestSliceStart = useMemo(
+    () =>
+      computeTranscriptSliceStart(
+        transcriptBlocks,
+        sliceAnchorRef,
+        MAX_TRANSCRIPT_BLOCKS,
+        TRANSCRIPT_CAP_STEP,
+      ),
+    [transcriptBlocks],
+  );
+  const maxSliceStart = Math.max(
+    0,
+    transcriptBlocks.length - MAX_TRANSCRIPT_BLOCKS,
+  );
+  const visibleSliceStart =
+    sliceStartOverride === null
+      ? latestSliceStart
+      : clampSliceStart(sliceStartOverride, maxSliceStart);
+  const visibleTranscriptBlocks = useMemo(
+    () =>
+      transcriptBlocks.slice(
+        visibleSliceStart,
+        visibleSliceStart + MAX_TRANSCRIPT_BLOCKS,
+      ),
+    [transcriptBlocks, visibleSliceStart],
+  );
+  const hiddenBeforeCount = visibleSliceStart;
+  const hiddenAfterCount = Math.max(
+    0,
+    transcriptBlocks.length -
+      visibleSliceStart -
+      visibleTranscriptBlocks.length,
+  );
+
+  useEffect(() => {
+    if (transcriptBlocks.length <= MAX_TRANSCRIPT_BLOCKS) {
+      if (sliceStartOverride !== null) {
+        setSliceStartOverride(null);
+      }
+      return;
+    }
+
+    if (sliceStartOverride === null) {
+      return;
+    }
+
+    const clamped = clampSliceStart(sliceStartOverride, maxSliceStart);
+    if (clamped !== sliceStartOverride) {
+      setSliceStartOverride(clamped);
+    }
+  }, [maxSliceStart, sliceStartOverride, transcriptBlocks.length]);
+
+  useInput(
+    (_input, key) => {
+      if (!key.pageUp && !key.pageDown) {
+        return;
+      }
+
+      if (key.pageUp) {
+        setSliceStartOverride((current) => {
+          const base = current === null ? latestSliceStart : current;
+          return clampSliceStart(base - TRANSCRIPT_CAP_STEP, maxSliceStart);
+        });
+        return;
+      }
+
+      setSliceStartOverride((current) => {
+        const base = current === null ? latestSliceStart : current;
+        const next = clampSliceStart(base + TRANSCRIPT_CAP_STEP, maxSliceStart);
+        return next >= maxSliceStart ? null : next;
+      });
+    },
+    { isActive: transcriptBlocks.length > MAX_TRANSCRIPT_BLOCKS },
+  );
 
   if (transcript.length === 0 && liveBlocks.length === 0 && !isStreaming) {
     return null;
@@ -80,12 +146,13 @@ const StreamOutput: FC<StreamOutputProps> = ({
 
   return (
     <Box flexDirection="column" paddingLeft={1} marginTop={1}>
-      {hiddenBlockCount > 0 ? (
+      {hiddenBeforeCount > 0 || hiddenAfterCount > 0 ? (
         <Box marginBottom={1}>
           <Text dimColor>
-            Showing latest {visibleTranscriptBlocks.length} transcript rows to
-            keep long sessions responsive. {hiddenBlockCount} earlier
-            {hiddenBlockCount === 1 ? " row is" : " rows are"} not re-rendered.
+            Showing transcript rows {hiddenBeforeCount + 1}-
+            {hiddenBeforeCount + visibleTranscriptBlocks.length} of{" "}
+            {transcriptBlocks.length} to keep long sessions responsive. PageUp
+            shows older rows. PageDown returns to newer rows.
           </Text>
         </Box>
       ) : null}
@@ -267,6 +334,10 @@ function computeTranscriptSliceStart(
   }
 
   return start;
+}
+
+function clampSliceStart(value: number, maxSliceStart: number): number {
+  return Math.max(0, Math.min(value, maxSliceStart));
 }
 
 function toolGroupKind(toolCall: UIToolCall): ToolCallGroup["kind"] | null {
