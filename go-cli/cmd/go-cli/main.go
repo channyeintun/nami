@@ -216,9 +216,12 @@ func runStdioEngine(ctx context.Context, cfg config.Config) error {
 		}
 	}
 
+	// Start the message router — single reader goroutine for the bridge.
+	router := ipc.NewMessageRouter(ctx, bridge)
+
 	// Main event loop: read client messages and dispatch
 	for {
-		msg, err := bridge.ReadMessage(ctx)
+		msg, err := router.Next(ctx)
 		if err != nil {
 			if ctx.Err() != nil {
 				return nil // clean shutdown
@@ -229,8 +232,6 @@ func runStdioEngine(ctx context.Context, cfg config.Config) error {
 		switch msg.Type {
 		case ipc.MsgShutdown:
 			return nil
-		case ipc.MsgCancel:
-			continue // no query in flight; ignore
 		case ipc.MsgUserInput:
 			var payload ipc.UserInputPayload
 			if err := json.Unmarshal(msg.Payload, &payload); err != nil {
@@ -266,7 +267,7 @@ func runStdioEngine(ctx context.Context, cfg config.Config) error {
 					return trackModelStream(callCtx, bridge, tracker, client, req)
 				},
 				ExecuteToolBatch: func(callCtx context.Context, calls []api.ToolCall) ([]api.ToolResult, error) {
-					return executeToolCalls(callCtx, bridge, registry, permissionCtx, tracker, planner, artifactManager, sessionID, client.Capabilities().MaxOutputTokens, calls)
+					return executeToolCalls(callCtx, bridge, router, registry, permissionCtx, tracker, planner, artifactManager, sessionID, client.Capabilities().MaxOutputTokens, calls)
 				},
 				CompactMessages: func(callCtx context.Context, current []api.Message, reason agent.CompactReason) ([]api.Message, error) {
 					pipeline := newCompactionPipeline(bridge, tracker, client)
@@ -296,27 +297,7 @@ func runStdioEngine(ctx context.Context, cfg config.Config) error {
 			}
 
 			queryCtx, queryCancel := context.WithCancel(ctx)
-			queuedMsgs := make([]ipc.ClientMessage, 0)
-			cancelReaderDone := make(chan struct{})
-			go func() {
-				defer close(cancelReaderDone)
-				for {
-					msg, err := bridge.ReadMessage(queryCtx)
-					if err != nil {
-						return
-					}
-					if msg.Type == ipc.MsgCancel {
-						queryCancel()
-						return
-					}
-					if msg.Type == ipc.MsgShutdown {
-						queryCancel()
-						queuedMsgs = append(queuedMsgs, msg)
-						return
-					}
-					queuedMsgs = append(queuedMsgs, msg)
-				}
-			}()
+			router.SetCancelFunc(queryCancel)
 
 			stream := agent.QueryStream(queryCtx, agent.QueryRequest{
 				Messages:      messages,
@@ -350,18 +331,11 @@ func runStdioEngine(ctx context.Context, cfg config.Config) error {
 			}
 
 			queryCancel()
-			<-cancelReaderDone
+			router.SetCancelFunc(nil)
 
 			if queryCancelled {
 				if err := bridge.Emit(ipc.EventTurnComplete, ipc.TurnCompletePayload{StopReason: "cancelled"}); err != nil {
 					return err
-				}
-			}
-
-			// Re-queue any messages received during the query
-			for _, queued := range queuedMsgs {
-				if queued.Type == ipc.MsgShutdown {
-					return nil
 				}
 			}
 
@@ -433,7 +407,7 @@ func runStdioEngine(ctx context.Context, cfg config.Config) error {
 			}
 			continue
 		case ipc.MsgPermissionResponse:
-			continue // handled inline during tool execution
+			continue // stale response outside query; ignore
 		}
 	}
 }
@@ -545,6 +519,7 @@ func systemPromptForMode(mode agent.ExecutionMode) string {
 func executeToolCalls(
 	ctx context.Context,
 	bridge *ipc.Bridge,
+	router *ipc.MessageRouter,
 	registry *toolpkg.Registry,
 	permissionCtx *permissions.Context,
 	tracker *costpkg.Tracker,
@@ -585,7 +560,7 @@ func executeToolCalls(
 			}
 			continue
 		}
-		allowed, denyReason, err := authorizeToolCall(ctx, bridge, permissionCtx, pendingCall)
+		allowed, denyReason, err := authorizeToolCall(ctx, bridge, router, permissionCtx, pendingCall)
 		if err != nil {
 			return nil, err
 		}
@@ -685,6 +660,7 @@ func newPermissionContext(mode string) *permissions.Context {
 func authorizeToolCall(
 	ctx context.Context,
 	bridge *ipc.Bridge,
+	router *ipc.MessageRouter,
 	permissionCtx *permissions.Context,
 	pending toolpkg.PendingCall,
 ) (bool, string, error) {
@@ -695,7 +671,7 @@ func authorizeToolCall(
 	case permissions.DecisionDeny:
 		return false, toolPermissionMessage("denied", pending, "permission policy denied this tool call"), nil
 	case permissions.DecisionAsk:
-		response, err := waitForPermissionDecision(ctx, bridge, pending)
+		response, err := waitForPermissionDecision(ctx, bridge, router, pending)
 		if err != nil {
 			return false, "", err
 		}
@@ -723,6 +699,7 @@ func authorizeToolCall(
 func waitForPermissionDecision(
 	ctx context.Context,
 	bridge *ipc.Bridge,
+	router *ipc.MessageRouter,
 	pending toolpkg.PendingCall,
 ) (string, error) {
 	requestID := fmt.Sprintf("perm-%d", time.Now().UnixNano())
@@ -736,7 +713,7 @@ func waitForPermissionDecision(
 	}
 
 	for {
-		msg, err := bridge.ReadMessage(ctx)
+		msg, err := router.Next(ctx)
 		if err != nil {
 			return "", err
 		}
@@ -751,7 +728,7 @@ func waitForPermissionDecision(
 				continue
 			}
 			return payload.Decision, nil
-		case ipc.MsgCancel, ipc.MsgShutdown:
+		case ipc.MsgShutdown:
 			return "", context.Canceled
 		default:
 			continue

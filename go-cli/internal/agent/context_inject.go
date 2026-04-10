@@ -3,6 +3,7 @@ package agent
 import (
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 )
 
@@ -79,7 +80,7 @@ func gitCommand(args ...string) string {
 	return strings.TrimSpace(string(out))
 }
 
-// listDirectory returns a compact listing of the working directory (files and dirs, one level deep).
+// listDirectory returns a compact listing of the working directory (two levels deep).
 func listDirectory(dir string) string {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -93,13 +94,28 @@ func listDirectory(dir string) string {
 		}
 		if e.IsDir() {
 			b.WriteString(name + "/\n")
+			subEntries, err := os.ReadDir(filepath.Join(dir, name))
+			if err != nil {
+				continue
+			}
+			for _, se := range subEntries {
+				seName := se.Name()
+				if strings.HasPrefix(seName, ".") {
+					continue
+				}
+				if se.IsDir() {
+					b.WriteString("  " + seName + "/\n")
+				} else {
+					b.WriteString("  " + seName + "\n")
+				}
+			}
 		} else {
 			b.WriteString(name + "\n")
 		}
 	}
 	listing := strings.TrimSpace(b.String())
-	if len(listing) > 2000 {
-		listing = listing[:2000] + "\n[truncated]"
+	if len(listing) > 3000 {
+		listing = listing[:3000] + "\n[truncated]"
 	}
 	return listing
 }
