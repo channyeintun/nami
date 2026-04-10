@@ -9,10 +9,10 @@
 
 ## Current Status
 
-| Phase                      | Status      | Notes                                                                                                                                                                                                             |
-| -------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 6. Protocol follow-up      | in progress | Permission amendment/feedback text, raw 5h/7d Anthropic rate-limit windows, and configurable footer cost-threshold notices are now wired through the IPC/TUI path. Block-oriented assistant messages remain open. |
-| 7. Deferred infrastructure | not started | Virtual transcript list requires scroll/fullscreen primitives the TUI does not yet have.                                                                                                                          |
+| Phase                      | Status      | Notes                                                                                                                                                                                                          |
+| -------------------------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 6. Protocol follow-up      | completed   | Permission amendment/feedback text, raw 5h/7d Anthropic rate-limit windows, configurable footer cost-threshold notices, and block-oriented assistant message rendering are now wired through the IPC/TUI path. |
+| 7. Deferred infrastructure | not started | Virtual transcript list requires scroll/fullscreen primitives the TUI does not yet have.                                                                                                                       |
 
 ## Task Log
 
@@ -26,3 +26,4 @@
 - Completed: Phase 6 permission amendment/feedback text parity slice. The permission prompt now accepts an optional note, the IPC payload carries it, denials include it in the rejection reason, and approved tool executions append it to the emitted tool result so the model can see the user's note on the next turn.
 - Completed: Phase 6 rate-limit status-line slice. Anthropic response headers now emit raw 5-hour and 7-day utilization windows through the engine protocol, and the TUI status bar shows those percentages when the provider returns them.
 - Completed: Phase 6 cost-threshold notice slice. The CLI now exposes a configurable session cost warning threshold, passes it into the TUI, and shows a footer warning once tracked spend crosses that threshold.
+- Completed: Phase 6 block-oriented assistant message slice. The TUI now stores assistant turns as ordered thinking/text blocks, preserves that structure for completed turns, and renders the live stream from the same block model instead of separate flat text buffers.

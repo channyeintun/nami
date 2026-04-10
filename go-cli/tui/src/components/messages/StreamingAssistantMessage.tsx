@@ -1,17 +1,19 @@
 import React, { type FC } from "react";
-import { Text } from "ink";
+import { Box, Text } from "ink";
 import Spinner from "ink-spinner";
+import type { UIAssistantBlock } from "../../hooks/useEvents.js";
 import MessageRow from "../MessageRow.js";
 import MarkdownText from "../MarkdownText.js";
+import AssistantThinkingMessage from "./AssistantThinkingMessage.js";
 
 interface StreamingAssistantMessageProps {
-  text?: string;
+  blocks: UIAssistantBlock[];
   statusLabel: string;
   model?: string;
 }
 
 const StreamingAssistantMessage: FC<StreamingAssistantMessageProps> = ({
-  text,
+  blocks,
   statusLabel,
   model,
 }) => {
@@ -26,10 +28,23 @@ const StreamingAssistantMessage: FC<StreamingAssistantMessageProps> = ({
       }
       meta={model ? <Text dimColor>{model}</Text> : null}
     >
-      <Text color="gray">
-        <Spinner type="dots" /> {statusLabel}
-      </Text>
-      {text ? <MarkdownText text={text} streaming /> : null}
+      <Box flexDirection="column">
+        <Text color="gray">
+          <Spinner type="dots" /> {statusLabel}
+        </Text>
+        {blocks.map((block, index) => (
+          <Box key={`${block.kind}-${index}`} marginTop={1}>
+            {block.kind === "thinking" ? (
+              <AssistantThinkingMessage text={block.text} streaming />
+            ) : (
+              <MarkdownText
+                text={block.text}
+                streaming={index === blocks.length - 1}
+              />
+            )}
+          </Box>
+        ))}
+      </Box>
     </MessageRow>
   );
 };

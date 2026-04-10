@@ -1,10 +1,10 @@
 import React, { type FC } from "react";
 import { Text } from "ink";
-import type { UIMessage } from "../../hooks/useEvents.js";
+import type { UIUserMessage } from "../../hooks/useEvents.js";
 import MessageRow from "../MessageRow.js";
 
 interface UserTextMessageProps {
-  message: UIMessage;
+  message: UIUserMessage;
   continuation?: boolean;
 }
 

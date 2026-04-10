@@ -30,13 +30,28 @@ export interface UIArtifact {
   content: string;
 }
 
-export interface UIMessage {
-  id: string;
-  role: "user" | "assistant";
+export interface UIAssistantBlock {
+  kind: "text" | "thinking";
   text: string;
+}
+
+interface UIMessageBase {
+  id: string;
   timestamp: string;
   model?: string;
 }
+
+export interface UIUserMessage extends UIMessageBase {
+  role: "user";
+  text: string;
+}
+
+export interface UIAssistantMessage extends UIMessageBase {
+  role: "assistant";
+  blocks: UIAssistantBlock[];
+}
+
+export type UIMessage = UIUserMessage | UIAssistantMessage;
 
 export interface UITranscriptEntry {
   id: string;
@@ -79,8 +94,7 @@ export interface EngineUIState {
   ready: boolean;
   messages: UIMessage[];
   transcript: UITranscriptEntry[];
-  streamedText: string;
-  thinkingText: string;
+  liveAssistantBlocks: UIAssistantBlock[];
   mode: string;
   model: string;
   sessionId: string | null;
@@ -108,8 +122,7 @@ const initialState = (model: string, mode: string): EngineUIState => ({
   ready: false,
   messages: [],
   transcript: [],
-  streamedText: "",
-  thinkingText: "",
+  liveAssistantBlocks: [],
   mode,
   model,
   sessionId: null,
@@ -130,16 +143,25 @@ const initialState = (model: string, mode: string): EngineUIState => ({
 
 let nextMessageId = 0;
 
-function createMessage(
-  role: UIMessage["role"],
-  text: string,
-  options?: { model?: string },
-): UIMessage {
+function createUserMessage(text: string): UIUserMessage {
   nextMessageId += 1;
   return {
     id: `msg-${nextMessageId}`,
-    role,
+    role: "user",
     text,
+    timestamp: new Date().toISOString(),
+  };
+}
+
+function createAssistantMessage(
+  blocks: UIAssistantBlock[],
+  options?: { model?: string },
+): UIAssistantMessage {
+  nextMessageId += 1;
+  return {
+    id: `msg-${nextMessageId}`,
+    role: "assistant",
+    blocks,
     timestamp: new Date().toISOString(),
     model: options?.model,
   };
@@ -165,7 +187,11 @@ export function useEvents(initialModel: string, initialMode: string) {
         const p = event.payload as TokenDeltaPayload;
         setUIState((s) => ({
           ...s,
-          streamedText: s.streamedText + p.text,
+          liveAssistantBlocks: appendAssistantBlock(
+            s.liveAssistantBlocks,
+            "text",
+            p.text,
+          ),
           isStreaming: true,
           statusLine: null,
         }));
@@ -175,7 +201,11 @@ export function useEvents(initialModel: string, initialMode: string) {
         const p = event.payload as TokenDeltaPayload;
         setUIState((s) => ({
           ...s,
-          thinkingText: s.thinkingText + p.text,
+          liveAssistantBlocks: appendAssistantBlock(
+            s.liveAssistantBlocks,
+            "thinking",
+            p.text,
+          ),
           isStreaming: true,
         }));
         break;
@@ -183,15 +213,12 @@ export function useEvents(initialModel: string, initialMode: string) {
       case "turn_complete": {
         const p = event.payload as TurnCompletePayload;
         setUIState((s) => {
-          const text = s.streamedText.trim();
-          const message =
-            text.length > 0
-              ? createMessage("assistant", text, { model: s.model })
-              : createMessage(
-                  "assistant",
-                  "(Model returned an empty response)",
-                  { model: s.model },
-                );
+          const blocks: UIAssistantBlock[] = assistantBlocksHaveContent(
+            s.liveAssistantBlocks,
+          )
+            ? s.liveAssistantBlocks
+            : [{ kind: "text", text: "(Model returned an empty response)" }];
+          const message = createAssistantMessage(blocks, { model: s.model });
           return {
             ...s,
             messages: [...s.messages, message],
@@ -199,8 +226,7 @@ export function useEvents(initialModel: string, initialMode: string) {
               id: message.id,
               kind: "message",
             }),
-            streamedText: "",
-            thinkingText: "",
+            liveAssistantBlocks: [],
             isStreaming: false,
             compact: null,
             statusLine: `Turn complete (${p.stop_reason})`,
@@ -493,8 +519,7 @@ export function useEvents(initialModel: string, initialMode: string) {
   const clearStream = useCallback(() => {
     setUIState((s) => ({
       ...s,
-      streamedText: "",
-      thinkingText: "",
+      liveAssistantBlocks: [],
       compact: null,
       statusLine: null,
       error: null,
@@ -524,7 +549,7 @@ export function useEvents(initialModel: string, initialMode: string) {
 
   const appendUserMessage = useCallback((text: string) => {
     setUIState((s) => {
-      const message = createMessage("user", text);
+      const message = createUserMessage(text);
       return {
         ...s,
         messages: [...s.messages, message],
@@ -539,8 +564,7 @@ export function useEvents(initialModel: string, initialMode: string) {
   const beginAssistantTurn = useCallback(() => {
     setUIState((s) => ({
       ...s,
-      streamedText: "",
-      thinkingText: "",
+      liveAssistantBlocks: [],
       error: null,
       statusLine: null,
       isStreaming: true,
@@ -646,6 +670,30 @@ function toolCallName(toolCalls: UIToolCall[], id: string): string {
 
 function toolCallInput(toolCalls: UIToolCall[], id: string): string {
   return toolCalls.find((toolCall) => toolCall.id === id)?.input ?? "";
+}
+
+function appendAssistantBlock(
+  blocks: UIAssistantBlock[],
+  kind: UIAssistantBlock["kind"],
+  text: string,
+): UIAssistantBlock[] {
+  if (text.length === 0) {
+    return blocks;
+  }
+
+  const lastBlock = blocks[blocks.length - 1];
+  if (lastBlock?.kind === kind) {
+    return [
+      ...blocks.slice(0, -1),
+      { ...lastBlock, text: lastBlock.text + text },
+    ];
+  }
+
+  return [...blocks, { kind, text }];
+}
+
+function assistantBlocksHaveContent(blocks: UIAssistantBlock[]): boolean {
+  return blocks.some((block) => block.text.trim().length > 0);
 }
 
 function findArtifactField(

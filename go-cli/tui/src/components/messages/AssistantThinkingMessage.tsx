@@ -1,43 +1,37 @@
 import React, { type FC, useMemo } from "react";
-import { Text } from "ink";
+import { Box, Text } from "ink";
 import Spinner from "ink-spinner";
-import MessageRow from "../MessageRow.js";
 
 interface AssistantThinkingMessageProps {
   text: string;
-  model?: string;
+  streaming?: boolean;
 }
 
-function truncateThinking(text: string): string {
+function truncateThinking(text: string, maxLines: number): string {
   const lines = text.split("\n").filter((line) => line.trim().length > 0);
-  return lines.slice(-4).join("\n");
+  return lines.slice(-maxLines).join("\n");
 }
 
 const AssistantThinkingMessage: FC<AssistantThinkingMessageProps> = ({
   text,
-  model,
+  streaming = false,
 }) => {
-  const preview = useMemo(() => truncateThinking(text), [text]);
-  if (!preview) {
+  const content = useMemo(
+    () => (streaming ? truncateThinking(text, 4) : text.trimEnd()),
+    [streaming, text],
+  );
+  if (!content) {
     return null;
   }
 
   return (
-    <MessageRow
-      markerColor="gray"
-      markerDim
-      label={
-        <Text color="gray" dimColor>
-          Assistant
-        </Text>
-      }
-      meta={model ? <Text dimColor>{model}</Text> : null}
-    >
+    <Box flexDirection="column">
       <Text color="gray" italic>
-        <Spinner type="dots" /> Thinking
+        {streaming ? <Spinner type="dots" /> : null}
+        {streaming ? " Thinking" : "Thinking"}
       </Text>
-      <Text color="gray">{preview}</Text>
-    </MessageRow>
+      <Text color="gray">{content}</Text>
+    </Box>
   );
 };
 

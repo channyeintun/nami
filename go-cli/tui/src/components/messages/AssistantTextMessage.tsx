@@ -1,11 +1,15 @@
 import React, { type FC } from "react";
-import { Text } from "ink";
-import type { UIMessage } from "../../hooks/useEvents.js";
+import { Box, Text } from "ink";
+import type {
+  UIAssistantBlock,
+  UIAssistantMessage,
+} from "../../hooks/useEvents.js";
 import MessageRow from "../MessageRow.js";
 import MarkdownText from "../MarkdownText.js";
+import AssistantThinkingMessage from "./AssistantThinkingMessage.js";
 
 interface AssistantTextMessageProps {
-  message: UIMessage;
+  message: UIAssistantMessage;
   continuation?: boolean;
 }
 
@@ -25,14 +29,34 @@ const AssistantTextMessage: FC<AssistantTextMessageProps> = ({
       }
       meta={renderMetadata(message)}
     >
-      <MarkdownText text={message.text} />
+      <Box flexDirection="column">
+        {message.blocks.map((block, index) =>
+          renderAssistantBlock(block, index, message.blocks.length),
+        )}
+      </Box>
     </MessageRow>
   );
 };
 
 export default AssistantTextMessage;
 
-function renderMetadata(message: UIMessage) {
+function renderAssistantBlock(
+  block: UIAssistantBlock,
+  index: number,
+  blockCount: number,
+) {
+  return (
+    <Box key={`${block.kind}-${index}`} marginTop={index === 0 ? 0 : 1}>
+      {block.kind === "thinking" ? (
+        <AssistantThinkingMessage text={block.text} />
+      ) : (
+        <MarkdownText text={block.text} streaming={index === blockCount - 1} />
+      )}
+    </Box>
+  );
+}
+
+function renderMetadata(message: UIAssistantMessage) {
   const parts: string[] = [];
 
   if (message.timestamp) {

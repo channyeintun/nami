@@ -179,8 +179,7 @@ const App: FC<AppProps> = ({ enginePath, model, mode }) => {
           messages={uiState.messages}
           toolCalls={uiState.toolCalls}
           transcript={uiState.transcript}
-          liveText={uiState.streamedText}
-          liveThinkingText={uiState.thinkingText}
+          liveBlocks={uiState.liveAssistantBlocks}
           isStreaming={uiState.isStreaming}
           model={uiState.model}
         />

@@ -1,14 +1,16 @@
 import React, { type FC, useMemo, useRef } from "react";
 import { Box, Text } from "ink";
 import type {
+  UIAssistantBlock,
+  UIAssistantMessage,
   UIMessage,
+  UIUserMessage,
   UIToolCall,
   UITranscriptEntry,
 } from "../hooks/useEvents.js";
 import GroupedToolCalls, { type ToolCallGroup } from "./GroupedToolCalls.js";
 import ToolProgress from "./ToolProgress.js";
 import AssistantTextMessage from "./messages/AssistantTextMessage.js";
-import AssistantThinkingMessage from "./messages/AssistantThinkingMessage.js";
 import StreamingAssistantMessage from "./messages/StreamingAssistantMessage.js";
 import UserTextMessage from "./messages/UserTextMessage.js";
 
@@ -16,8 +18,7 @@ interface StreamOutputProps {
   messages: UIMessage[];
   toolCalls: UIToolCall[];
   transcript: UITranscriptEntry[];
-  liveText: string;
-  liveThinkingText: string;
+  liveBlocks: UIAssistantBlock[];
   isStreaming: boolean;
   model: string;
 }
@@ -34,7 +35,7 @@ type TranscriptBlock =
   | {
       kind: "message";
       key: string;
-      message: UIMessage;
+      message: UIAssistantMessage | UIUserMessage;
       continuation: boolean;
     }
   | { kind: "tool_call"; key: string; toolCall: UIToolCall }
@@ -44,8 +45,7 @@ const StreamOutput: FC<StreamOutputProps> = ({
   messages,
   toolCalls,
   transcript,
-  liveText,
-  liveThinkingText,
+  liveBlocks,
   isStreaming,
   model,
 }) => {
@@ -74,12 +74,7 @@ const StreamOutput: FC<StreamOutputProps> = ({
   const hiddenBlockCount =
     transcriptBlocks.length - visibleTranscriptBlocks.length;
 
-  if (
-    transcript.length === 0 &&
-    !liveText &&
-    !liveThinkingText &&
-    !isStreaming
-  ) {
+  if (transcript.length === 0 && liveBlocks.length === 0 && !isStreaming) {
     return null;
   }
 
@@ -119,17 +114,11 @@ const StreamOutput: FC<StreamOutputProps> = ({
         );
       })}
 
-      {isStreaming && liveThinkingText && !liveText ? (
-        <AssistantThinkingMessage text={liveThinkingText} model={model} />
-      ) : null}
-
-      {isStreaming && (Boolean(liveText) || !liveThinkingText) ? (
+      {isStreaming ? (
         <StreamingAssistantMessage
-          text={liveText || undefined}
+          blocks={liveBlocks}
           model={model}
-          statusLabel={
-            liveText ? "Responding" : liveThinkingText ? "Thinking" : "Working"
-          }
+          statusLabel={streamingStatusLabel(liveBlocks)}
         />
       ) : null}
     </Box>
@@ -187,6 +176,14 @@ function buildTranscriptBlocks(
   }
 
   return blocks;
+}
+
+function streamingStatusLabel(blocks: UIAssistantBlock[]): string {
+  const lastBlock = blocks[blocks.length - 1];
+  if (!lastBlock) {
+    return "Working";
+  }
+  return lastBlock.kind === "thinking" ? "Thinking" : "Responding";
 }
 
 function buildToolBlocks(toolCalls: UIToolCall[]): TranscriptBlock[] {
