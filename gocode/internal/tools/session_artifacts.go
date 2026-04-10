@@ -10,12 +10,15 @@ import (
 )
 
 const (
-	taskListArtifactSlot      = "active"
-	taskListArtifactTitle     = "Task List"
-	taskListArtifactSource    = "task-list-tool"
-	walkthroughArtifactSlot   = "latest"
-	walkthroughArtifactTitle  = "Walkthrough"
-	walkthroughArtifactSource = "walkthrough-tool"
+	implementationPlanArtifactSlot   = "active"
+	implementationPlanArtifactTitle  = "Implementation Plan"
+	implementationPlanArtifactSource = "implementation-plan-tool"
+	taskListArtifactSlot             = "active"
+	taskListArtifactTitle            = "Task List"
+	taskListArtifactSource           = "task-list-tool"
+	walkthroughArtifactSlot          = "latest"
+	walkthroughArtifactTitle         = "Walkthrough"
+	walkthroughArtifactSource        = "walkthrough-tool"
 )
 
 type sessionArtifactRuntime struct {
@@ -41,6 +44,94 @@ func getSessionArtifactRuntime() (string, *artifactspkg.Manager, error) {
 		return "", nil, fmt.Errorf("session artifacts are unavailable")
 	}
 	return globalSessionArtifactRuntime.sessionID, globalSessionArtifactRuntime.manager, nil
+}
+
+// SaveImplementationPlanTool creates or updates the active session implementation-plan artifact.
+type SaveImplementationPlanTool struct{}
+
+// NewSaveImplementationPlanTool constructs the implementation-plan artifact tool.
+func NewSaveImplementationPlanTool() *SaveImplementationPlanTool {
+	return &SaveImplementationPlanTool{}
+}
+
+func (t *SaveImplementationPlanTool) Name() string {
+	return "save_implementation_plan"
+}
+
+func (t *SaveImplementationPlanTool) Description() string {
+	return "Create or update the session implementation-plan artifact with the final markdown plan for the current task."
+}
+
+func (t *SaveImplementationPlanTool) InputSchema() any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"content": map[string]any{
+				"type":        "string",
+				"description": "The final markdown implementation plan to persist for the current session.",
+			},
+			"title": map[string]any{
+				"type":        "string",
+				"description": "Optional artifact title. Defaults to Implementation Plan.",
+			},
+		},
+		"required": []string{"content"},
+	}
+}
+
+func (t *SaveImplementationPlanTool) Permission() PermissionLevel {
+	return PermissionReadOnly
+}
+
+func (t *SaveImplementationPlanTool) IsConcurrencySafe(input ToolInput) bool {
+	return false
+}
+
+func (t *SaveImplementationPlanTool) Execute(ctx context.Context, input ToolInput) (ToolOutput, error) {
+	sessionID, manager, err := getSessionArtifactRuntime()
+	if err != nil {
+		return ToolOutput{}, err
+	}
+
+	content, ok := stringParam(input.Params, "content")
+	if !ok || strings.TrimSpace(content) == "" {
+		return ToolOutput{}, fmt.Errorf("save_implementation_plan requires content")
+	}
+
+	title, _ := stringParam(input.Params, "title")
+	title = strings.TrimSpace(title)
+	if title == "" {
+		title = implementationPlanArtifactTitle
+	}
+
+	artifact, _, created, err := manager.UpsertSessionMarkdown(ctx, artifactspkg.MarkdownRequest{
+		Kind:    artifactspkg.KindImplementationPlan,
+		Scope:   artifactspkg.ScopeSession,
+		Title:   title,
+		Source:  implementationPlanArtifactSource,
+		Content: content,
+		Metadata: map[string]any{
+			"mode":   "plan",
+			"status": "final",
+		},
+	}, sessionID, implementationPlanArtifactSlot)
+	if err != nil {
+		return ToolOutput{}, err
+	}
+
+	verb := "updated"
+	if created {
+		verb = "created"
+	}
+
+	return ToolOutput{
+		Output: fmt.Sprintf("Implementation-plan artifact %s: %s", verb, artifact.ID),
+		Artifacts: []ArtifactMutation{{
+			Artifact: artifact,
+			Content:  content,
+			Created:  created,
+		}},
+	}, nil
 }
 
 // UpsertTaskListTool creates or updates the active session task-list artifact.
