@@ -10,7 +10,26 @@ An agentic coding CLI powered by LLMs. Think, plan, and execute code changes fro
 curl -fsSL https://raw.githubusercontent.com/channyeintun/go-code/main/go-cli/install.sh | sh
 ```
 
-This downloads two binaries (`gocode` and `gocode-engine`) to `/usr/local/bin/`. No runtime dependencies — no Node.js, no Go, nothing else needed.
+The installer chooses a writable install directory automatically:
+
+- `/usr/local/bin` if it is writable
+- `~/.local/bin` otherwise
+
+It installs two binaries: `gocode` and `gocode-engine`.
+
+No runtime dependencies — no Node.js, no Go, nothing else needed.
+
+After install, verify:
+
+```bash
+command -v gocode
+```
+
+If your shell still cannot find it, add the install directory to your PATH. For example:
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+```
 
 ### Manual install
 
@@ -29,6 +48,20 @@ Extract and copy both files to a directory in your `PATH`:
 tar -xzf gocode-darwin-arm64.tar.gz
 cd gocode-darwin-arm64
 sudo cp gocode gocode-engine /usr/local/bin/
+```
+
+If you do not want to use `sudo`, install to a user-owned directory instead:
+
+```bash
+mkdir -p "$HOME/.local/bin"
+cp gocode gocode-engine "$HOME/.local/bin/"
+chmod +x "$HOME/.local/bin/gocode" "$HOME/.local/bin/gocode-engine"
+```
+
+Then make sure `~/.local/bin` is on your PATH:
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
 ```
 
 ## Setup
