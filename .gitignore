@@ -43,6 +43,9 @@ cache/
 # OS
 Thumbs.db
 
-#Source code
+# Source code
 sourcecode/
 adk-go/
+
+# Agents
+CLAUDE.md
