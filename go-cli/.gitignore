@@ -1,5 +1,6 @@
 # Go
 /go-cli
+bin/
 *.exe
 *.test
 *.out
