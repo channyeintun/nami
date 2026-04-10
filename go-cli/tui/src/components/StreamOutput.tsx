@@ -111,7 +111,7 @@ const StreamOutput: FC<StreamOutputProps> = ({
           {liveThinkingText && !liveText && (
             <Text color="gray">{truncateThinking(liveThinkingText)}</Text>
           )}
-          {liveText && <MarkdownText text={liveText} />}
+          {liveText && <MarkdownText text={liveText} streaming />}
         </Box>
       )}
     </Box>

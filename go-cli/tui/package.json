@@ -14,15 +14,14 @@
     "setup": "npm install && npm run build && npm run install-engine"
   },
   "dependencies": {
+    "cli-highlight": "^2.1.11",
     "ink": "^7.0.0",
     "ink-spinner": "^5.0.0",
     "marked": "^15.0.12",
-    "marked-terminal": "^7.3.0",
     "react": "^19.2.5",
     "react-devtools-core": "^7.0.1"
   },
   "devDependencies": {
-    "@types/marked-terminal": "^6.1.1",
     "@types/node": "^24.7.2",
     "@types/react": "^19.2.14",
     "typescript": "^6.0.2"

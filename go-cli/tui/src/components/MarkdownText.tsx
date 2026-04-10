@@ -1,39 +1,75 @@
-import React, { type FC, useMemo } from "react";
-import { Text } from "ink";
-import { marked, type MarkedExtension } from "marked";
-import { markedTerminal } from "marked-terminal";
-
-marked.use(
-  markedTerminal({ reflowText: true, tab: 2 }) as MarkedExtension,
-);
-
-// marked-terminal's `text` renderer discards inline tokens (bold, italic,
-// code spans) inside tight list items by reading only the raw `.text`
-// property. Override it so inline tokens are parsed when present.
-marked.use({
-  renderer: {
-    text(token: string | { tokens?: unknown[]; text: string }) {
-      if (typeof token === "object" && Array.isArray(token.tokens) && token.tokens.length > 0) {
-        return (this as unknown as { parser: { parseInline(tokens: unknown[]): string } }).parser.parseInline(token.tokens);
-      }
-      if (typeof token === "object") return token.text;
-      return token;
-    },
-  },
-});
+import React, { type FC, useMemo, useRef } from "react";
+import { Box, Text } from "ink";
+import MarkdownTable from "./MarkdownTable.js";
+import { renderMarkdownBlocks, cachedLexer } from "../utils/markdown.js";
 
 interface MarkdownTextProps {
   text: string;
+  streaming?: boolean;
 }
 
-const MarkdownText: FC<MarkdownTextProps> = ({ text }) => {
+const MarkdownTextBody: FC<Pick<MarkdownTextProps, "text">> = ({ text }) => {
   const rendered = useMemo(() => {
-    const result = marked.parse(text);
-    if (typeof result !== "string") return text;
-    return result.replace(/\n+$/, "");
+    return renderMarkdownBlocks(text);
   }, [text]);
 
-  return <Text>{rendered}</Text>;
+  return (
+    <Box flexDirection="column">
+      {rendered.map((block, index) => {
+        if (block.kind === "table") {
+          return <MarkdownTable key={`table-${index}`} token={block.token} />;
+        }
+
+        return <Text key={`text-${index}`}>{block.content}</Text>;
+      })}
+    </Box>
+  );
+};
+
+const StreamingMarkdownText: FC<Pick<MarkdownTextProps, "text">> = ({
+  text,
+}) => {
+  const stablePrefixRef = useRef("");
+  const normalized = text.replace(/\r\n/g, "\n");
+
+  if (!normalized.startsWith(stablePrefixRef.current)) {
+    stablePrefixRef.current = "";
+  }
+
+  const boundary = stablePrefixRef.current.length;
+  const tokens = cachedLexer(normalized.slice(boundary));
+  let lastContentIndex = tokens.length - 1;
+
+  while (lastContentIndex >= 0 && tokens[lastContentIndex]?.type === "space") {
+    lastContentIndex -= 1;
+  }
+
+  let advance = 0;
+  for (let index = 0; index < lastContentIndex; index += 1) {
+    advance += tokens[index]?.raw.length ?? 0;
+  }
+
+  if (advance > 0) {
+    stablePrefixRef.current = normalized.slice(0, boundary + advance);
+  }
+
+  const stablePrefix = stablePrefixRef.current;
+  const unstableSuffix = normalized.slice(stablePrefix.length);
+
+  return (
+    <Box flexDirection="column">
+      {stablePrefix ? <MarkdownTextBody text={stablePrefix} /> : null}
+      {unstableSuffix ? <MarkdownTextBody text={unstableSuffix} /> : null}
+    </Box>
+  );
+};
+
+const MarkdownText: FC<MarkdownTextProps> = ({ text, streaming }) => {
+  if (streaming) {
+    return <StreamingMarkdownText text={text} />;
+  }
+
+  return <MarkdownTextBody text={text} />;
 };
 
 export default MarkdownText;
