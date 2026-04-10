@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -132,6 +133,7 @@ func launchTUI(ctx context.Context, cfg config.Config) error {
 		"GOCLI_ENGINE_PATH="+enginePath,
 		"GOCLI_MODEL="+cfg.Model,
 		"GOCLI_MODE="+cfg.DefaultMode,
+		"GOCLI_COST_WARNING_THRESHOLD_USD="+strconv.FormatFloat(cfg.CostWarningThresholdUSD, 'f', -1, 64),
 	)
 
 	if err := cmd.Run(); err != nil {

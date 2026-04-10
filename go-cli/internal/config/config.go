@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -18,7 +19,8 @@ type Config struct {
 	APIKey  string `json:"-"` // never serialized
 
 	// Session
-	DefaultMode string `json:"default_mode,omitempty"` // "plan" or "fast"
+	DefaultMode             string  `json:"default_mode,omitempty"` // "plan" or "fast"
+	CostWarningThresholdUSD float64 `json:"cost_warning_threshold_usd,omitempty"`
 
 	// Permissions
 	PermissionMode string `json:"permission_mode,omitempty"` // "default", "bypassPermissions", "autoApprove"
@@ -31,8 +33,9 @@ type Config struct {
 // DefaultConfig returns the configuration with sensible defaults.
 func DefaultConfig() Config {
 	return Config{
-		Model:       "anthropic/claude-sonnet-4-20250514",
-		DefaultMode: "plan",
+		Model:                   "anthropic/claude-sonnet-4-20250514",
+		DefaultMode:             "plan",
+		CostWarningThresholdUSD: 5,
 	}
 }
 
@@ -71,6 +74,13 @@ func Load() Config {
 	}
 	if v := os.Getenv("GOCLI_PERMISSION_MODE"); v != "" {
 		cfg.PermissionMode = v
+	}
+	if v := os.Getenv("GOCLI_COST_WARNING_THRESHOLD_USD"); v != "" {
+		if parsed, err := strconv.ParseFloat(v, 64); err == nil {
+			cfg.CostWarningThresholdUSD = parsed
+		} else {
+			fmt.Fprintf(os.Stderr, "warning: invalid GOCLI_COST_WARNING_THRESHOLD_USD %q: %v\n", v, err)
+		}
 	}
 
 	return cfg

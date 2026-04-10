@@ -236,6 +236,7 @@ const App: FC<AppProps> = ({ enginePath, model, mode }) => {
             isLoading={uiState.isStreaming}
             disabled={isPromptDisabled}
             promptValue={prompt.value}
+            totalCostUsd={uiState.cost.totalUsd}
             inputTokens={uiState.cost.inputTokens}
             outputTokens={uiState.cost.outputTokens}
           />

@@ -14,6 +14,7 @@ interface PromptFooterProps {
   isLoading: boolean;
   disabled?: boolean;
   promptValue: string;
+  totalCostUsd: number;
   inputTokens: number;
   outputTokens: number;
 }
@@ -31,6 +32,7 @@ const PromptFooter: FC<PromptFooterProps> = ({
   isLoading,
   disabled,
   promptValue,
+  totalCostUsd,
   inputTokens,
   outputTokens,
 }) => {
@@ -74,14 +76,23 @@ const PromptFooter: FC<PromptFooterProps> = ({
   const showWrappedIndicator = promptValue.length > 0 && wrappedLineCount > 1;
   const activityLabel = isLoading ? "running" : disabled ? "blocked" : "ready";
   const hint = disabled ? DISABLED_HINT : INPUT_HINT;
+  const costWarningText = useMemo(
+    () => buildCostWarningText(totalCostUsd),
+    [totalCostUsd],
+  );
   const warningText = tokenWarning.isWarning
     ? `Compact soon (~${tokenWarning.percentLeft}% until threshold) · ${formatTokenCount(tokenUsage)}/${formatTokenCount(tokenWarning.effectiveContextWindow)} used · Run /compact before the next long turn`
     : null;
 
   return (
     <Box flexDirection="column">
-      {warningText ? (
+      {costWarningText ? (
         <Box paddingX={2} paddingTop={1}>
+          <Text color="yellow">{costWarningText}</Text>
+        </Box>
+      ) : null}
+      {warningText ? (
+        <Box paddingX={2} paddingTop={costWarningText ? 0 : 1}>
           <Text color={tokenWarning.isError ? "red" : "yellow"}>
             {warningText}
           </Text>
@@ -89,7 +100,7 @@ const PromptFooter: FC<PromptFooterProps> = ({
       ) : null}
       <Box
         paddingX={2}
-        paddingTop={warningText ? 0 : 1}
+        paddingTop={warningText || costWarningText ? 0 : 1}
         flexDirection={footerLayout}
         justifyContent="space-between"
       >
@@ -146,4 +157,43 @@ function getWrappedLineSegments(value: string, columns: number): string[] {
   }
 
   return segments;
+}
+
+function buildCostWarningText(totalCostUsd: number): string | null {
+  const threshold = getCostWarningThresholdUsd();
+  if (threshold <= 0 || totalCostUsd < threshold) {
+    return null;
+  }
+
+  return `Session cost passed $${threshold.toFixed(2)} · current spend $${totalCostUsd.toFixed(4)} · Review API usage before the next long turn`;
+}
+
+function getCostWarningThresholdUsd(): number {
+  if (isEnvTruthy(process.env.GOCLI_DISABLE_COST_WARNINGS)) {
+    return 0;
+  }
+
+  const raw = process.env.GOCLI_COST_WARNING_THRESHOLD_USD?.trim();
+  if (!raw) {
+    return 5;
+  }
+
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? parsed : 5;
+}
+
+function isEnvTruthy(value: string | undefined): boolean {
+  if (!value) {
+    return false;
+  }
+
+  switch (value.trim().toLowerCase()) {
+    case "1":
+    case "true":
+    case "yes":
+    case "on":
+      return true;
+    default:
+      return false;
+  }
 }
