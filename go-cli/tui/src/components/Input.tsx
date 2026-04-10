@@ -261,7 +261,7 @@ const Input: FC<InputProps> = ({
             <Text color="cyan" bold>
               {"> "}
             </Text>
-            <Text color="gray">Ask go-cli to inspect, plan, or edit code</Text>
+            <Text color="gray">Ask gocode to inspect, plan, or edit code</Text>
             <Text color="gray">{"█"}</Text>
           </Box>
         ) : (
