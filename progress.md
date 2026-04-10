@@ -30,6 +30,7 @@
 - [x] `context_inject.go` — SystemContext (session-stable) + TurnContext (per-turn refresh)
 - [x] `loop.go` — Wire real model calls into the 5-phase iteration
 - [x] `planner.go` — Plan creation + enforcement before writes
+- [x] `planner.go` — Persist implementation-plan artifacts only for actual planning turns (skip simple explanatory questions in plan mode)
 
 ### `internal/tools/` — Tool Execution
 
@@ -155,6 +156,8 @@
 - [x] `src/protocol/codec.ts` — NDJSON parser/serializer
 - [x] `src/components/PlanPanel.tsx` — Render implementation-plan artifact
 - [x] `src/components/ArtifactView.tsx` — Render artifact content
+- [x] Conversation transcript retained after submit; live assistant row now shows thinking/responding state instead of clearing the visible prompt
+- [x] Status bar labels mode/model explicitly and tool progress uses a real spinner
 - [x] `npm install` + TypeScript build verification
 
 ---
@@ -203,4 +206,4 @@
 | Ink TUI        | ✅                   | ✅ (default CLI launches Ink parent, Go child over NDJSON; status/permission/artifact rendering validated) |
 | CLI Entrypoint | ✅                   | ✅ (live stdio engine)                                                          |
 
-**Current state:** All four provider clients, the Bash tool, and the file read/write/edit/glob/grep/web_search/web_fetch/git tools are implemented, along with the streaming executor needed to overlap safe tool calls. The default CLI path now launches the Ink frontend as the parent process and runs the Go engine as a stdio child over NDJSON, with status, artifact, compaction, and permission/error states rendered in the TUI while the engine remains recoverable if the configured model is unavailable at startup. The stdio engine persists and restores transcript + session metadata, supports runtime `/model` switching, exposes `/plan`, `/fast`, `/compact`, `/model`, `/cost`, `/usage`, and `/resume` over the stdio command path, emits markdown-backed implementation-plan/tool-log artifacts during planning and oversized tool execution, keeps plan mode read-only through planner enforcement, auto-selects matching markdown skills into the per-turn system prompt, and now shapes requests by model capability: native tool definitions are withheld for text-only models, `ultrathink` only enables extended thinking on supported models, context thresholds already track each model's window, and tool-output budgets scale with model output capacity. The next concrete task is session title generation with the local model and any remaining non-hook follow-ups before hooks.
+**Current state:** All four provider clients, the Bash tool, and the file read/write/edit/glob/grep/web_search/web_fetch/git tools are implemented, along with the streaming executor needed to overlap safe tool calls. The default CLI path now launches the Ink frontend as the parent process and runs the Go engine as a stdio child over NDJSON, with status, artifact, compaction, permission/error states, preserved conversation history, and live assistant/tool activity rendered in the TUI while the engine remains recoverable if the configured model is unavailable at startup. The stdio engine persists and restores transcript + session metadata, supports runtime `/model` switching, exposes `/plan`, `/fast`, `/compact`, `/model`, `/cost`, `/usage`, and `/resume` over the stdio command path, emits markdown-backed implementation-plan/tool-log artifacts during planning and oversized tool execution, keeps plan mode read-only through planner enforcement, avoids creating implementation-plan artifacts for simple plan-mode Q&A turns, auto-selects matching markdown skills into the per-turn system prompt, and now shapes requests by model capability: native tool definitions are withheld for text-only models, `ultrathink` only enables extended thinking on supported models, context thresholds already track each model's window, and tool-output budgets scale with model output capacity. The next concrete task is session title generation with the local model and any remaining non-hook follow-ups before hooks.

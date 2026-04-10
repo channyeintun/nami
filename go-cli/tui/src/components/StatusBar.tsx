@@ -20,7 +20,11 @@ const StatusBar: FC<StatusBarProps> = ({ ready, mode, model, totalCostUsd, input
       <Text>
         <Text color={readinessColor} bold>{`[${readinessLabel}]`}</Text>
         {"  "}
-        <Text color={modeColor} bold>{`[${mode.toUpperCase()}]`}</Text>
+        <Text color="gray">mode:</Text>
+        {"  "}
+        <Text color={modeColor} bold>{mode.toUpperCase()}</Text>
+        {"  "}
+        <Text color="gray">model:</Text>
         {"  "}
         <Text color="yellow">{model}</Text>
       </Text>

@@ -260,23 +260,7 @@ func runStdioEngine(ctx context.Context, cfg config.Config) error {
 			})
 			availableSkills, _ := skillspkg.LoadAll(cwd)
 			messagesBeforeQuery := len(messages)
-			planArtifactID := ""
 			planner := agent.NewPlanner(mode, sessionID, artifactManager)
-			if update, beginErr := planner.BeginTurn(ctx, payload.Text); beginErr != nil {
-				if emitErr := bridge.EmitError(fmt.Sprintf("persist implementation plan artifact: %v", beginErr), true); emitErr != nil {
-					return emitErr
-				}
-			} else if update != nil {
-				planArtifactID = update.Artifact.ID
-				if update.Created {
-					if err := emitArtifactCreated(bridge, update.Artifact); err != nil {
-						return err
-					}
-				}
-				if err := emitArtifactUpdated(bridge, update.Artifact, update.Content); err != nil {
-					return err
-				}
-			}
 
 			deps := agent.QueryDeps{
 				CallModel: func(callCtx context.Context, req api.ModelRequest) (iter.Seq2[api.ModelEvent, error], error) {
@@ -339,7 +323,7 @@ func runStdioEngine(ctx context.Context, cfg config.Config) error {
 			}
 
 			if !queryFailed {
-				if update, finalizeErr := planner.FinalizeTurn(ctx, planArtifactID, payload.Text, messages, messagesBeforeQuery); finalizeErr != nil {
+				if update, finalizeErr := planner.FinalizeTurn(ctx, "", payload.Text, messages, messagesBeforeQuery); finalizeErr != nil {
 					if emitErr := bridge.EmitError(fmt.Sprintf("update implementation plan artifact: %v", finalizeErr), true); emitErr != nil {
 						return emitErr
 					}

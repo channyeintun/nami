@@ -81,6 +81,9 @@ func (p *Planner) FinalizeTurn(ctx context.Context, artifactID string, userReque
 	if strings.TrimSpace(plan) == "" {
 		return nil, nil
 	}
+	if !shouldPersistImplementationPlan(userRequest, plan) {
+		return nil, nil
+	}
 
 	content := artifactspkg.RenderImplementationPlanMarkdown(userRequest, plan)
 	request := artifactspkg.MarkdownRequest{
@@ -192,4 +195,120 @@ func latestAssistantPlanSince(messages []api.Message, fromIndex int) string {
 		return message.Content
 	}
 	return ""
+}
+
+func shouldPersistImplementationPlan(userRequest string, assistantResponse string) bool {
+	request := strings.ToLower(strings.TrimSpace(userRequest))
+	response := strings.ToLower(strings.TrimSpace(assistantResponse))
+
+	if request == "" && response == "" {
+		return false
+	}
+
+	if containsAny(request, planIntentTerms) {
+		return true
+	}
+
+	if looksLikeQuestion(request) && !containsAny(request, implementationIntentTerms) {
+		return false
+	}
+
+	if containsAny(response, explicitPlanResponseTerms) {
+		return true
+	}
+
+	if containsAny(response, implementationIntentTerms) && containsStructuredSteps(response) {
+		return true
+	}
+
+	return false
+}
+
+var planIntentTerms = []string{
+	"implementation plan",
+	"plan this",
+	"make a plan",
+	"give me a plan",
+	"step by step plan",
+	"plan for",
+	"approach for",
+	"how should we implement",
+	"how should i implement",
+}
+
+var implementationIntentTerms = []string{
+	"implement",
+	"implementation",
+	"fix",
+	"add",
+	"change",
+	"update",
+	"refactor",
+	"build",
+	"create",
+	"rename",
+	"support",
+	"wire",
+	"patch",
+	"edit",
+	"modify",
+	"migrate",
+	"remove",
+	"replace",
+}
+
+var explicitPlanResponseTerms = []string{
+	"implementation plan",
+	"proposed plan",
+	"here's the plan",
+	"here is the plan",
+	"steps:",
+	"next steps",
+	"plan:",
+	"approach:",
+	"i would",
+}
+
+var questionPrefixes = []string{
+	"what",
+	"why",
+	"how",
+	"when",
+	"where",
+	"which",
+	"who",
+	"explain",
+	"review",
+	"analyze",
+	"tell me",
+	"can you explain",
+	"could you explain",
+}
+
+func containsAny(text string, terms []string) bool {
+	for _, term := range terms {
+		if strings.Contains(text, term) {
+			return true
+		}
+	}
+	return false
+}
+
+func looksLikeQuestion(text string) bool {
+	if strings.Contains(text, "?") {
+		return true
+	}
+	for _, prefix := range questionPrefixes {
+		if strings.HasPrefix(text, prefix+" ") || text == prefix {
+			return true
+		}
+	}
+	return false
+}
+
+func containsStructuredSteps(text string) bool {
+	return strings.Contains(text, "\n1.") ||
+		strings.HasPrefix(text, "1.") ||
+		strings.Contains(text, "\n- ") ||
+		strings.Contains(text, "\n## ")
 }

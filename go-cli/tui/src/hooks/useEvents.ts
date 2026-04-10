@@ -24,8 +24,15 @@ export interface UIArtifact {
   content: string;
 }
 
+export interface UIMessage {
+  id: string;
+  role: "user" | "assistant";
+  text: string;
+}
+
 export interface EngineUIState {
   ready: boolean;
+  messages: UIMessage[];
   streamedText: string;
   thinkingText: string;
   mode: string;
@@ -47,6 +54,7 @@ export interface EngineUIState {
 
 const initialState = (model: string, mode: string): EngineUIState => ({
   ready: false,
+  messages: [],
   streamedText: "",
   thinkingText: "",
   mode,
@@ -60,6 +68,17 @@ const initialState = (model: string, mode: string): EngineUIState => ({
   error: null,
   isStreaming: false,
 });
+
+let nextMessageId = 0;
+
+function createMessage(role: UIMessage["role"], text: string): UIMessage {
+  nextMessageId += 1;
+  return {
+    id: `msg-${nextMessageId}`,
+    role,
+    text,
+  };
+}
 
 export function useEvents(initialModel: string, initialMode: string) {
   const [uiState, setUIState] = useState<EngineUIState>(() =>
@@ -100,6 +119,12 @@ export function useEvents(initialModel: string, initialMode: string) {
         const p = event.payload as TurnCompletePayload;
         setUIState((s) => ({
           ...s,
+          messages:
+            s.streamedText.trim().length > 0
+              ? [...s.messages, createMessage("assistant", s.streamedText.trim())]
+              : s.messages,
+          streamedText: "",
+          thinkingText: "",
           isStreaming: false,
           activeTool: null,
           compact: null,
@@ -252,7 +277,20 @@ export function useEvents(initialModel: string, initialMode: string) {
     setUIState((s) => ({ ...s, pendingPermission: null }));
   }, []);
 
-  return { uiState, handleEvent, clearStream, clearPermission };
+  const appendUserMessage = useCallback((text: string) => {
+    setUIState((s) => ({
+      ...s,
+      messages: [...s.messages, createMessage("user", text)],
+    }));
+  }, []);
+
+  return {
+    uiState,
+    handleEvent,
+    clearStream,
+    clearPermission,
+    appendUserMessage,
+  };
 }
 
 function upsertArtifact(

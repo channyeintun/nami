@@ -18,10 +18,13 @@ interface AppProps {
 
 const App: FC<AppProps> = ({ enginePath, model, mode }) => {
   const engine = useEngine(enginePath, { model, mode });
-  const { uiState, handleEvent, clearStream, clearPermission } = useEvents(
-    model,
-    mode,
-  );
+  const {
+    uiState,
+    handleEvent,
+    clearStream,
+    clearPermission,
+    appendUserMessage,
+  } = useEvents(model, mode);
   const planArtifact =
     uiState.artifacts.find(
       (artifact) => artifact.kind === "implementation-plan",
@@ -37,6 +40,7 @@ const App: FC<AppProps> = ({ enginePath, model, mode }) => {
   }, [engine.eventVersion, engine.lastEvent, handleEvent]);
 
   const handleSubmit = (text: string) => {
+    appendUserMessage(text);
     clearStream();
     if (text.startsWith("/")) {
       const [cmd, ...rest] = text.slice(1).split(" ");
@@ -98,26 +102,24 @@ const App: FC<AppProps> = ({ enginePath, model, mode }) => {
           </Box>
         )}
 
-        {planArtifact && (
-          <PlanPanel
-            title={planArtifact.title}
-            content={planArtifact.content}
-          />
-        )}
-
-        {uiState.thinkingText && (
-          <Box flexDirection="column" paddingLeft={1} marginTop={1}>
-            <Text color="gray">Thinking</Text>
-            <Text color="gray">{uiState.thinkingText}</Text>
-          </Box>
-        )}
-
-        <StreamOutput text={uiState.streamedText} />
+        <StreamOutput
+          messages={uiState.messages}
+          liveText={uiState.streamedText}
+          liveThinkingText={uiState.thinkingText}
+          isStreaming={uiState.isStreaming}
+        />
 
         {uiState.error && (
           <Box borderStyle="round" borderColor="red" paddingX={1} marginTop={1}>
             <Text color="red">{uiState.error}</Text>
           </Box>
+        )}
+
+        {planArtifact && (
+          <PlanPanel
+            title={planArtifact.title}
+            content={planArtifact.content}
+          />
         )}
 
         {recentArtifacts.length > 0 && (
