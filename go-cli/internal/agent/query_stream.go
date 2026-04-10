@@ -126,15 +126,11 @@ func QueryStream(ctx context.Context, req QueryRequest, deps QueryDeps) iter.Seq
 
 func composeSystemPrompt(basePrompt string, sys SystemContext, turn TurnContext, skillPrompt string) string {
 	contextPrompt := strings.TrimSpace(FormatContextPrompt(sys, turn))
-	memoryPrompt := strings.TrimSpace(FormatMemoryPrompt(sys.MemoryFiles))
 	skillPrompt = strings.TrimSpace(skillPrompt)
 	basePrompt = strings.TrimSpace(basePrompt)
-	parts := make([]string, 0, 4)
+	parts := make([]string, 0, 3)
 	if basePrompt != "" {
 		parts = append(parts, basePrompt)
-	}
-	if memoryPrompt != "" {
-		parts = append(parts, memoryPrompt)
 	}
 	if skillPrompt != "" {
 		parts = append(parts, skillPrompt)

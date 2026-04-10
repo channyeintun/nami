@@ -9,9 +9,8 @@ import (
 
 // SystemContext holds session-stable context (cached once per session).
 type SystemContext struct {
-	MainBranch  string
-	GitUser     string
-	MemoryFiles []MemoryFile
+	MainBranch string
+	GitUser    string
 }
 
 // TurnContext holds volatile context refreshed every user turn.
@@ -23,7 +22,7 @@ type TurnContext struct {
 	DirectoryListing string
 }
 
-// LoadSystemContext gathers session-stable git info and project memory files.
+// LoadSystemContext gathers session-stable git info.
 func LoadSystemContext() SystemContext {
 	ctx := SystemContext{}
 	ctx.MainBranch = gitCommand("rev-parse", "--abbrev-ref", "origin/HEAD")
@@ -33,7 +32,6 @@ func LoadSystemContext() SystemContext {
 		ctx.MainBranch = strings.TrimPrefix(ctx.MainBranch, "origin/")
 	}
 	ctx.GitUser = gitCommand("config", "user.name")
-	ctx.MemoryFiles = LoadMemoryFiles()
 	return ctx
 }
 
