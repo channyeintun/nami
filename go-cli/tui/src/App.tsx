@@ -151,6 +151,8 @@ const App: FC<AppProps> = ({ enginePath, model, mode }) => {
       ) : (
         <Input
           prompt={prompt}
+          mode={uiState.mode}
+          isLoading={uiState.isStreaming}
           onSubmit={handleSubmit}
           onModeToggle={engine.sendModeToggle}
           onCancel={engine.sendCancel}

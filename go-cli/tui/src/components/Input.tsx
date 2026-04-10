@@ -4,6 +4,8 @@ import type { PromptController } from "../hooks/usePromptHistory.js";
 
 interface InputProps {
   prompt: PromptController;
+  mode: string;
+  isLoading: boolean;
   onSubmit: () => void;
   onModeToggle: () => void;
   onCancel: () => void;
@@ -13,6 +15,22 @@ interface InputProps {
 const INPUT_HINT =
   "Enter send | Shift+Enter newline | Arrows move | Tab mode | Esc cancel";
 const DISABLED_HINT = "Engine busy | Esc cancel";
+
+function formatModeLabel(mode: string): string {
+  return mode === "plan" ? "PLAN" : mode.toUpperCase();
+}
+
+function getModeColor(mode: string): "blue" | "green" | "yellow" {
+  if (mode === "plan") {
+    return "blue";
+  }
+
+  if (mode === "fast") {
+    return "green";
+  }
+
+  return "yellow";
+}
 
 function getPromptTextColumns(terminalColumns: number): number {
   return Math.max(8, terminalColumns - 7);
@@ -104,6 +122,8 @@ function renderInputLines(
 
 const Input: FC<InputProps> = ({
   prompt,
+  mode,
+  isLoading,
   onSubmit,
   onModeToggle,
   onCancel,
@@ -253,6 +273,9 @@ const Input: FC<InputProps> = ({
     () => getWrappedLineSegments(prompt.value, promptTextColumns).length,
     [prompt.value, promptTextColumns],
   );
+  const footerLayout = terminalColumns < 96 ? "column" : "row";
+  const activityLabel = isLoading ? "running" : disabled ? "blocked" : "ready";
+  const showWrappedIndicator = !showPlaceholder && wrappedLineCount > 1;
 
   return (
     <Box
@@ -281,12 +304,21 @@ const Input: FC<InputProps> = ({
           ))
         )}
       </Box>
-      <Box paddingLeft={2} marginTop={1}>
+      <Box
+        paddingLeft={2}
+        marginTop={1}
+        flexDirection={footerLayout}
+        justifyContent="space-between"
+      >
         <Text dimColor>
-          {showPlaceholder
-            ? hint
-            : `${hint} | ${wrappedLineCount} line${wrappedLineCount === 1 ? "" : "s"}`}
+          <Text color={getModeColor(mode)} bold>
+            {formatModeLabel(mode)}
+          </Text>
+          {"  "}
+          <Text>{activityLabel}</Text>
+          {showWrappedIndicator ? `  wrapped:${wrappedLineCount}` : ""}
         </Text>
+        <Text dimColor>{hint}</Text>
       </Box>
     </Box>
   );
