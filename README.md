@@ -1,10 +1,10 @@
-# gocode
+# Go Code
 
 An agentic coding CLI powered by LLMs. Think, plan, and execute code changes from your terminal.
 
 ## Architecture & Vision
 
-`gocode` is built on three core pillars:
+`Go Code` is built on three core pillars:
 
 1.  **TUI (React/Ink):** A highly interactive terminal UI that provides real-time feedback, grouped tool execution transcripts, and dynamic progress indicators.
 2.  **Go Engine:** A high-performance backend that handles the agent loop, tool execution (bash, file system, git, search), and project-level orchestration with built-in permission gating.
