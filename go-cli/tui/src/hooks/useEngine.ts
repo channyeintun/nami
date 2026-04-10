@@ -15,24 +15,26 @@ import type { ClientMessage } from "../protocol/types.js";
 
 interface EngineState {
   ready: boolean;
-  lastEvent: StreamEvent | null;
-  eventVersion: number;
   error: string | null;
 }
 
 interface EngineOptions {
   model?: string;
   mode?: string;
+  onEvent?: (event: StreamEvent) => void;
 }
 
 export function useEngine(enginePath: string, options: EngineOptions = {}) {
   const [state, setState] = useState<EngineState>({
     ready: false,
-    lastEvent: null,
-    eventVersion: 0,
     error: null,
   });
   const processRef = useRef<ChildProcess | null>(null);
+  const onEventRef = useRef<EngineOptions["onEvent"]>(options.onEvent);
+
+  useEffect(() => {
+    onEventRef.current = options.onEvent;
+  }, [options.onEvent]);
 
   useEffect(() => {
     const args = ["--stdio"];
@@ -55,11 +57,11 @@ export function useEngine(enginePath: string, options: EngineOptions = {}) {
       const event = parseEvent(line);
       if (!event) return;
 
+      onEventRef.current?.(event);
+
       setState((prev) => {
         const next = {
           ...prev,
-          lastEvent: event,
-          eventVersion: prev.eventVersion + 1,
         };
         if (event.type === "ready") {
           next.ready = true;

@@ -39,7 +39,6 @@ function toUserInputImagePayload(
 }
 
 const App: FC<AppProps> = ({ enginePath, model, mode }) => {
-  const engine = useEngine(enginePath, { model, mode });
   const prompt = usePromptHistory();
   const [promptImages, setPromptImages] = useState<UserInputImagePayload[]>([]);
   const [nextImageId, setNextImageId] = useState(1);
@@ -51,6 +50,7 @@ const App: FC<AppProps> = ({ enginePath, model, mode }) => {
     appendUserMessage,
     beginAssistantTurn,
   } = useEvents(model, mode);
+  const engine = useEngine(enginePath, { model, mode, onEvent: handleEvent });
   const planArtifact =
     uiState.artifacts.find(
       (artifact) => artifact.kind === "implementation-plan",
@@ -61,12 +61,6 @@ const App: FC<AppProps> = ({ enginePath, model, mode }) => {
         artifact.kind !== "implementation-plan" && artifact.kind !== "tool-log",
     )
     .slice(0, 2);
-
-  // Dispatch incoming events to the UI state handler
-  useEffect(() => {
-    if (!engine.lastEvent) return;
-    handleEvent(engine.lastEvent);
-  }, [engine.eventVersion, engine.lastEvent, handleEvent]);
 
   useEffect(() => {
     setPromptImages((current) => {
@@ -126,13 +120,15 @@ const App: FC<AppProps> = ({ enginePath, model, mode }) => {
     }
   };
 
+  const isEngineReady = uiState.ready || engine.ready;
+
   const isPromptDisabled =
-    !uiState.ready || !!engine.error || uiState.pendingPermission !== null;
+    !isEngineReady || !!engine.error || uiState.pendingPermission !== null;
 
   return (
     <Box flexDirection="column" height="100%">
       <StatusBar
-        ready={uiState.ready || engine.ready}
+        ready={isEngineReady}
         mode={uiState.mode}
         model={uiState.model}
         sessionId={uiState.sessionId}
@@ -153,7 +149,7 @@ const App: FC<AppProps> = ({ enginePath, model, mode }) => {
           </Box>
         )}
 
-        {!uiState.ready && !engine.error && (
+        {!isEngineReady && !engine.error && (
           <Box paddingLeft={1} marginTop={1}>
             <Text color="gray">Starting Go engine...</Text>
           </Box>
