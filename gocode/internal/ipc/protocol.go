@@ -3,7 +3,7 @@ package ipc
 import "encoding/json"
 
 // ProtocolVersion is the current IPC protocol version.
-const ProtocolVersion = 5
+const ProtocolVersion = 1
 
 // --- Go → Ink (stdout): StreamEvent ---
 
