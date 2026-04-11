@@ -22,19 +22,20 @@ const backgroundCommandMaxOutputBytes = 256 * 1024
 const backgroundCommandRetention = 5 * time.Minute
 
 type backgroundCommand struct {
-	mu       sync.Mutex
-	id       string
-	command  string
-	cwd      string
-	cmd      *exec.Cmd
-	stdin    io.WriteCloser
-	terminal *os.File
-	cancel   context.CancelFunc
-	output   *boundedOutput
-	running  bool
-	exitCode *int
-	errText  string
-	done     chan struct{}
+	mu        sync.Mutex
+	consumeMu sync.Mutex
+	id        string
+	command   string
+	cwd       string
+	cmd       *exec.Cmd
+	stdin     io.WriteCloser
+	terminal  *os.File
+	cancel    context.CancelFunc
+	output    *boundedOutput
+	running   bool
+	exitCode  *int
+	errText   string
+	done      chan struct{}
 }
 
 type boundedOutput struct {
@@ -225,6 +226,9 @@ func getBackgroundCommand(commandID string) (*backgroundCommand, error) {
 }
 
 func (bg *backgroundCommand) sendInput(input string, wait time.Duration) (backgroundCommandResult, error) {
+	bg.consumeMu.Lock()
+	defer bg.consumeMu.Unlock()
+
 	bg.mu.Lock()
 	if !bg.running {
 		bg.mu.Unlock()
@@ -249,6 +253,9 @@ func (bg *backgroundCommand) sendInput(input string, wait time.Duration) (backgr
 }
 
 func (bg *backgroundCommand) status(wait time.Duration) backgroundCommandResult {
+	bg.consumeMu.Lock()
+	defer bg.consumeMu.Unlock()
+
 	if wait > 0 {
 		timer := time.NewTimer(wait)
 		defer timer.Stop()

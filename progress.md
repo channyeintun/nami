@@ -24,6 +24,7 @@
 
 ### 2026-04-11
 
+- Completed: Serialized background-command unread-output consumption across `command_status` and `send_command_input`. Per-command delta reads now run behind a dedicated mutex so interactive stdin writes cannot race status polling and steal each other's unread output, and `command_status` is now marked concurrency-safe because same-command polls are serialized internally.
 - Completed: Hardened oversized tool-output spill paths. The tool-result budgeter now sanitizes tool IDs before constructing `.log` spill filenames and adds a short hash suffix when normalization changes the ID, so malformed or compatibility-drifted tool IDs cannot traverse outside the tool-log artifact directory.
 - Completed: Aligned the Antigravity-style tool schemas with their accepted snake_case runtime aliases. `command_status`, `send_command_input`, `list_dir`, and `multi_replace_file_content` now advertise both PascalCase and snake_case parameter variants in JSON Schema, including nested multi-replace chunk fields, so schema validation matches the compatibility paths already supported by execution.
 - Completed: Tightened the `list_dir` output contract. The tool now returns a single structured JSON array for all directory listings, including empty directories, instead of mixing JSON entry lines with a trailing plain-text summary; the README tool description was updated to match the runtime behavior.

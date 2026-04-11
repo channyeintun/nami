@@ -55,7 +55,7 @@ func (t *CommandStatusTool) Permission() PermissionLevel {
 }
 
 func (t *CommandStatusTool) IsConcurrencySafe(input ToolInput) bool {
-	return false
+	return true
 }
 
 func (t *CommandStatusTool) Execute(ctx context.Context, input ToolInput) (ToolOutput, error) {
