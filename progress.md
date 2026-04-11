@@ -11,15 +11,15 @@
 
 ## Current Status
 
-| Workstream                          | Status    | Notes                                                                                      |
-| ----------------------------------- | --------- | ------------------------------------------------------------------------------------------ |
-| Planning refresh                    | completed | 2026-04-12 explanation-driven roadmap replaced stale parity-era planning docs.             |
-| Phase 1 runtime measurement         | planned   | Required before subagents or large UI work.                                                |
-| Phase 2 tool depth                  | planned   | Extend the local tool system and input-aware concurrency without broadening product scope. |
-| Phase 3 subagents                   | planned   | Parent-child only, with no swarm, team, or remote scope.                                   |
-| Phase 4 memory                      | planned   | Project-scoped memory layer kept separate from artifacts.                                  |
-| Phase 5 compaction and cache        | planned   | Keep the current pipeline and improve context budgeting plus cache stability.              |
-| Phase 6 UI and developer experience | planned   | Prioritize only measured bottlenecks and artifact-safe surfaces.                           |
+| Workstream                          | Status    | Scope | Notes                                                                                      |
+| ----------------------------------- | --------- | ----- | ------------------------------------------------------------------------------------------ |
+| Planning refresh                    | completed | S     | 2026-04-12 explanation-driven roadmap replaced stale parity-era planning docs.             |
+| Phase 1 runtime measurement         | planned   | S     | Checkpoint system, timing instrumentation, artifact ownership contract.                    |
+| Phase 2 tool depth                  | planned   | L     | Register existing tools, add Think tool, semantic validation, input-aware concurrency.     |
+| Phase 3 subagents                   | planned   | XL    | Parent-child delegation, fresh context model, permission isolation, sidechain transcripts. |
+| Phase 4 memory                      | planned   | L     | Four-type taxonomy, MEMORY.md index, async recall, staleness warnings.                    |
+| Phase 5 compaction and cache        | planned   | M     | Output slot reservation, prompt memoization, provider-gated cache stability.               |
+| Phase 6 UI and developer experience | planned   | M     | Data-driven: API preconnect, measured Ink optimizations, subagent/memory UI surfaces.      |
 
 ## Task Log
 
@@ -33,8 +33,4 @@
 
 ## Next Planning Baseline
 
-1. Phase 1 must land before any large subagent or UI initiative so latency and artifact safety are measurable.
-2. Phase 2 should deepen the local tool system before delegation expands, otherwise subagents will inherit a shallow tool surface.
-3. Phase 3 subagents must start with parent-child delegation only; team, swarm, and remote remain out of scope.
-4. Phase 4 memory must stay separate from both artifacts and `AGENTS` instruction files.
-5. Phase 5 and Phase 6 should be driven by measured context and latency data, not parity optics.
+See `plan.md` for full phase ordering rationale and cross-cutting concerns (cost tracking, provider abstraction, skills evaluation).

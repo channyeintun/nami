@@ -34,11 +34,13 @@ Every opportunity below must preserve the existing artifact model.
 - `sourcecode/tools.ts`
 - `sourcecode/tasks.ts`
 
+**Current baseline**
+
+- `gocode/internal/agent/loop.go` already has proactive compaction, 3-attempt model recovery (`invokeModelWithRecovery`), batch tool execution via `deps.ExecuteToolBatch()`, continuation tracking with budget-aware stop conditions, and dynamic capability downgrade. This is a strong foundation for hosting child agents.
+
 **Current gap**
 
-- `gocode/internal/agent/loop.go` is still a single-agent loop.
-- `gocode/internal/tools/registry.go` exposes no `Agent` tool.
-- `gocode` has no child permission, cancellation, or result-lifecycle model.
+- Despite the loop's sophistication, it has no delegation path — no `Agent` tool in the registry, no child context model, no child permission isolation, and no child cancellation or result-lifecycle model.
 
 **Best opportunity**
 
@@ -71,16 +73,19 @@ Every opportunity below must preserve the existing artifact model.
 
 **Current baseline**
 
-- `gocode/internal/tools/interface.go` already supports per-call `Concurrency(input)`.
-- `gocode/internal/tools/orchestration.go` and `gocode/internal/tools/streaming_executor.go` already batch and stream ordered results.
-- `gocode/internal/tools/registry.go` still exposes a relatively small local tool surface compared with the reference system.
+- `gocode/internal/tools/interface.go` already supports per-call `Concurrency(input)` returning `ConcurrencySerial` or `ConcurrencyParallel`.
+- `gocode/internal/tools/orchestration.go` and `gocode/internal/tools/streaming_executor.go` already batch and stream ordered results with configurable semaphore (default 10 max concurrent).
+- `gocode/internal/tools/registry.go` exposes 16 registered tools plus aliases (`bash`, `list_dir`, `file_read`, `file_write`, `file_edit`, `multi_replace_file_content`, `glob`, `grep`, `web_search`, `web_fetch`, `git`, `command_status`, `send_command_input`, `save_implementation_plan`, `upsert_task_list`, `save_walkthrough`).
+- `gocode/internal/tools/budgeting.go` already exists for result budgeting.
 
 **Current gap**
 
 - limited semantic validation before execution
 - shallow concurrency classification for complex shell inputs
-- no per-turn aggregate result budget
-- a smaller local tool family than the architecture it is modeled against
+- unregistered tools already implemented but not exposed: `file_diff_preview.go` and `file_history.go` exist in the tools directory but are not wired into the registry — these are free improvements
+- no `Think` scratchpad tool (zero-cost, high-value reasoning aid from the reference system)
+- no code navigation tools beyond grep (symbol search, go-to-definition)
+- a smaller active tool family than the architecture it is modeled against
 
 **Best opportunity**
 
@@ -141,22 +146,28 @@ Every opportunity below must preserve the existing artifact model.
 
 **Best opportunity**
 
-- tighten output reservation and escalate only on truncation
-- make prompt construction cache-aware
-- memoize stable system-prompt sections
-- unify result budgeting, compaction, and memory recall into a shared context-pressure policy
+- tighten output reservation and escalate only on truncation (universally useful across all providers)
+- memoize stable system-prompt sections to avoid rebuilding identical content each turn (universally useful)
+- make prompt construction cache-aware by placing stable sections before volatile sections — applicable to Anthropic API and compatible OpenRouter routes; no-op for providers without prompt caching (Ollama, etc.)
+- build on the existing `ContinuationTracker` in `token_budget.go` which already monitors budget usage and diminishing-returns stop conditions
+- unify result budgeting, compaction, continuation tracking, and future memory recall into a shared context-pressure policy
+
+**Provider caveat**
+
+- Prompt cache stability patterns from the reference system (`__DYNAMIC_BOUNDARY__`, sticky latches, session date memoization) are Anthropic-specific. These should be implemented behind a provider abstraction so they activate only when the current model supports prompt caching.
 
 **Why this beats the old roadmap**
 
 - It reclaims context and cost headroom without adding new product scope.
 - It protects future subagent and memory work from avoidable prompt bloat.
+- Building on `ContinuationTracker` avoids reinventing budget-awareness.
 
 ### 5. Measured UI and Milliseconds-Level Developer Experience
 
 **Reference signal**
 
-- `sourcecode-explanation/book/ch13-terminal-ui.md`
-- `sourcecode-explanation/book/ch17-performance.md`
+- `sourcecode-explanation/book/ch13-terminal-ui.md` (informs *what to measure*, not *how to build* — the reference uses a custom DOM + React reconciler with `Int32Array` packed cells and double-buffered frames, which is incompatible with Ink)
+- `sourcecode-explanation/book/ch17-performance.md` (startup checkpoints, API preconnect, module-level I/O parallelism, 26-bit bitmap pre-filter for fuzzy search)
 - `sourcecode/main.tsx`
 
 **Current baseline**
@@ -166,21 +177,28 @@ Every opportunity below must preserve the existing artifact model.
 
 **Current gap**
 
-- no startup, query, or render profiler
-- no API preconnect or other deliberate warmup path
+- no startup, query, or render profiler — currently no hard data on where time is spent
+- no API preconnect or other deliberate warmup path (ch17 shows ~100-200ms savings from HEAD-request warmup)
 - long-session transcript and search performance are still mostly heuristic
 - no dedicated subagent or memory status surfaces yet
 
 **Best opportunity**
 
-- instrument first, then optimize startup, first token latency, transcript paging, prompt editing, file search, and UI status feedback
-- keep using Ink unless measurement proves a harder renderer problem
+- instrument first, then optimize: boot-to-ready, prompt-submit-to-first-token, prompt-submit-to-first-tool-result, manual compaction duration
+- add API preconnect during init (warmup HEAD request pattern from ch17)
+- targeted Ink performance work based on measured bottlenecks — do not import custom renderer patterns from ch13 unless Ink proves to be the bottleneck
 - add UI surfaces for subagents and memory only after the engine contracts are stable
 
 **Why this beats the old roadmap**
 
 - It aligns the UI with the user's stated priority: specific milliseconds-level developer experience.
 - It keeps performance work tied to data instead of parity imitation.
+- It avoids the trap of chasing the reference system's custom renderer when Ink may be sufficient.
+
+## Unaddressed but Worth Noting
+
+- **Skills system**: `gocode/internal/skills/` exists but is not covered by any opportunity above. Evaluate during Phase 2 (tools) whether skills need expansion or better integration with subagents.
+- **Cost tracking**: Subagents, memory side-queries, and background extraction all increase API costs. The existing cost tracker should be extended in the relevant phases.
 
 ## Already Strong and Not the Next Bottleneck
 
@@ -188,7 +206,8 @@ Do not reopen these as the primary roadmap unless regressions appear:
 
 - first-class artifacts and plan review flow
 - ordered concurrent tool batching
-- streaming tool execution
-- current three-stage compaction pipeline
+- streaming tool execution with order-preserving yield
+- current three-stage compaction pipeline (tool truncate → summarize → partial)
 - Bun-based TUI workflow
 - artifact-aware transcript and panel rendering
+- continuation tracking with budget-aware stop conditions (`ContinuationTracker`)
