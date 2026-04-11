@@ -228,6 +228,7 @@ This section is the canonical phase tracker. A phase is only complete when its `
 - Fixed: restricted session-wide `allow_all_session` permission grants to read-only tools and non-destructive shell commands, and clarified the session-allow prompt and README text to match the runtime behavior.
 - Fixed: resolved shell execution through a supported local shell fallback chain instead of hardcoding `/bin/zsh`, so foreground and background shell tools continue to work on Linux environments without zsh.
 - Fixed: surfaced partial failures from `file_history_rewind`, surfaced unreadable session-artifact warnings during resume and lookup, taught schema validation to enforce `anyOf`/`allOf` required-field contracts, and corrected the Phase 6 dashboard status to match the completed tracker.
+- Completed: drafted `release-note-v1.md` to summarize the shipped roadmap scope, user-visible improvements, and immediate reliability fixes for the current v1 milestone.
 - Completed: emitted structured `memory_recalled` telemetry from the query loop using existing MEMORY.md recall metadata so each turn can report which durable notes were selected without polluting the transcript.
 - Completed: surfaced low-noise per-turn memory recall summaries in the TUI footer, showing recalled note titles and recall source while keeping full recall content out of the main conversation flow.
 - Completed: switched MEMORY.md index injection from whole-file dumping to bounded heuristic recall so only a small set of lines relevant to the current request enters the prompt by default.
