@@ -14,7 +14,7 @@
 | Workstream                          | Status    | Scope | Notes                                                                                      |
 | ----------------------------------- | --------- | ----- | ------------------------------------------------------------------------------------------ |
 | Planning refresh                    | completed | S     | 2026-04-12 explanation-driven roadmap replaced stale parity-era planning docs.             |
-| Phase 1 runtime measurement         | in progress | S   | Checkpoint logging landed; artifact ownership contract and threshold validation remain.    |
+| Phase 1 runtime measurement         | in progress | S   | Checkpoint logging and artifact ownership contract landed; threshold validation remains.   |
 | Phase 2 tool depth                  | planned   | L     | Register existing tools, add Think tool, semantic validation, input-aware concurrency.     |
 | Phase 3 subagents                   | planned   | XL    | Parent-child delegation, fresh context model, permission isolation, sidechain transcripts. |
 | Phase 4 memory                      | planned   | L     | Four-type taxonomy, MEMORY.md index, async recall, staleness warnings.                    |
@@ -32,7 +32,9 @@
 - Note: this was a planning-only task. No implementation work was performed.
 - Completed: added a session-local checkpoint logger that writes structured JSONL timing records to `timings.ndjson` under each session directory.
 - Completed: instrumented engine startup, per-query first-token latency, first tool-result latency, first artifact-focus latency, and compaction duration without changing runtime behavior.
-- Note: Phase 1 is now in progress rather than planned; the remaining work is artifact ownership documentation and threshold validation against real timing data.
+- Completed: made session artifact ownership explicit in the artifact manager via normalized ownership metadata (`owner_scope`, `owner_id`, `owner_authority`) while preserving `session_id` compatibility for existing lookups.
+- Completed: routed tool-log artifact persistence through the session upsert path so implementation plans, task lists, walkthroughs, search reports, diff previews, and tool logs all share the same parent-session ownership contract.
+- Note: Phase 1 is now in progress rather than planned; the remaining work is continuation and budgeting threshold validation against real timing data.
 
 ## Next Planning Baseline
 

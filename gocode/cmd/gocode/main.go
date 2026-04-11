@@ -1873,18 +1873,17 @@ func budgetToolOutput(
 		return truncateOutputPreview(output, budget.PreviewLen, "", len(output)), artifactspkg.Artifact{}, nil
 	}
 
-	artifact, _, _, err := artifactManager.SaveMarkdown(ctx, artifactspkg.MarkdownRequest{
+	artifact, _, _, err := artifactManager.UpsertSessionMarkdown(ctx, artifactspkg.MarkdownRequest{
 		Kind:    artifactspkg.KindToolLog,
 		Scope:   artifactspkg.ScopeSession,
 		Title:   fmt.Sprintf("Tool Log: %s", call.Name),
 		Source:  call.Name,
 		Content: artifactspkg.RenderToolLogMarkdown(sessionID, call.Name, call.ID, call.Input, output),
 		Metadata: map[string]any{
-			"session_id":   sessionID,
 			"tool_call_id": call.ID,
 			"tool_name":    call.Name,
 		},
-	})
+	}, sessionID, "tool-log-"+call.ID)
 	if err != nil {
 		return truncateOutputPreview(output, budget.PreviewLen, "", len(output)), artifactspkg.Artifact{}, err
 	}

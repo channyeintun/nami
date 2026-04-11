@@ -52,7 +52,7 @@ func (m *Manager) SaveMarkdown(ctx context.Context, req MarkdownRequest) (Artifa
 		MimeType: MarkdownMimeType,
 		Source:   req.Source,
 		Content:  []byte(req.Content),
-		Metadata: cloneMetadata(req.Metadata),
+		Metadata: normalizeOwnershipMetadata(req.Scope, req.Metadata, "", ""),
 	})
 	if err != nil {
 		return Artifact{}, ArtifactVersion{}, false, err
@@ -102,7 +102,7 @@ func (m *Manager) LoadSessionArtifacts(ctx context.Context, sessionID string) ([
 		if err != nil {
 			continue
 		}
-		if metadataString(art.Metadata, "session_id") != sessionID {
+		if sessionOwnerID(art.Metadata) != sessionID {
 			continue
 		}
 		artifacts = append(artifacts, SessionArtifact{Artifact: art, Content: content})
@@ -127,10 +127,10 @@ func (m *Manager) FindSessionArtifact(ctx context.Context, kind Kind, scope Scop
 		if err != nil {
 			continue
 		}
-		if metadataString(art.Metadata, "session_id") != sessionID {
+		if sessionOwnerID(art.Metadata) != sessionID {
 			continue
 		}
-		if strings.TrimSpace(slot) != "" && metadataString(art.Metadata, "slot") != slot {
+		if strings.TrimSpace(slot) != "" && metadataString(art.Metadata, MetadataSlot) != slot {
 			continue
 		}
 		return art, true, nil
@@ -150,14 +150,7 @@ func (m *Manager) UpsertSessionMarkdown(ctx context.Context, req MarkdownRequest
 	}
 
 	metadata := cloneMetadata(req.Metadata)
-	if metadata == nil {
-		metadata = make(map[string]any, 2)
-	}
-	metadata["session_id"] = sessionID
-	if strings.TrimSpace(slot) != "" {
-		metadata["slot"] = slot
-	}
-	req.Metadata = metadata
+	req.Metadata = normalizeOwnershipMetadata(req.Scope, metadata, sessionID, slot)
 
 	return m.SaveMarkdown(ctx, req)
 }
