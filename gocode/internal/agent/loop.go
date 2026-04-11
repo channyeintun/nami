@@ -31,18 +31,30 @@ func runIteration(
 	currentUserPrompt := latestUserPrompt(state.Messages)
 	memoryRecalls := recallMemoryIndexes(ctx, deps.RecallMemory, state.SystemContext.MemoryFiles, currentUserPrompt)
 	selectedSkills := skillspkg.SelectRelevant(state.Skills, currentUserPrompt)
+	skillPrompt := skillspkg.FormatPromptSection(selectedSkills)
 	basePrompt := state.BasePrompt
 	if capabilityPrompt := capabilitySystemPrompt(state.Capabilities); capabilityPrompt != "" {
 		basePrompt = strings.TrimSpace(basePrompt + "\n\n" + capabilityPrompt)
 	}
-	state.SystemPrompt = composeSystemPrompt(
-		basePrompt,
-		state.SystemContext,
-		state.TurnContext,
-		currentUserPrompt,
-		memoryRecalls,
-		skillspkg.FormatPromptSection(selectedSkills),
-	)
+	if state.PromptCache != nil {
+		state.SystemPrompt = state.PromptCache.Compose(
+			basePrompt,
+			state.SystemContext,
+			state.TurnContext,
+			currentUserPrompt,
+			memoryRecalls,
+			skillPrompt,
+		)
+	} else {
+		state.SystemPrompt = composeSystemPrompt(
+			basePrompt,
+			state.SystemContext,
+			state.TurnContext,
+			currentUserPrompt,
+			memoryRecalls,
+			skillPrompt,
+		)
+	}
 
 	if deps.ApplyResultBudget != nil {
 		state.Messages = deps.ApplyResultBudget(state.Messages)

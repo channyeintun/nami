@@ -53,6 +53,7 @@ type QueryState struct {
 	SystemPrompt        string
 	SystemContext       SystemContext
 	TurnContext         TurnContext
+	PromptCache         *PromptAssemblyCache
 	Mode                ExecutionMode
 	Profile             ExecutionProfile
 	Skills              []skillspkg.Skill
@@ -74,6 +75,7 @@ func NewQueryState(req QueryRequest) *QueryState {
 		BasePrompt:    req.SystemPrompt,
 		SystemPrompt:  req.SystemPrompt,
 		SystemContext: LoadSystemContext(),
+		PromptCache:   NewPromptAssemblyCache(),
 		Mode:          req.Mode,
 		Profile:       ProfileForMode(req.Mode),
 		Skills:        req.Skills,
