@@ -2,6 +2,15 @@
 
 Code review of progress against `plan.md` phases 6–8 and post-parity stabilization.
 
+## Status as of 2026-04-11
+
+All items in this review have now been addressed or superseded by later changes.
+
+- Resolved in code: tool-result truncation, planner lifecycle hooks, background output loss reporting, PTY-backed background commands, background command cleanup, background reader shutdown cancellation, file-tool path traversal defense, artifact ID sanitization, protocol parse warnings, image paste warnings, Esc cancellation during permission waits, bash substitution narrowing, TUI limit documentation, and compat alias schema alignment.
+- Superseded by current code: the permission prompt no longer replaces the live transcript area, and the markdown token cache now promotes hits on access so eviction behaves as LRU.
+
+Keep the historical findings below only as an audit trail.
+
 ---
 
 ## P0 — Bugs / Correctness
