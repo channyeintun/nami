@@ -5,7 +5,12 @@ import {
   formatTokenCount,
   getEffectiveContextWindow,
 } from "../utils/modelContext.js";
-import type { UIBackgroundCommand, UIRateLimits } from "../hooks/useEvents.js";
+import type {
+  UIArtifact,
+  UIArtifactReview,
+  UIBackgroundCommand,
+  UIRateLimits,
+} from "../hooks/useEvents.js";
 
 interface StatusBarProps {
   ready: boolean;
@@ -25,6 +30,9 @@ interface StatusBarProps {
   childAgentUsd: number;
   childAgentInputTokens: number;
   childAgentOutputTokens: number;
+  artifacts: UIArtifact[];
+  focusedArtifactId?: string | null;
+  pendingArtifactReview?: UIArtifactReview | null;
   backgroundCommands: UIBackgroundCommand[];
   rateLimits: UIRateLimits;
 }
@@ -47,6 +55,9 @@ const StatusBar: FC<StatusBarProps> = ({
   childAgentUsd,
   childAgentInputTokens,
   childAgentOutputTokens,
+  artifacts,
+  focusedArtifactId,
+  pendingArtifactReview,
   backgroundCommands,
   rateLimits,
 }) => {
@@ -81,6 +92,11 @@ const StatusBar: FC<StatusBarProps> = ({
     childAgentUsd > 0 ||
     childAgentInputTokens > 0 ||
     childAgentOutputTokens > 0;
+  const artifactSummary = summarizeArtifacts(
+    artifacts,
+    focusedArtifactId,
+    pendingArtifactReview,
+  );
   const backgroundCommandSummary =
     summarizeBackgroundCommands(backgroundCommands);
 
@@ -157,6 +173,13 @@ const StatusBar: FC<StatusBarProps> = ({
             <Text color="gray"> · </Text>
             <Text color="yellow">cmd</Text>
             <Text color="gray"> {backgroundCommandSummary}</Text>
+          </>
+        ) : null}
+        {artifactSummary ? (
+          <>
+            <Text color="gray"> · </Text>
+            <Text color="cyan">art</Text>
+            <Text color="gray"> {artifactSummary}</Text>
           </>
         ) : null}
         <Text color="gray"> · </Text>
@@ -242,4 +265,48 @@ function summarizeBackgroundCommands(
   }
 
   return parts.length > 0 ? parts.join(" ") : null;
+}
+
+function summarizeArtifacts(
+  artifacts: UIArtifact[],
+  focusedArtifactId?: string | null,
+  pendingArtifactReview?: UIArtifactReview | null,
+): string | null {
+  if (
+    (!Array.isArray(artifacts) || artifacts.length === 0) &&
+    !pendingArtifactReview
+  ) {
+    return null;
+  }
+
+  const parts: string[] = [];
+  if (Array.isArray(artifacts) && artifacts.length > 0) {
+    parts.push(`${artifacts.length} total`);
+  }
+
+  if (focusedArtifactId) {
+    const focusedArtifact = artifacts.find(
+      (artifact) => artifact.id === focusedArtifactId,
+    );
+    if (focusedArtifact) {
+      parts.push(`focus ${artifactSummaryLabel(focusedArtifact)}`);
+    }
+  }
+
+  if (pendingArtifactReview) {
+    parts.push(
+      `review ${pendingArtifactReview.title.trim() || pendingArtifactReview.kind}`,
+    );
+  }
+
+  return parts.length > 0 ? parts.join(" · ") : null;
+}
+
+function artifactSummaryLabel(artifact: UIArtifact): string {
+  const label = artifact.title.trim() || artifact.kind;
+  const compact = label.replace(/\s+/g, " ").trim();
+  if (compact.length <= 28) {
+    return compact;
+  }
+  return `${compact.slice(0, 25)}...`;
 }

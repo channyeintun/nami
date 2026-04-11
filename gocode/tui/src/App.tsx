@@ -310,6 +310,9 @@ const App: FC<AppProps> = ({ enginePath, model, mode }) => {
         childAgentUsd={uiState.cost.childAgentUsd}
         childAgentInputTokens={uiState.cost.childAgentInputTokens}
         childAgentOutputTokens={uiState.cost.childAgentOutputTokens}
+        artifacts={uiState.artifacts}
+        focusedArtifactId={uiState.focusedArtifactId}
+        pendingArtifactReview={uiState.pendingArtifactReview}
         backgroundCommands={uiState.backgroundCommands}
         rateLimits={uiState.rateLimits}
       />

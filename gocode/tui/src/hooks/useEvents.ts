@@ -780,11 +780,8 @@ export function useEvents(initialModel: string, initialMode: string) {
       }
       case "artifact_focused": {
         const p = event.payload as ArtifactFocusedPayload;
-        setUIState((s) => ({
-          ...s,
-          focusedArtifactId: p.id,
-          // Update status on the artifact entry if it changed
-          artifacts: s.artifacts.map((a) =>
+        setUIState((s) => {
+          const nextArtifacts = s.artifacts.map((a) =>
             a.id === p.id
               ? {
                   ...a,
@@ -792,8 +789,18 @@ export function useEvents(initialModel: string, initialMode: string) {
                   status: p.status ?? a.status,
                 }
               : a,
-          ),
-        }));
+          );
+          const focusedArtifact = nextArtifacts.find(
+            (artifact) => artifact.id === p.id,
+          );
+
+          return {
+            ...s,
+            focusedArtifactId: p.id,
+            artifacts: nextArtifacts,
+            statusLine: buildArtifactFocusStatusLine(focusedArtifact, p.id),
+          };
+        });
         break;
       }
       case "artifact_status_changed": {
@@ -1103,6 +1110,44 @@ function buildTurnCompleteStatusLine(
     parts.push(`total ${formatLatencyMs(timing.totalMs)}`);
   }
   return parts.join(" · ");
+}
+
+function buildArtifactFocusStatusLine(
+  artifact: UIArtifact | undefined,
+  fallbackID: string,
+): string {
+  if (!artifact) {
+    return `Focused artifact ${fallbackID}`;
+  }
+
+  const label = artifact.title.trim() || artifact.id;
+  const kind = artifactKindLabel(artifact.kind);
+  const status = artifact.status.trim();
+  if (status.length > 0) {
+    return `Focused ${kind}: ${label} [${status}]`;
+  }
+  return `Focused ${kind}: ${label}`;
+}
+
+function artifactKindLabel(kind: string): string {
+  switch (kind) {
+    case "implementation-plan":
+      return "implementation plan";
+    case "task-list":
+      return "task list";
+    case "tool-log":
+      return "tool log";
+    case "search-report":
+      return "search report";
+    case "diff-preview":
+      return "diff preview";
+    case "compact-summary":
+      return "compact summary";
+    case "knowledge-item":
+      return "knowledge item";
+    default:
+      return kind.replace(/-/g, " ");
+  }
 }
 
 function formatLatencyMs(value: number): string {
