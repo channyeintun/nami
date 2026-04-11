@@ -15,7 +15,7 @@
 | ----------------------------------- | --------- | ----- | ------------------------------------------------------------------------------------------ |
 | Planning refresh                    | completed | S     | 2026-04-12 explanation-driven roadmap replaced stale parity-era planning docs.             |
 | Phase 1 runtime measurement         | completed | S     | Checkpoint logging, artifact ownership, aggregate tool-result budgeting, and continuation stop telemetry are in place. |
-| Phase 2 tool depth                  | in progress | L   | File-history tools exposed; Think tool, semantic validation, and input-aware concurrency remain. |
+| Phase 2 tool depth                  | in progress | L   | File-history tools and semantic validation landed; Think tool and input-aware concurrency remain. |
 | Phase 3 subagents                   | planned   | XL    | Parent-child delegation, fresh context model, permission isolation, sidechain transcripts. |
 | Phase 4 memory                      | planned   | L     | Four-type taxonomy, MEMORY.md index, async recall, staleness warnings.                    |
 | Phase 5 compaction and cache        | planned   | M     | Output slot reservation, prompt memoization, provider-gated cache stability.               |
@@ -41,6 +41,8 @@
 - Note: there were still no local `timings.ndjson` samples to analyze, but Phase 1 now has the required runtime instrumentation and guardrails to validate thresholds from subsequent real sessions.
 - Completed: added `file_history` and `file_history_rewind` tool wrappers on top of the existing session file-history runtime so snapshots, diff stats, and rewind are now available through the agent tool surface.
 - Completed: registered the new file-history tools in the runtime registry and updated the model prompt plus README tool list so the exposed tool names stay in sync.
+- Completed: added a schema-backed semantic validation layer that rejects malformed tool calls before tool-start events, plan-mode checks, permission prompts, and execution.
+- Completed: added tool-specific semantic validators for `bash` and `git` on top of the shared validator hook so obviously low-value or incomplete calls fail early with clear errors.
 
 ## Next Planning Baseline
 

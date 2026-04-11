@@ -120,6 +120,20 @@ func (t *GitTool) Concurrency(input ToolInput) ConcurrencyDecision {
 	return ConcurrencyParallel
 }
 
+func (t *GitTool) Validate(input ToolInput) error {
+	operation, ok := stringParam(input.Params, "operation")
+	if !ok || strings.TrimSpace(operation) == "" {
+		return fmt.Errorf("git requires operation")
+	}
+	if strings.TrimSpace(operation) == "blame" {
+		filePath, ok := stringParam(input.Params, "file_path")
+		if !ok || strings.TrimSpace(filePath) == "" {
+			return fmt.Errorf("git blame requires file_path")
+		}
+	}
+	return nil
+}
+
 func (t *GitTool) Execute(ctx context.Context, input ToolInput) (ToolOutput, error) {
 	operation, ok := stringParam(input.Params, "operation")
 	if !ok || strings.TrimSpace(operation) == "" {

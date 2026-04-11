@@ -811,6 +811,14 @@ func executeToolCalls(
 			continue
 		}
 
+		if err := toolpkg.ValidateToolCall(tool, input); err != nil {
+			results[index] = api.ToolResult{ToolCallID: call.ID, Output: err.Error(), IsError: true}
+			if emitErr := bridge.Emit(ipc.EventToolError, ipc.ToolErrorPayload{ToolID: call.ID, Name: call.Name, Input: call.Input, Error: err.Error()}); emitErr != nil {
+				return nil, emitErr
+			}
+			continue
+		}
+
 		if err := bridge.Emit(ipc.EventToolStart, ipc.ToolStartPayload{
 			ToolID: call.ID,
 			Name:   call.Name,

@@ -72,6 +72,12 @@ type Tool interface {
 	Execute(ctx context.Context, input ToolInput) (ToolOutput, error)
 }
 
+// SemanticValidator allows a tool to reject invalid or low-value calls before
+// permission resolution and execution.
+type SemanticValidator interface {
+	Validate(input ToolInput) error
+}
+
 // MaxResultSizeChars is the default per-tool result budget.
 const MaxResultSizeChars = 100_000
 

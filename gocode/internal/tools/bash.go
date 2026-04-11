@@ -98,6 +98,14 @@ func (t *BashTool) Concurrency(input ToolInput) ConcurrencyDecision {
 	return ConcurrencySerial
 }
 
+func (t *BashTool) Validate(input ToolInput) error {
+	command, ok := stringParam(input.Params, "command")
+	if !ok || strings.TrimSpace(command) == "" {
+		return fmt.Errorf("bash requires a non-empty command")
+	}
+	return nil
+}
+
 func (t *BashTool) Execute(ctx context.Context, input ToolInput) (ToolOutput, error) {
 	command, ok := stringParam(input.Params, "command")
 	if !ok || strings.TrimSpace(command) == "" {
