@@ -49,11 +49,15 @@ type boundedOutput struct {
 }
 
 type backgroundCommandResult struct {
-	CommandID string `json:"CommandId"`
-	Running   bool   `json:"Running"`
-	Output    string `json:"Output,omitempty"`
-	Error     string `json:"Error,omitempty"`
-	ExitCode  *int   `json:"ExitCode,omitempty"`
+	CommandID string    `json:"CommandId"`
+	Command   string    `json:"Command,omitempty"`
+	Cwd       string    `json:"Cwd,omitempty"`
+	Running   bool      `json:"Running"`
+	StartedAt time.Time `json:"StartedAt,omitempty"`
+	UpdatedAt time.Time `json:"UpdatedAt,omitempty"`
+	Output    string    `json:"Output,omitempty"`
+	Error     string    `json:"Error,omitempty"`
+	ExitCode  *int      `json:"ExitCode,omitempty"`
 }
 
 var (
@@ -325,7 +329,11 @@ func (bg *backgroundCommand) snapshotDelta() backgroundCommandResult {
 
 	return backgroundCommandResult{
 		CommandID: bg.id,
+		Command:   bg.command,
+		Cwd:       bg.cwd,
 		Running:   running,
+		StartedAt: bg.startedAt,
+		UpdatedAt: bg.updatedAt,
 		Output:    bg.output.ReadDelta(),
 		Error:     errText,
 		ExitCode:  exitCode,

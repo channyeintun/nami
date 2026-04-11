@@ -17,7 +17,7 @@ func (t *SendCommandInputTool) Name() string {
 }
 
 func (t *SendCommandInputTool) Description() string {
-	return "Send stdin to a running background command and return the newly produced output."
+	return "Send stdin to a running background command and return the updated command status plus any newly produced output."
 }
 
 func (t *SendCommandInputTool) InputSchema() any {

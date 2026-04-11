@@ -17,7 +17,7 @@ func (t *CommandStatusTool) Name() string {
 }
 
 func (t *CommandStatusTool) Description() string {
-	return "Check the latest status and unread output for a previously started background command."
+	return "Check the latest status, command metadata, timing context, and unread output for a previously started background command."
 }
 
 func (t *CommandStatusTool) InputSchema() any {

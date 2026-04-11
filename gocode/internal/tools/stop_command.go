@@ -17,7 +17,7 @@ func (t *StopCommandTool) Name() string {
 }
 
 func (t *StopCommandTool) Description() string {
-	return "Stop a running background command and return its latest status and unread output."
+	return "Stop a running background command and return its final status, command metadata, and unread output."
 }
 
 func (t *StopCommandTool) InputSchema() any {

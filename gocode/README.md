@@ -183,9 +183,9 @@ The agent has access to:
 | **web_search**                 | Search the web                                                |
 | **web_fetch**                  | Fetch and read a URL                                          |
 | **list_commands**              | List background commands with recent activity and unread output previews |
-| **command_status**             | Check unread output and state for a background command        |
-| **send_command_input**         | Send stdin to a background command                            |
-| **stop_command**               | Stop a running background command and return its status       |
+| **command_status**             | Check command metadata, timing, unread output, and state      |
+| **send_command_input**         | Send stdin and get the updated background command status      |
+| **stop_command**               | Stop a running background command and return final status     |
 | **file_history**               | Inspect tracked file history, create snapshots, and diff them |
 | **file_history_rewind**        | Restore tracked files to a previous file-history snapshot     |
 | **git**                        | Read-only git operations (status, diff, log, blame)           |

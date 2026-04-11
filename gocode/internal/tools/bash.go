@@ -157,7 +157,11 @@ func (t *BashTool) Execute(ctx context.Context, input ToolInput) (ToolOutput, er
 		}
 		result, err := renderBackgroundCommandResult(backgroundCommandResult{
 			CommandID: bg.id,
+			Command:   command,
+			Cwd:       workingDir,
 			Running:   true,
+			StartedAt: bg.startedAt,
+			UpdatedAt: bg.updatedAt,
 		})
 		if err != nil {
 			return ToolOutput{}, fmt.Errorf("render background command result: %w", err)
