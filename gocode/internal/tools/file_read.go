@@ -3,11 +3,14 @@ package tools
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
 	"strings"
 )
+
+const fileReadMaxTokenBytes = 2 * 1024 * 1024
 
 // FileReadTool reads file contents from disk, optionally limited to a line range.
 type FileReadTool struct{}
@@ -86,7 +89,7 @@ func (t *FileReadTool) Execute(ctx context.Context, input ToolInput) (ToolOutput
 	defer file.Close()
 
 	scanner := bufio.NewScanner(file)
-	scanner.Buffer(make([]byte, 0, 64*1024), 2*1024*1024)
+	scanner.Buffer(make([]byte, 0, 64*1024), fileReadMaxTokenBytes)
 
 	var builder strings.Builder
 	lineNo := 0
@@ -107,6 +110,14 @@ func (t *FileReadTool) Execute(ctx context.Context, input ToolInput) (ToolOutput
 		fmt.Fprintf(&builder, "%d\t%s\n", lineNo, scanner.Text())
 	}
 	if err := scanner.Err(); err != nil {
+		if errors.Is(err, bufio.ErrTooLong) {
+			notice := fmt.Sprintf("[Output truncated: encountered a line longer than %d bytes while reading %s]", fileReadMaxTokenBytes, filePath)
+			output := strings.TrimRight(builder.String(), "\n")
+			if output == "" {
+				return ToolOutput{Output: notice, Truncated: true}, nil
+			}
+			return ToolOutput{Output: output + "\n\n" + notice, Truncated: true}, nil
+		}
 		return ToolOutput{}, fmt.Errorf("read file %q: %w", filePath, err)
 	}
 

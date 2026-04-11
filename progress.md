@@ -24,6 +24,7 @@
 
 ### 2026-04-11
 
+- Completed: Surfaced `file_read` scanner-limit truncation explicitly. When a file contains a line longer than the configured scan token limit, the tool now returns any already-read content plus a clear truncation notice and marks the result as truncated instead of only bubbling a generic read failure.
 - Completed: Serialized background-command unread-output consumption across `command_status` and `send_command_input`. Per-command delta reads now run behind a dedicated mutex so interactive stdin writes cannot race status polling and steal each other's unread output, and `command_status` is now marked concurrency-safe because same-command polls are serialized internally.
 - Completed: Hardened oversized tool-output spill paths. The tool-result budgeter now sanitizes tool IDs before constructing `.log` spill filenames and adds a short hash suffix when normalization changes the ID, so malformed or compatibility-drifted tool IDs cannot traverse outside the tool-log artifact directory.
 - Completed: Aligned the Antigravity-style tool schemas with their accepted snake_case runtime aliases. `command_status`, `send_command_input`, `list_dir`, and `multi_replace_file_content` now advertise both PascalCase and snake_case parameter variants in JSON Schema, including nested multi-replace chunk fields, so schema validation matches the compatibility paths already supported by execution.
