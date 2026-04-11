@@ -92,6 +92,8 @@ export interface ToolResultPayload {
   preview?: string;
   insertions?: number;
   deletions?: number;
+  error_kind?: string;
+  error_hint?: string;
 }
 
 export interface ToolErrorPayload {
@@ -99,6 +101,9 @@ export interface ToolErrorPayload {
   error: string;
   name?: string;
   input?: string;
+  file_path?: string;
+  error_kind?: string;
+  error_hint?: string;
 }
 
 export interface PermissionRequestPayload {

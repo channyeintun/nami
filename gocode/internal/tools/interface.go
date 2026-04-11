@@ -40,6 +40,8 @@ type ToolOutput struct {
 	Preview    string
 	Insertions int
 	Deletions  int
+	ErrorKind  string
+	ErrorHint  string
 	Artifacts  []ArtifactMutation
 }
 

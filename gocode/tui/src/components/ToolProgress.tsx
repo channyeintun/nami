@@ -31,6 +31,9 @@ function summarizeInput(name: string, raw: string): string {
       obj.file_path
     )
       return obj.file_path;
+    if (name === "multi_replace_file_content" && obj.target_file) {
+      return obj.target_file;
+    }
     if (name === "glob" && obj.pattern) return obj.pattern;
     if (name === "grep" && obj.pattern) return obj.pattern;
     if (name === "git" && obj.subcommand) return obj.subcommand;
@@ -132,6 +135,13 @@ function describeTool(toolCall: UIToolCall): ToolDescriptor {
           summarizeInput(toolCall.name, toolCall.input),
         ),
       };
+    case "multi_replace_file_content":
+      return {
+        title: "Multi Replace",
+        summary: basenameOrFallback(
+          summarizeInput(toolCall.name, toolCall.input),
+        ),
+      };
     case "grep":
       return {
         title: "Search Files",
@@ -187,6 +197,8 @@ function permissionLabel(toolCall: UIToolCall): string {
       return "Waiting for permission to overwrite file…";
     case "file_edit":
       return "Waiting for permission to modify file…";
+    case "multi_replace_file_content":
+      return "Waiting for permission to modify file ranges…";
     case "web_fetch":
       return "Waiting for permission to fetch URL…";
     default:
@@ -211,6 +223,8 @@ function runningLabel(toolCall: UIToolCall): string {
       return `Overwriting file…${progressSuffix}`;
     case "file_edit":
       return `Editing file…${progressSuffix}`;
+    case "multi_replace_file_content":
+      return `Replacing file ranges…${progressSuffix}`;
     case "grep":
       return `Searching files…${progressSuffix}`;
     case "glob":
@@ -236,13 +250,10 @@ function renderError(toolCall: UIToolCall) {
   if (
     toolCall.name === "create_file" ||
     toolCall.name === "file_write" ||
-    toolCall.name === "file_edit"
+    toolCall.name === "file_edit" ||
+    toolCall.name === "multi_replace_file_content"
   ) {
-    return (
-      <Text color="red">
-        File update failed: {summarizeOutput(toolCall.error ?? "Tool failed")}
-      </Text>
-    );
+    return renderFileMutationError(toolCall);
   }
 
   if (toolCall.name === "bash") {
@@ -263,6 +274,7 @@ function renderSuccess(toolCall: UIToolCall) {
     case "file_write":
     case "create_file":
     case "file_edit":
+    case "multi_replace_file_content":
       return renderFileMutation(toolCall);
     case "file_read":
       return (
@@ -324,6 +336,23 @@ function renderSuccess(toolCall: UIToolCall) {
         />
       );
   }
+}
+
+function renderFileMutationError(toolCall: UIToolCall) {
+  const summary = summarizeOutput(toolCall.error ?? "Tool failed");
+  const kindLabel = toolCall.errorKind
+    ? toolCall.errorKind.replaceAll("_", " ")
+    : null;
+  return (
+    <Box flexDirection="column">
+      <Text color="red">
+        File update failed{kindLabel ? ` (${kindLabel})` : ""}: {summary}
+      </Text>
+      {toolCall.errorHint ? (
+        <Text color="yellow">Recovery: {toolCall.errorHint}</Text>
+      ) : null}
+    </Box>
+  );
 }
 
 interface AgentResultSummary {

@@ -853,7 +853,7 @@ func executeToolCalls(
 		call, err := normalizeToolCall(call)
 		if err != nil {
 			results[index] = api.ToolResult{ToolCallID: calls[index].ID, Output: err.Error(), IsError: true}
-			if emitErr := bridge.Emit(ipc.EventToolError, ipc.ToolErrorPayload{ToolID: calls[index].ID, Name: calls[index].Name, Input: calls[index].Input, Error: err.Error()}); emitErr != nil {
+			if emitErr := emitToolError(bridge, calls[index], err.Error(), toolpkg.ToolOutput{}, err); emitErr != nil {
 				return nil, emitErr
 			}
 			continue
@@ -862,7 +862,7 @@ func executeToolCalls(
 		tool, err := registry.Get(call.Name)
 		if err != nil {
 			results[index] = api.ToolResult{ToolCallID: call.ID, Output: err.Error(), IsError: true}
-			if emitErr := bridge.Emit(ipc.EventToolError, ipc.ToolErrorPayload{ToolID: call.ID, Name: call.Name, Input: call.Input, Error: err.Error()}); emitErr != nil {
+			if emitErr := emitToolError(bridge, call, err.Error(), toolpkg.ToolOutput{}, err); emitErr != nil {
 				return nil, emitErr
 			}
 			continue
@@ -871,7 +871,7 @@ func executeToolCalls(
 		input, err := decodeToolInput(call)
 		if err != nil {
 			results[index] = api.ToolResult{ToolCallID: call.ID, Output: err.Error(), IsError: true}
-			if emitErr := bridge.Emit(ipc.EventToolError, ipc.ToolErrorPayload{ToolID: call.ID, Name: call.Name, Input: call.Input, Error: err.Error()}); emitErr != nil {
+			if emitErr := emitToolError(bridge, call, err.Error(), toolpkg.ToolOutput{}, err); emitErr != nil {
 				return nil, emitErr
 			}
 			continue
@@ -879,7 +879,7 @@ func executeToolCalls(
 
 		if err := toolpkg.ValidateToolCall(tool, input); err != nil {
 			results[index] = api.ToolResult{ToolCallID: call.ID, Output: err.Error(), IsError: true}
-			if emitErr := bridge.Emit(ipc.EventToolError, ipc.ToolErrorPayload{ToolID: call.ID, Name: call.Name, Input: call.Input, Error: err.Error()}); emitErr != nil {
+			if emitErr := emitToolError(bridge, call, err.Error(), toolpkg.ToolOutput{}, err); emitErr != nil {
 				return nil, emitErr
 			}
 			continue
@@ -896,7 +896,7 @@ func executeToolCalls(
 		pendingCall := toolpkg.PendingCall{Index: index, Tool: tool, Input: input}
 		if err := planner.ValidateTool(ctx, pendingCall.Tool.Name(), pendingCall.Tool.Permission()); err != nil {
 			results[index] = api.ToolResult{ToolCallID: call.ID, Output: err.Error(), IsError: true}
-			if emitErr := bridge.Emit(ipc.EventToolError, ipc.ToolErrorPayload{ToolID: call.ID, Name: call.Name, Input: call.Input, Error: err.Error()}); emitErr != nil {
+			if emitErr := emitToolError(bridge, call, err.Error(), toolpkg.ToolOutput{}, err); emitErr != nil {
 				return nil, emitErr
 			}
 			continue
@@ -907,7 +907,7 @@ func executeToolCalls(
 		}
 		if !authorization.Allowed {
 			results[index] = api.ToolResult{ToolCallID: call.ID, Output: authorization.DenyReason, IsError: true}
-			if emitErr := bridge.Emit(ipc.EventToolError, ipc.ToolErrorPayload{ToolID: call.ID, Name: call.Name, Input: call.Input, Error: authorization.DenyReason}); emitErr != nil {
+			if emitErr := emitToolError(bridge, call, authorization.DenyReason, toolpkg.ToolOutput{}, nil); emitErr != nil {
 				return nil, emitErr
 			}
 			continue
@@ -933,7 +933,7 @@ func executeToolCalls(
 					}
 					reason = appendPermissionFeedback(reason, approvalFeedback[index])
 					results[index] = api.ToolResult{ToolCallID: call.ID, Output: reason, IsError: true}
-					_ = bridge.Emit(ipc.EventToolError, ipc.ToolErrorPayload{ToolID: call.ID, Name: call.Name, Input: call.Input, Error: reason})
+					_ = emitToolError(bridge, call, reason, toolpkg.ToolOutput{}, nil)
 					hookDenied = true
 					break
 				}
@@ -958,7 +958,7 @@ func executeToolCalls(
 			if result.Err != nil {
 				toolResult.Output = appendPermissionFeedback(result.Err.Error(), feedback)
 				toolResult.IsError = true
-				if err := bridge.Emit(ipc.EventToolError, ipc.ToolErrorPayload{ToolID: call.ID, Name: call.Name, Input: call.Input, Error: toolResult.Output}); err != nil {
+				if err := emitToolError(bridge, call, toolResult.Output, result.Output, result.Err); err != nil {
 					return nil, err
 				}
 				results[result.Index] = toolResult
@@ -1001,7 +1001,7 @@ func executeToolCalls(
 			results[result.Index] = toolResult
 
 			if result.Output.IsError {
-				if err := bridge.Emit(ipc.EventToolError, ipc.ToolErrorPayload{ToolID: call.ID, Name: call.Name, Input: call.Input, Error: output}); err != nil {
+				if err := emitToolError(bridge, call, output, result.Output, nil); err != nil {
 					return nil, err
 				}
 				continue
@@ -1040,6 +1040,8 @@ func executeToolCalls(
 				Preview:    result.Output.Preview,
 				Insertions: result.Output.Insertions,
 				Deletions:  result.Output.Deletions,
+				ErrorKind:  result.Output.ErrorKind,
+				ErrorHint:  result.Output.ErrorHint,
 			}); err != nil {
 				return nil, err
 			}
@@ -1058,6 +1060,30 @@ func executeToolCalls(
 	}
 
 	return results, nil
+}
+
+func emitToolError(bridge *ipc.Bridge, call api.ToolCall, message string, output toolpkg.ToolOutput, err error) error {
+	payload := ipc.ToolErrorPayload{
+		ToolID:    call.ID,
+		Name:      call.Name,
+		Input:     call.Input,
+		Error:     message,
+		FilePath:  output.FilePath,
+		ErrorKind: output.ErrorKind,
+		ErrorHint: output.ErrorHint,
+	}
+	if editFailure, ok := toolpkg.ExtractEditFailure(err); ok {
+		if payload.FilePath == "" {
+			payload.FilePath = editFailure.FilePath
+		}
+		if payload.ErrorKind == "" {
+			payload.ErrorKind = string(editFailure.Kind)
+		}
+		if payload.ErrorHint == "" {
+			payload.ErrorHint = editFailure.Hint
+		}
+	}
+	return bridge.Emit(ipc.EventToolError, payload)
 }
 
 type authorizationResult struct {

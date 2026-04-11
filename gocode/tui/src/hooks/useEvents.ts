@@ -103,6 +103,8 @@ export interface UIToolCall {
   preview?: string;
   insertions?: number;
   deletions?: number;
+  errorKind?: string;
+  errorHint?: string;
 }
 
 export interface UIBackgroundAgent {
@@ -529,6 +531,8 @@ export function useEvents(initialModel: string, initialMode: string) {
               preview: p.preview,
               insertions: p.insertions,
               deletions: p.deletions,
+              errorKind: p.error_kind,
+              errorHint: p.error_hint,
             }),
             backgroundAgents: applyBackgroundAgentResult(s.backgroundAgents, p),
             backgroundCommands: nextBackgroundCommands,
@@ -556,6 +560,9 @@ export function useEvents(initialModel: string, initialMode: string) {
             input: p.input ?? toolCallInput(s.toolCalls, p.tool_id),
             status: "error",
             error: p.error,
+            filePath: p.file_path,
+            errorKind: p.error_kind,
+            errorHint: p.error_hint,
             permissionRequestId: undefined,
           }),
         }));

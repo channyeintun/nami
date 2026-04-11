@@ -20,7 +20,7 @@ func (t *FileEditTool) Name() string {
 }
 
 func (t *FileEditTool) Description() string {
-	return "Perform exact string replacements in an existing text file. Use file_write to create new files or overwrite full file contents."
+	return "Perform exact string replacements in an existing text file. Use create_file to create new files and file_write to overwrite full file contents."
 }
 
 func (t *FileEditTool) InputSchema() any {
@@ -67,15 +67,15 @@ func (t *FileEditTool) Validate(input ToolInput) error {
 	}
 	oldString, ok := stringParam(input.Params, "old_string")
 	if !ok {
-		return fmt.Errorf("file_edit requires old_string")
+		return NewEditFailure(EditFailureInvalidRequest, resolvedPath, "file_edit requires old_string", "Include the exact old_string you want to replace.")
 	}
 	if oldString == "" {
-		return fmt.Errorf("file_edit requires a non-empty old_string; use file_write to create or overwrite files")
+		return NewEditFailure(EditFailureInvalidRequest, resolvedPath, "file_edit requires a non-empty old_string", "Use create_file for new files, file_write for full overwrites, or provide the exact existing text you want to replace.")
 	}
 	info, err := os.Stat(resolvedPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return fmt.Errorf("file does not exist: %s (use file_write to create it)", resolvedPath)
+			return NewEditFailure(EditFailureTargetMissing, resolvedPath, fmt.Sprintf("file does not exist: %s", resolvedPath), "Use create_file to create it first, then retry file_edit with the exact existing text.")
 		}
 		return fmt.Errorf("stat file %q: %w", resolvedPath, err)
 	}
@@ -107,13 +107,13 @@ func (t *FileEditTool) Execute(ctx context.Context, input ToolInput) (ToolOutput
 	}
 	newString, ok := stringParam(input.Params, "new_string")
 	if !ok {
-		return ToolOutput{}, fmt.Errorf("file_edit requires new_string")
+		return ToolOutput{}, NewEditFailure(EditFailureInvalidRequest, filePath, "file_edit requires new_string", "Provide the replacement text in new_string.")
 	}
 	if oldString == "" {
-		return ToolOutput{}, fmt.Errorf("file_edit requires a non-empty old_string; use file_write to create or overwrite files")
+		return ToolOutput{}, NewEditFailure(EditFailureInvalidRequest, filePath, "file_edit requires a non-empty old_string", "Use create_file for new files, file_write for full overwrites, or provide the exact existing text you want to replace.")
 	}
 	if oldString == newString {
-		return ToolOutput{}, fmt.Errorf("no changes to make: old_string and new_string are exactly the same")
+		return EditFailureOutput(EditFailureNoOp, filePath, "no changes to make: old_string and new_string are exactly the same", "Change new_string or skip the edit if the file is already in the desired state."), nil
 	}
 
 	replaceAll := boolParam(input.Params, "replace_all")
@@ -123,7 +123,7 @@ func (t *FileEditTool) Execute(ctx context.Context, input ToolInput) (ToolOutput
 		if !os.IsNotExist(err) {
 			return ToolOutput{}, fmt.Errorf("read file %q: %w", filePath, err)
 		}
-		return ToolOutput{}, fmt.Errorf("file does not exist: %s (use file_write to create it)", filePath)
+		return EditFailureOutput(EditFailureTargetMissing, filePath, fmt.Sprintf("file does not exist: %s", filePath), "Use create_file to create it first, then retry file_edit with the exact existing text."), nil
 	}
 
 	trackFileBeforeWrite(filePath)
@@ -135,10 +135,10 @@ func (t *FileEditTool) Execute(ctx context.Context, input ToolInput) (ToolOutput
 
 	matchCount := strings.Count(content, normalizedOldString)
 	if matchCount == 0 {
-		return ToolOutput{}, fmt.Errorf("string to replace not found in file")
+		return EditFailureOutput(EditFailureNoMatch, filePath, "string to replace not found in file", "Reread the file, copy a longer exact snippet into old_string, or switch to multi_replace_file_content for line-based edits."), nil
 	}
 	if matchCount > 1 && !replaceAll {
-		return ToolOutput{}, fmt.Errorf("found %d matches of old_string; set replace_all=true or provide more context", matchCount)
+		return EditFailureOutput(EditFailureMultipleMatch, filePath, fmt.Sprintf("found %d matches of old_string", matchCount), "Provide a more specific old_string with surrounding context, or set replace_all=true only if every match should change."), nil
 	}
 
 	updatedContent := strings.Replace(content, normalizedOldString, normalizedNewString, 1)
