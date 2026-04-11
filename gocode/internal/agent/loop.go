@@ -53,6 +53,7 @@ func runIteration(
 			state.TurnContext,
 			currentUserPrompt,
 			memoryRecalls,
+			state.Capabilities,
 			skillPrompt,
 		)
 	} else {
@@ -62,6 +63,7 @@ func runIteration(
 			state.TurnContext,
 			currentUserPrompt,
 			memoryRecalls,
+			state.Capabilities,
 			skillPrompt,
 		)
 	}

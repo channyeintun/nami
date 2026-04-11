@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"hash/fnv"
 	"strings"
+
+	"github.com/channyeintun/gocode/internal/api"
 )
 
 type promptCacheEntry struct {
@@ -25,9 +27,9 @@ func NewPromptAssemblyCache() *PromptAssemblyCache {
 	return &PromptAssemblyCache{}
 }
 
-func (c *PromptAssemblyCache) Compose(basePrompt string, sys SystemContext, turn TurnContext, currentUserPrompt string, recalls []MemoryRecallResult, skillPrompt string) string {
+func (c *PromptAssemblyCache) Compose(basePrompt string, sys SystemContext, turn TurnContext, currentUserPrompt string, recalls []MemoryRecallResult, capabilities api.ModelCapabilities, skillPrompt string) string {
 	if c == nil {
-		return composeSystemPrompt(basePrompt, sys, turn, currentUserPrompt, recalls, skillPrompt)
+		return composeSystemPrompt(basePrompt, sys, turn, currentUserPrompt, recalls, capabilities, skillPrompt)
 	}
 
 	basePrompt = c.memoize(&c.base, hashStrings("base", basePrompt), func() string {
@@ -43,22 +45,9 @@ func (c *PromptAssemblyCache) Compose(basePrompt string, sys SystemContext, turn
 		return strings.TrimSpace(FormatContextPrompt(sys, turn))
 	})
 
-	finalKey := hashStrings("final", basePrompt, skillPrompt, memoryPrompt, contextPrompt)
+	finalKey := hashStrings("final", boolString(capabilities.SupportsCaching), basePrompt, skillPrompt, memoryPrompt, contextPrompt)
 	return c.memoize(&c.final, finalKey, func() string {
-		parts := make([]string, 0, 4)
-		if basePrompt != "" {
-			parts = append(parts, basePrompt)
-		}
-		if memoryPrompt != "" {
-			parts = append(parts, memoryPrompt)
-		}
-		if skillPrompt != "" {
-			parts = append(parts, skillPrompt)
-		}
-		if contextPrompt != "" {
-			parts = append(parts, contextPrompt)
-		}
-		return strings.Join(parts, "\n\n")
+		return joinPromptSections(orderedPromptSections(capabilities.SupportsCaching, basePrompt, skillPrompt, memoryPrompt, contextPrompt))
 	})
 }
 
@@ -98,4 +87,11 @@ func hashStrings(parts ...string) string {
 		_, _ = h.Write([]byte{0})
 	}
 	return fmt.Sprintf("%x", h.Sum64())
+}
+
+func boolString(value bool) string {
+	if value {
+		return "1"
+	}
+	return "0"
 }

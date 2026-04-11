@@ -137,25 +137,31 @@ func QueryStream(ctx context.Context, req QueryRequest, deps QueryDeps) iter.Seq
 	}
 }
 
-func composeSystemPrompt(basePrompt string, sys SystemContext, turn TurnContext, currentUserPrompt string, recalls []MemoryRecallResult, skillPrompt string) string {
+func composeSystemPrompt(basePrompt string, sys SystemContext, turn TurnContext, currentUserPrompt string, recalls []MemoryRecallResult, capabilities api.ModelCapabilities, skillPrompt string) string {
 	contextPrompt := strings.TrimSpace(FormatContextPrompt(sys, turn))
 	memoryPrompt := strings.TrimSpace(FormatMemoryPrompt(sys.MemoryFiles, currentUserPrompt, recalls))
 	skillPrompt = strings.TrimSpace(skillPrompt)
 	basePrompt = strings.TrimSpace(basePrompt)
-	parts := make([]string, 0, 4)
-	if basePrompt != "" {
-		parts = append(parts, basePrompt)
+	return joinPromptSections(orderedPromptSections(capabilities.SupportsCaching, basePrompt, skillPrompt, memoryPrompt, contextPrompt))
+}
+
+func orderedPromptSections(supportsCaching bool, basePrompt, skillPrompt, memoryPrompt, contextPrompt string) []string {
+	if supportsCaching {
+		return []string{basePrompt, skillPrompt, memoryPrompt, contextPrompt}
 	}
-	if memoryPrompt != "" {
-		parts = append(parts, memoryPrompt)
+	return []string{basePrompt, memoryPrompt, skillPrompt, contextPrompt}
+}
+
+func joinPromptSections(parts []string) string {
+	filtered := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		filtered = append(filtered, part)
 	}
-	if skillPrompt != "" {
-		parts = append(parts, skillPrompt)
-	}
-	if contextPrompt != "" {
-		parts = append(parts, contextPrompt)
-	}
-	return strings.Join(parts, "\n\n")
+	return strings.Join(filtered, "\n\n")
 }
 
 func persistMessages(messages []api.Message, persist func([]api.Message)) {

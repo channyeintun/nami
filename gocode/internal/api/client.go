@@ -24,6 +24,7 @@ type ModelCapabilities struct {
 	SupportsExtendedThinking bool
 	SupportsVision           bool
 	SupportsJsonMode         bool
+	SupportsCaching          bool
 	MaxContextWindow         int
 	MaxOutputTokens          int
 }

@@ -22,6 +22,7 @@ var Presets = map[string]ProviderPreset{
 			SupportsToolUse:          true,
 			SupportsExtendedThinking: true,
 			SupportsVision:           true,
+			SupportsCaching:          true,
 			MaxContextWindow:         200000,
 			MaxOutputTokens:          8192,
 		},
