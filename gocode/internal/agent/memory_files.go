@@ -21,6 +21,13 @@ type MemoryFile struct {
 	UpdatedAt time.Time
 }
 
+// MemoryRecallResult holds recalled index lines for a specific durable memory file.
+type MemoryRecallResult struct {
+	Path   string
+	Lines  []string
+	Source string
+}
+
 const (
 	memoryTypeProject       = "project"
 	memoryTypeLocal         = "local"
@@ -167,9 +174,10 @@ func readMemoryIndex(path string) (string, error) {
 }
 
 // FormatMemoryPrompt renders loaded instruction files into a system prompt section.
-func FormatMemoryPrompt(files []MemoryFile, currentUserPrompt string) string {
+func FormatMemoryPrompt(files []MemoryFile, currentUserPrompt string, recalls []MemoryRecallResult) string {
 	instructions := make([]MemoryFile, 0, len(files))
 	memoryIndexes := make([]MemoryFile, 0, len(files))
+	recallByPath := memoryRecallLookup(recalls)
 	for _, f := range files {
 		switch f.Type {
 		case memoryTypeProjectIndex, memoryTypeUserIndex:
@@ -199,7 +207,7 @@ func FormatMemoryPrompt(files []MemoryFile, currentUserPrompt string) string {
 		b.WriteString("Durable memory indexes are shown below. Treat them as selectively relevant context, not as unconditional instructions. Prefer recent, project-specific entries when they help, and verify details against the live repository when needed.\n\n")
 
 		for _, f := range memoryIndexes {
-			recalledContent := formatRelevantMemoryIndexContent(f, currentUserPrompt)
+			recalledContent := formatRelevantMemoryIndexContent(f, currentUserPrompt, recallByPath[f.Path])
 			if strings.TrimSpace(recalledContent) == "" {
 				continue
 			}
@@ -287,8 +295,13 @@ func formatMemoryIndexContent(file MemoryFile) string {
 	return note + "\n" + file.Content
 }
 
-func formatRelevantMemoryIndexContent(file MemoryFile, currentUserPrompt string) string {
-	selectedLines := selectRelevantMemoryLines(file.Content, currentUserPrompt)
+func formatRelevantMemoryIndexContent(file MemoryFile, currentUserPrompt string, recalled MemoryRecallResult) string {
+	selectedLines := recalled.Lines
+	selectionSource := strings.TrimSpace(recalled.Source)
+	if len(selectedLines) == 0 {
+		selectedLines = selectRelevantMemoryLines(file.Content, currentUserPrompt)
+		selectionSource = "heuristic fallback"
+	}
 	if len(selectedLines) == 0 {
 		return ""
 	}
@@ -297,9 +310,27 @@ func formatRelevantMemoryIndexContent(file MemoryFile, currentUserPrompt string)
 	if note := memoryAgeNote(file.UpdatedAt); note != "" {
 		parts = append(parts, note)
 	}
-	parts = append(parts, fmt.Sprintf("[memory-recall] Selected %d relevant index entr%s for the current request.", len(selectedLines), pluralSuffix(len(selectedLines), "y", "ies")))
+	parts = append(parts, fmt.Sprintf("[memory-recall] Selected %d relevant index entr%s for the current request via %s.", len(selectedLines), pluralSuffix(len(selectedLines), "y", "ies"), selectionSource))
 	parts = append(parts, selectedLines...)
 	return strings.Join(parts, "\n")
+}
+
+func memoryRecallLookup(recalls []MemoryRecallResult) map[string]MemoryRecallResult {
+	if len(recalls) == 0 {
+		return nil
+	}
+	lookup := make(map[string]MemoryRecallResult, len(recalls))
+	for _, recall := range recalls {
+		if strings.TrimSpace(recall.Path) == "" {
+			continue
+		}
+		lookup[recall.Path] = MemoryRecallResult{
+			Path:   recall.Path,
+			Lines:  append([]string(nil), recall.Lines...),
+			Source: recall.Source,
+		}
+	}
+	return lookup
 }
 
 func selectRelevantMemoryLines(content, currentUserPrompt string) []string {

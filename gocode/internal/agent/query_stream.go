@@ -37,6 +37,7 @@ type QueryDeps struct {
 	CallModel           func(context.Context, api.ModelRequest) (iter.Seq2[api.ModelEvent, error], error)
 	ExecuteToolBatch    func(context.Context, []api.ToolCall) ([]api.ToolResult, error)
 	CompactMessages     func(context.Context, []api.Message, CompactReason) ([]api.Message, error)
+	RecallMemory        func(context.Context, []MemoryFile, string) ([]MemoryRecallResult, error)
 	ApplyResultBudget   func([]api.Message) []api.Message
 	ObserveContinuation func(ContinuationTracker, string)
 	EmitTelemetry       func(ipc.StreamEvent)
@@ -131,9 +132,9 @@ func QueryStream(ctx context.Context, req QueryRequest, deps QueryDeps) iter.Seq
 	}
 }
 
-func composeSystemPrompt(basePrompt string, sys SystemContext, turn TurnContext, currentUserPrompt string, skillPrompt string) string {
+func composeSystemPrompt(basePrompt string, sys SystemContext, turn TurnContext, currentUserPrompt string, recalls []MemoryRecallResult, skillPrompt string) string {
 	contextPrompt := strings.TrimSpace(FormatContextPrompt(sys, turn))
-	memoryPrompt := strings.TrimSpace(FormatMemoryPrompt(sys.MemoryFiles, currentUserPrompt))
+	memoryPrompt := strings.TrimSpace(FormatMemoryPrompt(sys.MemoryFiles, currentUserPrompt, recalls))
 	skillPrompt = strings.TrimSpace(skillPrompt)
 	basePrompt = strings.TrimSpace(basePrompt)
 	parts := make([]string, 0, 4)

@@ -29,6 +29,7 @@ func runIteration(
 	state.TurnCount++
 	state.TurnContext = LoadTurnContext()
 	currentUserPrompt := latestUserPrompt(state.Messages)
+	memoryRecalls := recallMemoryIndexes(ctx, deps.RecallMemory, state.SystemContext.MemoryFiles, currentUserPrompt)
 	selectedSkills := skillspkg.SelectRelevant(state.Skills, currentUserPrompt)
 	basePrompt := state.BasePrompt
 	if capabilityPrompt := capabilitySystemPrompt(state.Capabilities); capabilityPrompt != "" {
@@ -39,6 +40,7 @@ func runIteration(
 		state.SystemContext,
 		state.TurnContext,
 		currentUserPrompt,
+		memoryRecalls,
 		skillspkg.FormatPromptSection(selectedSkills),
 	)
 
@@ -96,6 +98,37 @@ func runIteration(
 	}
 
 	return nil
+}
+
+func recallMemoryIndexes(
+	ctx context.Context,
+	recall func(context.Context, []MemoryFile, string) ([]MemoryRecallResult, error),
+	files []MemoryFile,
+	currentUserPrompt string,
+) []MemoryRecallResult {
+	if recall == nil || strings.TrimSpace(currentUserPrompt) == "" {
+		return nil
+	}
+
+	hasMemoryIndexes := false
+	for _, file := range files {
+		if file.Type == memoryTypeProjectIndex || file.Type == memoryTypeUserIndex {
+			hasMemoryIndexes = true
+			break
+		}
+	}
+	if !hasMemoryIndexes {
+		return nil
+	}
+
+	results, err := recall(ctx, files, currentUserPrompt)
+	if err != nil {
+		return nil
+	}
+	if len(results) == 0 {
+		return nil
+	}
+	return results
 }
 
 func invokeModelWithRecovery(

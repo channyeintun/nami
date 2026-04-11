@@ -17,7 +17,7 @@
 | Phase 1 runtime measurement         | completed   | S     | Checkpoint logging, artifact ownership, aggregate tool-result budgeting, and continuation stop telemetry are in place.                                                                                                    |
 | Phase 2 tool depth                  | in progress | L     | File-history tools, semantic validation, input-aware bash concurrency, Think, stronger Go-aware navigation, repository overview tooling, and fuller background command lifecycle tools landed; follow-up tooling remains. |
 | Phase 3 subagents                   | in progress | XL    | Fresh-context explore, permission-isolated general-purpose child agents, and full background child launch/status/stop lifecycle are landed.                                                                               |
-| Phase 4 memory                      | in progress | L     | Project and user MEMORY.md index loading, staleness cues, write-path scaffolding, and bounded heuristic index recall are wired into prompt assembly; side-query recall remains.                                           |
+| Phase 4 memory                      | in progress | L     | Project and user MEMORY.md index loading, staleness cues, write-path scaffolding, bounded heuristic fallback, and model-backed side-query recall are wired into prompt assembly.                                          |
 | Phase 5 compaction and cache        | planned     | M     | Output slot reservation, prompt memoization, provider-gated cache stability.                                                                                                                                              |
 | Phase 6 UI and developer experience | planned     | M     | Data-driven: API preconnect, measured Ink optimizations, subagent/memory UI surfaces.                                                                                                                                     |
 
@@ -79,6 +79,7 @@
 - Completed: added prompt-level memory write guidance with concrete project and user memory paths plus index-update instructions so durable memories can be written through existing file tools without a custom memory tool.
 - Completed: added canonical memory filename, frontmatter, and MEMORY.md index-entry scaffolding to the prompt guidance so future memory writes can follow a consistent on-disk format.
 - Completed: switched MEMORY.md index injection from whole-file dumping to bounded heuristic recall so only a small set of lines relevant to the current request enters the prompt by default.
+- Completed: added a bounded model-backed memory side-query that selects relevant MEMORY.md index entries before each turn and falls back to the existing heuristic recall path when the side-query fails or returns nothing.
 
 ## Next Planning Baseline
 
