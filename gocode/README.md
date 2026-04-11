@@ -160,7 +160,7 @@ The agent has access to:
 | Tool | Description |
 |------|-------------|
 | **bash** | Execute shell commands |
-| **list_dir** | List directory contents as structured JSON lines |
+| **list_dir** | List directory contents as structured JSON |
 | **file_read** | Read file contents |
 | **file_write** | Create or overwrite files |
 | **file_edit** | Find-and-replace edits in files |

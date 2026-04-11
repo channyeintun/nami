@@ -1,7 +1,6 @@
 package tools
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -27,7 +26,7 @@ func (t *ListDirTool) Name() string {
 }
 
 func (t *ListDirTool) Description() string {
-	return "List the direct contents of a directory in a structured JSON-lines format."
+	return "List the direct contents of a directory as a structured JSON array."
 }
 
 func (t *ListDirTool) InputSchema() any {
@@ -108,23 +107,10 @@ func (t *ListDirTool) Execute(ctx context.Context, input ToolInput) (ToolOutput,
 		return strings.ToLower(results[i].Name) < strings.ToLower(results[j].Name)
 	})
 
-	var out bytes.Buffer
-	for _, item := range results {
-		encoded, err := json.Marshal(item)
-		if err != nil {
-			return ToolOutput{}, fmt.Errorf("marshal list_dir entry: %w", err)
-		}
-		out.Write(encoded)
-		out.WriteByte('\n')
+	encoded, err := json.Marshal(results)
+	if err != nil {
+		return ToolOutput{}, fmt.Errorf("marshal list_dir results: %w", err)
 	}
-	fmt.Fprintf(&out, "Summary: This directory contains %d entr%s.", len(results), pluralizeEntries(len(results)))
 
-	return ToolOutput{Output: strings.TrimRight(out.String(), "\n")}, nil
-}
-
-func pluralizeEntries(count int) string {
-	if count == 1 {
-		return "y"
-	}
-	return "ies"
+	return ToolOutput{Output: string(encoded)}, nil
 }
