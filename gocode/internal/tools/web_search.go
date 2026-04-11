@@ -79,8 +79,8 @@ func (t *WebSearchTool) Permission() PermissionLevel {
 	return PermissionReadOnly
 }
 
-func (t *WebSearchTool) IsConcurrencySafe(input ToolInput) bool {
-	return true
+func (t *WebSearchTool) Concurrency(input ToolInput) ConcurrencyDecision {
+	return ConcurrencyParallel
 }
 
 func (t *WebSearchTool) Execute(ctx context.Context, input ToolInput) (ToolOutput, error) {

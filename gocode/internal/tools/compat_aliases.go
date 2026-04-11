@@ -54,8 +54,8 @@ func (t *FileSearchAliasTool) Permission() PermissionLevel {
 	return PermissionReadOnly
 }
 
-func (t *FileSearchAliasTool) IsConcurrencySafe(input ToolInput) bool {
-	return true
+func (t *FileSearchAliasTool) Concurrency(input ToolInput) ConcurrencyDecision {
+	return ConcurrencyParallel
 }
 
 func (t *FileSearchAliasTool) Execute(ctx context.Context, input ToolInput) (ToolOutput, error) {
@@ -147,8 +147,8 @@ func (t *ReadFileAliasTool) Permission() PermissionLevel {
 	return PermissionReadOnly
 }
 
-func (t *ReadFileAliasTool) IsConcurrencySafe(input ToolInput) bool {
-	return true
+func (t *ReadFileAliasTool) Concurrency(input ToolInput) ConcurrencyDecision {
+	return ConcurrencyParallel
 }
 
 func (t *ReadFileAliasTool) Execute(ctx context.Context, input ToolInput) (ToolOutput, error) {

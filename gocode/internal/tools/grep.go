@@ -73,8 +73,8 @@ func (t *GrepTool) Permission() PermissionLevel {
 	return PermissionReadOnly
 }
 
-func (t *GrepTool) IsConcurrencySafe(input ToolInput) bool {
-	return true
+func (t *GrepTool) Concurrency(input ToolInput) ConcurrencyDecision {
+	return ConcurrencyParallel
 }
 
 func (t *GrepTool) Execute(ctx context.Context, input ToolInput) (ToolOutput, error) {

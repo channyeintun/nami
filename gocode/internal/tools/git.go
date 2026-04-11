@@ -116,8 +116,8 @@ func (t *GitTool) Permission() PermissionLevel {
 	return PermissionReadOnly
 }
 
-func (t *GitTool) IsConcurrencySafe(input ToolInput) bool {
-	return true
+func (t *GitTool) Concurrency(input ToolInput) ConcurrencyDecision {
+	return ConcurrencyParallel
 }
 
 func (t *GitTool) Execute(ctx context.Context, input ToolInput) (ToolOutput, error) {

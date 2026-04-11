@@ -54,8 +54,8 @@ func (t *GlobTool) Permission() PermissionLevel {
 	return PermissionReadOnly
 }
 
-func (t *GlobTool) IsConcurrencySafe(input ToolInput) bool {
-	return true
+func (t *GlobTool) Concurrency(input ToolInput) ConcurrencyDecision {
+	return ConcurrencyParallel
 }
 
 func (t *GlobTool) Execute(ctx context.Context, input ToolInput) (ToolOutput, error) {

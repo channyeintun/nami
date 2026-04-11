@@ -72,8 +72,8 @@ func (t *SendCommandInputTool) Permission() PermissionLevel {
 	return PermissionExecute
 }
 
-func (t *SendCommandInputTool) IsConcurrencySafe(input ToolInput) bool {
-	return false
+func (t *SendCommandInputTool) Concurrency(input ToolInput) ConcurrencyDecision {
+	return ConcurrencySerial
 }
 
 func (t *SendCommandInputTool) Execute(ctx context.Context, input ToolInput) (ToolOutput, error) {

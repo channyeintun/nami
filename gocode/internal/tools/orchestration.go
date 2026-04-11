@@ -42,18 +42,18 @@ func PartitionBatches(calls []PendingCall) []Batch {
 	}
 
 	var batches []Batch
-	var currentSafe []PendingCall
+	var currentParallel []PendingCall
 
 	flush := func() {
-		if len(currentSafe) > 0 {
-			batches = append(batches, Batch{Calls: currentSafe, Concurrent: true})
-			currentSafe = nil
+		if len(currentParallel) > 0 {
+			batches = append(batches, Batch{Calls: currentParallel, Concurrent: true})
+			currentParallel = nil
 		}
 	}
 
 	for _, call := range calls {
-		if call.Tool.IsConcurrencySafe(call.Input) {
-			currentSafe = append(currentSafe, call)
+		if call.Tool.Concurrency(call.Input) == ConcurrencyParallel {
+			currentParallel = append(currentParallel, call)
 		} else {
 			flush()
 			batches = append(batches, Batch{Calls: []PendingCall{call}, Concurrent: false})

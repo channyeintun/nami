@@ -55,8 +55,8 @@ func (t *FileReadTool) Permission() PermissionLevel {
 	return PermissionReadOnly
 }
 
-func (t *FileReadTool) IsConcurrencySafe(input ToolInput) bool {
-	return true
+func (t *FileReadTool) Concurrency(input ToolInput) ConcurrencyDecision {
+	return ConcurrencyParallel
 }
 
 func (t *FileReadTool) Execute(ctx context.Context, input ToolInput) (ToolOutput, error) {

@@ -7,25 +7,25 @@ import (
 )
 
 // StreamingExecutor starts tool calls as they arrive, while preserving ordered result delivery.
-// Concurrency-safe calls may overlap; exclusive calls execute alone and block later calls.
+// Parallel calls may overlap; serial calls execute alone and block later calls.
 type StreamingExecutor struct {
 	ctx          context.Context
 	cancel       context.CancelFunc
 	completionCh chan int
 
-	mu           sync.Mutex
-	calls        []*streamingCall
-	nextYield    int
-	closed       bool
-	activeSafe   int
-	activeUnsafe bool
-	activeCount  int
+	mu             sync.Mutex
+	calls          []*streamingCall
+	nextYield      int
+	closed         bool
+	activeParallel int
+	activeSerial   bool
+	activeCount    int
 }
 
 type streamingCall struct {
 	seq       int
 	pending   PendingCall
-	safe      bool
+	parallel  bool
 	status    streamingCallStatus
 	result    IndexedResult
 	completed bool
@@ -61,10 +61,10 @@ func (e *StreamingExecutor) Add(call PendingCall) error {
 	}
 
 	tracked := &streamingCall{
-		seq:     len(e.calls),
-		pending: call,
-		safe:    call.Tool.IsConcurrencySafe(call.Input),
-		status:  streamingCallQueued,
+		seq:      len(e.calls),
+		pending:  call,
+		parallel: call.Tool.Concurrency(call.Input) == ConcurrencyParallel,
+		status:   streamingCallQueued,
 	}
 	e.calls = append(e.calls, tracked)
 	e.processQueueLocked()
@@ -181,30 +181,30 @@ func (e *StreamingExecutor) processQueueLocked() {
 		if call.status != streamingCallQueued {
 			continue
 		}
-		if !e.canStartLocked(call.safe) {
+		if !e.canStartLocked(call.parallel) {
 			break
 		}
 		e.startLocked(call)
 	}
 }
 
-func (e *StreamingExecutor) canStartLocked(safe bool) bool {
+func (e *StreamingExecutor) canStartLocked(parallel bool) bool {
 	if e.activeCount == 0 {
 		return true
 	}
-	if !safe {
+	if !parallel {
 		return false
 	}
-	return !e.activeUnsafe
+	return !e.activeSerial
 }
 
 func (e *StreamingExecutor) startLocked(call *streamingCall) {
 	call.status = streamingCallRunning
 	e.activeCount++
-	if call.safe {
-		e.activeSafe++
+	if call.parallel {
+		e.activeParallel++
 	} else {
-		e.activeUnsafe = true
+		e.activeSerial = true
 	}
 
 	go func(tracked *streamingCall) {
@@ -221,10 +221,10 @@ func (e *StreamingExecutor) startLocked(call *streamingCall) {
 		tracked.completed = true
 		tracked.status = streamingCallCompleted
 		e.activeCount--
-		if tracked.safe {
-			e.activeSafe--
+		if tracked.parallel {
+			e.activeParallel--
 		} else {
-			e.activeUnsafe = false
+			e.activeSerial = false
 		}
 		e.processQueueLocked()
 

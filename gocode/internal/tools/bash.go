@@ -87,12 +87,15 @@ func (t *BashTool) Permission() PermissionLevel {
 	return PermissionExecute
 }
 
-func (t *BashTool) IsConcurrencySafe(input ToolInput) bool {
+func (t *BashTool) Concurrency(input ToolInput) ConcurrencyDecision {
 	if firstBoolParam(input.Params, "background") {
-		return false
+		return ConcurrencySerial
 	}
 	command, _ := stringParam(input.Params, "command")
-	return bashReadOnlyCommands.MatchString(command)
+	if bashReadOnlyCommands.MatchString(command) {
+		return ConcurrencyParallel
+	}
+	return ConcurrencySerial
 }
 
 func (t *BashTool) Execute(ctx context.Context, input ToolInput) (ToolOutput, error) {

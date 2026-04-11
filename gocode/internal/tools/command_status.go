@@ -54,8 +54,8 @@ func (t *CommandStatusTool) Permission() PermissionLevel {
 	return PermissionReadOnly
 }
 
-func (t *CommandStatusTool) IsConcurrencySafe(input ToolInput) bool {
-	return false
+func (t *CommandStatusTool) Concurrency(input ToolInput) ConcurrencyDecision {
+	return ConcurrencySerial
 }
 
 func (t *CommandStatusTool) Execute(ctx context.Context, input ToolInput) (ToolOutput, error) {

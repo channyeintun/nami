@@ -53,8 +53,8 @@ func (t *FileEditTool) Permission() PermissionLevel {
 	return PermissionWrite
 }
 
-func (t *FileEditTool) IsConcurrencySafe(input ToolInput) bool {
-	return false
+func (t *FileEditTool) Concurrency(input ToolInput) ConcurrencyDecision {
+	return ConcurrencySerial
 }
 
 func (t *FileEditTool) Execute(ctx context.Context, input ToolInput) (ToolOutput, error) {

@@ -15,6 +15,14 @@ const (
 	PermissionExecute                         // ask user + security check
 )
 
+// ConcurrencyDecision classifies how a tool invocation should be scheduled.
+type ConcurrencyDecision int
+
+const (
+	ConcurrencySerial ConcurrencyDecision = iota
+	ConcurrencyParallel
+)
+
 // ToolInput holds the parsed input for a tool invocation.
 type ToolInput struct {
 	Name   string
@@ -56,8 +64,8 @@ type Tool interface {
 	// Permission returns the default permission level.
 	Permission() PermissionLevel
 
-	// IsConcurrencySafe returns true if this invocation can run in parallel.
-	IsConcurrencySafe(input ToolInput) bool
+	// Concurrency reports whether this invocation must run serially or can join a parallel batch.
+	Concurrency(input ToolInput) ConcurrencyDecision
 
 	// Execute runs the tool with the given input.
 	Execute(ctx context.Context, input ToolInput) (ToolOutput, error)

@@ -83,8 +83,8 @@ func (t *SaveImplementationPlanTool) Permission() PermissionLevel {
 	return PermissionReadOnly
 }
 
-func (t *SaveImplementationPlanTool) IsConcurrencySafe(input ToolInput) bool {
-	return false
+func (t *SaveImplementationPlanTool) Concurrency(input ToolInput) ConcurrencyDecision {
+	return ConcurrencySerial
 }
 
 func (t *SaveImplementationPlanTool) Execute(ctx context.Context, input ToolInput) (ToolOutput, error) {
@@ -171,8 +171,8 @@ func (t *UpsertTaskListTool) Permission() PermissionLevel {
 	return PermissionReadOnly
 }
 
-func (t *UpsertTaskListTool) IsConcurrencySafe(input ToolInput) bool {
-	return false
+func (t *UpsertTaskListTool) Concurrency(input ToolInput) ConcurrencyDecision {
+	return ConcurrencySerial
 }
 
 func (t *UpsertTaskListTool) Execute(ctx context.Context, input ToolInput) (ToolOutput, error) {
@@ -255,8 +255,8 @@ func (t *SaveWalkthroughTool) Permission() PermissionLevel {
 	return PermissionReadOnly
 }
 
-func (t *SaveWalkthroughTool) IsConcurrencySafe(input ToolInput) bool {
-	return false
+func (t *SaveWalkthroughTool) Concurrency(input ToolInput) ConcurrencyDecision {
+	return ConcurrencySerial
 }
 
 func (t *SaveWalkthroughTool) Execute(ctx context.Context, input ToolInput) (ToolOutput, error) {

@@ -24,6 +24,7 @@
 
 ### 2026-04-11
 
+- Completed: Refactored the tool scheduler concurrency API to use explicit classifications instead of a misleading boolean predicate. The `Tool` interface now reports a `Concurrency` decision (`serial` vs `parallel`), the batch/streaming executors were renamed internally to match that model, and dynamic tools such as `bash` still choose their scheduling class from input while fixed-policy tools now return an explicit constant that reads naturally.
 - Completed: Surfaced `file_read` scanner-limit truncation explicitly. When a file contains a line longer than the configured scan token limit, the tool now returns any already-read content plus a clear truncation notice and marks the result as truncated instead of only bubbling a generic read failure.
 - Completed: Serialized background-command unread-output consumption across `command_status` and `send_command_input`. Per-command delta reads now run behind a dedicated mutex so interactive stdin writes cannot race status polling and steal each other's unread output, while `command_status` remains conservatively non-concurrent under the current batch scheduler because unread-output consumption is still stateful per command.
 - Completed: Hardened oversized tool-output spill paths. The tool-result budgeter now sanitizes tool IDs before constructing `.log` spill filenames and adds a short hash suffix when normalization changes the ID, so malformed or compatibility-drifted tool IDs cannot traverse outside the tool-log artifact directory.

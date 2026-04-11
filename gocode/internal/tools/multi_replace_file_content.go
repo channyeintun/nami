@@ -148,8 +148,8 @@ func (t *MultiReplaceFileContentTool) Permission() PermissionLevel {
 	return PermissionWrite
 }
 
-func (t *MultiReplaceFileContentTool) IsConcurrencySafe(input ToolInput) bool {
-	return false
+func (t *MultiReplaceFileContentTool) Concurrency(input ToolInput) ConcurrencyDecision {
+	return ConcurrencySerial
 }
 
 func (t *MultiReplaceFileContentTool) Execute(ctx context.Context, input ToolInput) (ToolOutput, error) {

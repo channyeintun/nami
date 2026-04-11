@@ -80,8 +80,8 @@ func (t *WebFetchTool) Permission() PermissionLevel {
 	return PermissionReadOnly
 }
 
-func (t *WebFetchTool) IsConcurrencySafe(input ToolInput) bool {
-	return true
+func (t *WebFetchTool) Concurrency(input ToolInput) ConcurrencyDecision {
+	return ConcurrencyParallel
 }
 
 func (t *WebFetchTool) Execute(ctx context.Context, input ToolInput) (ToolOutput, error) {
