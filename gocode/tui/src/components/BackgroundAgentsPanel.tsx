@@ -1,6 +1,7 @@
 import React, { type FC } from "react";
 import { Box, Text } from "ink";
 import type { UIBackgroundAgent } from "../hooks/useEvents.js";
+import { formatTokenCount } from "../utils/modelContext.js";
 
 interface BackgroundAgentsPanelProps {
   agents: UIBackgroundAgent[];
@@ -128,6 +129,11 @@ function formatSubagentType(subagentType: string): string {
 function formatMeta(agent: UIBackgroundAgent): string {
   const parts = [agent.agentId, `updated ${formatUpdatedAt(agent.updatedAt)}`];
 
+  const costSummary = formatCostSummary(agent);
+  if (costSummary) {
+    parts.push(costSummary);
+  }
+
   if (agent.sessionId) {
     parts.push(agent.sessionId);
   }
@@ -139,6 +145,18 @@ function formatMeta(agent: UIBackgroundAgent): string {
   }
 
   return parts.join(" | ");
+}
+
+function formatCostSummary(agent: UIBackgroundAgent): string {
+  if (
+    agent.totalCostUsd <= 0 &&
+    agent.inputTokens <= 0 &&
+    agent.outputTokens <= 0
+  ) {
+    return "";
+  }
+
+  return `cost $${agent.totalCostUsd.toFixed(4)} · ${formatTokenCount(agent.inputTokens)}↑ ${formatTokenCount(agent.outputTokens)}↓`;
 }
 
 function renderCounts(activeCount: number, recentCount: number): string {

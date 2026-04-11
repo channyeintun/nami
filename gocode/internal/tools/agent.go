@@ -26,6 +26,9 @@ type AgentRunResult struct {
 	OutputFile     string   `json:"output_file,omitempty"`
 	Summary        string   `json:"summary"`
 	Error          string   `json:"error,omitempty"`
+	TotalCostUSD   float64  `json:"total_cost_usd,omitempty"`
+	InputTokens    int      `json:"input_tokens,omitempty"`
+	OutputTokens   int      `json:"output_tokens,omitempty"`
 	Tools          []string `json:"tools,omitempty"`
 }
 

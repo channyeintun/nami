@@ -259,6 +259,9 @@ export interface BackgroundAgentUpdatedPayload {
   transcript_path?: string;
   output_file?: string;
   error?: string;
+  total_cost_usd?: number;
+  input_tokens?: number;
+  output_tokens?: number;
 }
 
 export interface ArtifactReviewResponsePayload {

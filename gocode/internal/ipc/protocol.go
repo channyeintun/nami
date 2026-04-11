@@ -272,15 +272,18 @@ type ArtifactStatusChangedPayload struct {
 
 // BackgroundAgentUpdatedPayload is emitted when a background child agent changes state.
 type BackgroundAgentUpdatedPayload struct {
-	AgentID        string `json:"agent_id"`
-	Description    string `json:"description,omitempty"`
-	SubagentType   string `json:"subagent_type,omitempty"`
-	Status         string `json:"status"`
-	Summary        string `json:"summary,omitempty"`
-	SessionID      string `json:"session_id,omitempty"`
-	TranscriptPath string `json:"transcript_path,omitempty"`
-	OutputFile     string `json:"output_file,omitempty"`
-	Error          string `json:"error,omitempty"`
+	AgentID        string  `json:"agent_id"`
+	Description    string  `json:"description,omitempty"`
+	SubagentType   string  `json:"subagent_type,omitempty"`
+	Status         string  `json:"status"`
+	Summary        string  `json:"summary,omitempty"`
+	SessionID      string  `json:"session_id,omitempty"`
+	TranscriptPath string  `json:"transcript_path,omitempty"`
+	OutputFile     string  `json:"output_file,omitempty"`
+	Error          string  `json:"error,omitempty"`
+	TotalCostUSD   float64 `json:"total_cost_usd,omitempty"`
+	InputTokens    int     `json:"input_tokens,omitempty"`
+	OutputTokens   int     `json:"output_tokens,omitempty"`
 }
 
 // ArtifactReviewRequestedPayload is emitted when an implementation-plan artifact

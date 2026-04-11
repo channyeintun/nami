@@ -224,7 +224,8 @@ func executeSubagent(
 		return toolpkg.AgentRunResult{}, err
 	}
 
-	parentTracker.MergeSnapshot(childTracker.Snapshot())
+	childSnapshot := childTracker.Snapshot()
+	parentTracker.MergeSnapshot(childSnapshot)
 	_ = emitCostUpdate(bridge, parentTracker)
 
 	return toolpkg.AgentRunResult{
@@ -234,6 +235,9 @@ func executeSubagent(
 		TranscriptPath: filepath.Join(sessionStore.SessionDir(childSessionID), "transcript.ndjson"),
 		OutputFile:     resultFile,
 		Summary:        latestAssistantContent(childMessages),
+		TotalCostUSD:   childSnapshot.TotalCostUSD,
+		InputTokens:    childSnapshot.TotalInputTokens,
+		OutputTokens:   childSnapshot.TotalOutputTokens,
 		Tools:          toolDefinitionNames(childRegistry.Definitions()),
 	}, nil
 }

@@ -97,6 +97,9 @@ func emitBackgroundAgentUpdated(bridge *ipc.Bridge, bg *backgroundAgent, result 
 		TranscriptPath: result.TranscriptPath,
 		OutputFile:     result.OutputFile,
 		Error:          result.Error,
+		TotalCostUSD:   result.TotalCostUSD,
+		InputTokens:    result.InputTokens,
+		OutputTokens:   result.OutputTokens,
 	})
 }
 

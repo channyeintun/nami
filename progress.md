@@ -77,6 +77,8 @@
 - Completed: added transcript-level background-agent notices for launch, stop, completion, cancellation, and failure so important child-agent state transitions are visible in the main conversation flow instead of only in the side panel.
 - Completed: upgraded the Background Agents panel to separate active and recent child runs, show compact status counts, and surface transcript/result/update hints so the panel is useful without digging through raw session files.
 - Completed: capped retained background-agent entries in TUI state so long sessions do not accumulate an unbounded child-agent list after repeated background runs.
+- Completed: added child-agent cost and token totals to the shared `agent` result model and `background_agent_updated` payload so delegated runs now preserve their own spend data instead of only mutating the parent aggregate tracker.
+- Completed: surfaced background child-agent cost summaries in the TUI panel so completed and failed delegated runs show their token and dollar footprint alongside transcript and result-file hints.
 - Completed: extended the prompt memory loader to discover user-global and project-scoped `MEMORY.md` indexes from the config tree alongside existing `AGENTS.md` instruction files.
 - Completed: applied tighter `MEMORY.md` index caps (200 lines / 25KB) and separated durable memory indexes from hard instructions in the formatted system-prompt section.
 - Completed: added age-aware staleness warnings for older loaded memory indexes so memories older than yesterday are presented as context to verify rather than unconditional facts.

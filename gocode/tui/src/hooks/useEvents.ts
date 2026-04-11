@@ -115,6 +115,9 @@ export interface UIBackgroundAgent {
   transcriptPath?: string;
   outputFile?: string;
   error?: string;
+  totalCostUsd: number;
+  inputTokens: number;
+  outputTokens: number;
   updatedAt: string;
 }
 
@@ -768,6 +771,9 @@ export function useEvents(initialModel: string, initialMode: string) {
             transcriptPath: stringOrUndefined(p.transcript_path),
             outputFile: stringOrUndefined(p.output_file),
             error: stringOrUndefined(p.error),
+            totalCostUsd: numberOrZero(p.total_cost_usd),
+            inputTokens: numberOrZero(p.input_tokens),
+            outputTokens: numberOrZero(p.output_tokens),
             updatedAt: new Date().toISOString(),
           };
           const notice = buildBackgroundAgentNotice(previousAgent, nextAgent);
@@ -1052,6 +1058,9 @@ interface AgentToolResult {
   output_file?: string;
   summary?: string;
   error?: string;
+  total_cost_usd?: number;
+  input_tokens?: number;
+  output_tokens?: number;
 }
 
 interface BackgroundAgentNotice {
@@ -1111,6 +1120,9 @@ function parseBackgroundAgentResult(
     transcriptPath: stringOrUndefined(result.transcript_path),
     outputFile: stringOrUndefined(result.output_file),
     error: stringOrUndefined(result.error),
+    totalCostUsd: numberOrZero(result.total_cost_usd),
+    inputTokens: numberOrZero(result.input_tokens),
+    outputTokens: numberOrZero(result.output_tokens),
     updatedAt: new Date().toISOString(),
   };
 }
@@ -1131,6 +1143,16 @@ function upsertBackgroundAgent(
         transcriptPath: nextAgent.transcriptPath ?? existing.transcriptPath,
         outputFile: nextAgent.outputFile ?? existing.outputFile,
         error: nextAgent.error ?? existing.error,
+        totalCostUsd:
+          nextAgent.totalCostUsd > 0
+            ? nextAgent.totalCostUsd
+            : existing.totalCostUsd,
+        inputTokens:
+          nextAgent.inputTokens > 0 ? nextAgent.inputTokens : existing.inputTokens,
+        outputTokens:
+          nextAgent.outputTokens > 0
+            ? nextAgent.outputTokens
+            : existing.outputTokens,
       }
     : nextAgent;
 
@@ -1293,6 +1315,10 @@ function stringOrEmpty(value: unknown): string {
 function stringOrUndefined(value: unknown): string | undefined {
   const normalized = stringOrEmpty(value);
   return normalized.length > 0 ? normalized : undefined;
+}
+
+function numberOrZero(value: unknown): number {
+	return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
 
 function upsertArtifact(
