@@ -170,6 +170,18 @@ export function useEngine(enginePath: string, options: EngineOptions = {}) {
     [send],
   );
 
+  const sendArtifactReviewResponse = useCallback(
+    (requestId: string, decision: string, feedback?: string) =>
+      send(
+        createMessage("artifact_review_response", {
+          request_id: requestId,
+          decision,
+          feedback,
+        }),
+      ),
+    [send],
+  );
+
   return {
     ...state,
     sendInput,
@@ -178,5 +190,6 @@ export function useEngine(enginePath: string, options: EngineOptions = {}) {
     sendModeToggle,
     sendShutdown,
     sendPermissionResponse,
+    sendArtifactReviewResponse,
   };
 }

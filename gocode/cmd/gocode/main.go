@@ -427,6 +427,26 @@ func runStdioEngine(ctx context.Context, cfg config.Config) error {
 					}
 				}
 
+				// Plan review gate: after a successful plan-mode query that saved a final
+				// implementation plan, pause for explicit user review before execution.
+				if mode == agent.ModePlan {
+					reviewResult, reviewErr := handlePlanReviewGate(ctx, bridge, router, &mode, artifactManager, sessionID, messages, messagesBeforeQuery)
+					if reviewErr != nil && reviewErr != context.Canceled {
+						if emitErr := bridge.EmitError(fmt.Sprintf("plan review gate: %v", reviewErr), true); emitErr != nil {
+							return emitErr
+						}
+					}
+					if reviewResult.Decision == "approved" {
+						// Mode already switched to fast inside handlePlanReviewGate; persist it.
+						_ = persistSessionState(sessionStore, sessionStateParams{
+							SessionID: sessionID, CreatedAt: startedAt, Mode: mode,
+							Model: activeModelID, CWD: cwd,
+							Branch:  agent.LoadTurnContext().GitBranch,
+							Tracker: tracker, Messages: messages,
+						})
+					}
+				}
+
 				// Generate session title after the first successful query
 				if !sessionTitleGenerated && len(messages) > 0 {
 					sessionTitleGenerated = true
@@ -1527,6 +1547,119 @@ func emitTextResponse(bridge *ipc.Bridge, text string) error {
 		}
 	}
 	return bridge.Emit(ipc.EventTurnComplete, ipc.TurnCompletePayload{StopReason: "end_turn"})
+}
+
+// planReviewGateResult describes the outcome of handlePlanReviewGate.
+type planReviewGateResult struct {
+	Decision string // "approved", "revised", "cancelled", or "" (no gate triggered)
+	Feedback string // non-empty for "revised"
+}
+
+// handlePlanReviewGate emits artifact_review_requested after a successful plan
+// query, waits for the TUI response, and emits artifact_review_resolved.
+// On "approved" it auto-switches the engine to fast mode.
+func handlePlanReviewGate(
+	ctx context.Context,
+	bridge *ipc.Bridge,
+	router *ipc.MessageRouter,
+	mode *agent.ExecutionMode,
+	artifactManager *artifactspkg.Manager,
+	sessionID string,
+	messages []api.Message,
+	fromIndex int,
+) (planReviewGateResult, error) {
+	if *mode != agent.ModePlan {
+		return planReviewGateResult{}, nil
+	}
+	if !turnUsedToolName(messages, fromIndex, "save_implementation_plan") {
+		return planReviewGateResult{}, nil
+	}
+
+	artifact, found, err := artifactManager.FindSessionArtifact(ctx,
+		artifactspkg.KindImplementationPlan, artifactspkg.ScopeSession, sessionID, "active")
+	if err != nil || !found {
+		return planReviewGateResult{}, err
+	}
+	if artifactMetadataString(artifact, "status") != "final" {
+		return planReviewGateResult{}, nil
+	}
+
+	requestID := fmt.Sprintf("review-%d", time.Now().UnixNano())
+	if err := bridge.Emit(ipc.EventArtifactReviewRequested, ipc.ArtifactReviewRequestedPayload{
+		RequestID: requestID,
+		ID:        artifact.ID,
+		Kind:      string(artifact.Kind),
+		Title:     artifact.Title,
+		Version:   artifact.Version,
+	}); err != nil {
+		return planReviewGateResult{}, err
+	}
+
+	for {
+		msg, err := router.Next(ctx)
+		if err != nil {
+			return planReviewGateResult{}, err
+		}
+
+		switch msg.Type {
+		case ipc.MsgArtifactReviewResponse:
+			var payload ipc.ArtifactReviewResponsePayload
+			if err := json.Unmarshal(msg.Payload, &payload); err != nil {
+				return planReviewGateResult{}, fmt.Errorf("decode artifact review response: %w", err)
+			}
+			if payload.RequestID != requestID {
+				continue
+			}
+
+			decision := strings.TrimSpace(payload.Decision)
+			feedback := strings.TrimSpace(payload.Feedback)
+
+			resolvedDecision := "cancelled"
+			switch decision {
+			case "approve":
+				resolvedDecision = "approved"
+			case "revise":
+				resolvedDecision = "revised"
+			}
+
+			if err := bridge.Emit(ipc.EventArtifactReviewResolved, ipc.ArtifactReviewResolvedPayload{
+				RequestID: requestID,
+				Decision:  resolvedDecision,
+			}); err != nil {
+				return planReviewGateResult{}, err
+			}
+
+			if resolvedDecision == "approved" {
+				*mode = agent.ModeFast
+				if err := bridge.Emit(ipc.EventModeChanged, ipc.ModeChangedPayload{Mode: string(agent.ModeFast)}); err != nil {
+					return planReviewGateResult{}, err
+				}
+			}
+
+			return planReviewGateResult{Decision: resolvedDecision, Feedback: feedback}, nil
+
+		case ipc.MsgShutdown:
+			return planReviewGateResult{}, context.Canceled
+		default:
+			// Hold all other messages until the review is resolved
+		}
+	}
+}
+
+// turnUsedToolName returns true if any assistant tool call in messages[fromIndex:]
+// has the given tool name.
+func turnUsedToolName(messages []api.Message, fromIndex int, toolName string) bool {
+	for _, msg := range messages[fromIndex:] {
+		if msg.Role != api.RoleAssistant {
+			continue
+		}
+		for _, call := range msg.ToolCalls {
+			if call.Name == toolName {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func emitArtifactCreated(bridge *ipc.Bridge, artifact artifactspkg.Artifact) error {

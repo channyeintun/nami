@@ -19,6 +19,8 @@ export type EventType =
   | "artifact_updated"
   | "artifact_focused"
   | "artifact_status_changed"
+  | "artifact_review_requested"
+  | "artifact_review_resolved"
   | "ready"
   | "error"
   | "session_updated"
@@ -36,7 +38,8 @@ export type ClientMessageType =
   | "permission_response"
   | "cancel"
   | "mode_toggle"
-  | "shutdown";
+  | "shutdown"
+  | "artifact_review_response";
 
 export interface ClientMessage {
   type: ClientMessageType;
@@ -205,4 +208,23 @@ export interface ArtifactFocusedPayload {
 export interface ArtifactStatusChangedPayload {
   id: string;
   status: string;
+}
+
+export interface ArtifactReviewRequestedPayload {
+  request_id: string;
+  id: string;
+  kind: string;
+  title: string;
+  version?: number;
+}
+
+export interface ArtifactReviewResolvedPayload {
+  request_id: string;
+  decision: string; // "approved" | "revised" | "cancelled"
+}
+
+export interface ArtifactReviewResponsePayload {
+  request_id: string;
+  decision: string; // "approve" | "revise" | "cancel"
+  feedback?: string;
 }

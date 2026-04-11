@@ -35,10 +35,12 @@ const (
 	EventCompactEnd      EventType = "compact_end"
 
 	// Artifacts
-	EventArtifactCreated       EventType = "artifact_created"
-	EventArtifactUpdated       EventType = "artifact_updated"
-	EventArtifactFocused       EventType = "artifact_focused"
-	EventArtifactStatusChanged EventType = "artifact_status_changed"
+	EventArtifactCreated         EventType = "artifact_created"
+	EventArtifactUpdated         EventType = "artifact_updated"
+	EventArtifactFocused         EventType = "artifact_focused"
+	EventArtifactStatusChanged   EventType = "artifact_status_changed"
+	EventArtifactReviewRequested EventType = "artifact_review_requested"
+	EventArtifactReviewResolved  EventType = "artifact_review_resolved"
 
 	// Engine status
 	EventReady           EventType = "ready"
@@ -59,12 +61,13 @@ type StreamEvent struct {
 type ClientMessageType string
 
 const (
-	MsgUserInput          ClientMessageType = "user_input"
-	MsgSlashCommand       ClientMessageType = "slash_command"
-	MsgPermissionResponse ClientMessageType = "permission_response"
-	MsgCancel             ClientMessageType = "cancel"
-	MsgModeToggle         ClientMessageType = "mode_toggle"
-	MsgShutdown           ClientMessageType = "shutdown"
+	MsgUserInput              ClientMessageType = "user_input"
+	MsgSlashCommand           ClientMessageType = "slash_command"
+	MsgPermissionResponse     ClientMessageType = "permission_response"
+	MsgCancel                 ClientMessageType = "cancel"
+	MsgModeToggle             ClientMessageType = "mode_toggle"
+	MsgShutdown               ClientMessageType = "shutdown"
+	MsgArtifactReviewResponse ClientMessageType = "artifact_review_response"
 )
 
 // ClientMessage is one NDJSON line from Ink frontend → Go engine.
@@ -239,4 +242,27 @@ type ArtifactFocusedPayload struct {
 type ArtifactStatusChangedPayload struct {
 	ID     string `json:"id"`
 	Status string `json:"status"`
+}
+
+// ArtifactReviewRequestedPayload is emitted when an implementation-plan artifact
+// requires explicit user review before execution can proceed.
+type ArtifactReviewRequestedPayload struct {
+	RequestID string `json:"request_id"`
+	ID        string `json:"id"`
+	Kind      string `json:"kind"`
+	Title     string `json:"title"`
+	Version   int    `json:"version,omitempty"`
+}
+
+// ArtifactReviewResolvedPayload is emitted once the review gate is lifted.
+type ArtifactReviewResolvedPayload struct {
+	RequestID string `json:"request_id"`
+	Decision  string `json:"decision"` // "approved", "revised", "cancelled"
+}
+
+// ArtifactReviewResponsePayload is sent by the TUI to respond to a review gate.
+type ArtifactReviewResponsePayload struct {
+	RequestID string `json:"request_id"`
+	Decision  string `json:"decision"` // "approve", "revise", "cancel"
+	Feedback  string `json:"feedback,omitempty"`
 }

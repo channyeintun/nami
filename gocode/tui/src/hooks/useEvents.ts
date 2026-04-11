@@ -2,6 +2,8 @@ import { useState, useCallback } from "react";
 import type {
   ArtifactCreatedPayload,
   ArtifactFocusedPayload,
+  ArtifactReviewRequestedPayload,
+  ArtifactReviewResolvedPayload,
   ArtifactStatusChangedPayload,
   ArtifactUpdatedPayload,
   CompactEndPayload,
@@ -24,6 +26,14 @@ import type {
   ToolResultPayload,
   ToolStartPayload,
 } from "../protocol/types.js";
+
+export interface UIArtifactReview {
+  requestId: string;
+  id: string;
+  kind: string;
+  title: string;
+  version: number;
+}
 
 export interface UIArtifact {
   id: string;
@@ -123,6 +133,7 @@ export interface EngineUIState {
   rateLimits: UIRateLimits;
   artifacts: UIArtifact[];
   focusedArtifactId: string | null;
+  pendingArtifactReview: UIArtifactReview | null;
   toolCalls: UIToolCall[];
   compact: {
     active: boolean;
@@ -154,6 +165,7 @@ const initialState = (model: string, mode: string): EngineUIState => ({
   rateLimits: { fiveHour: null, sevenDay: null },
   artifacts: [],
   focusedArtifactId: null,
+  pendingArtifactReview: null,
   toolCalls: [],
   compact: null,
   statusLine: null,
@@ -578,6 +590,28 @@ export function useEvents(initialModel: string, initialMode: string) {
             a.id === p.id ? { ...a, status: p.status } : a,
           ),
         }));
+        break;
+      }
+      case "artifact_review_requested": {
+        const p = event.payload as ArtifactReviewRequestedPayload;
+        setUIState((s) => ({
+          ...s,
+          pendingArtifactReview: {
+            requestId: p.request_id,
+            id: p.id,
+            kind: p.kind,
+            title: p.title,
+            version: p.version ?? 1,
+          },
+        }));
+        break;
+      }
+      case "artifact_review_resolved": {
+        const p = event.payload as ArtifactReviewResolvedPayload;
+        setUIState((s) => {
+          if (s.pendingArtifactReview?.requestId !== p.request_id) return s;
+          return { ...s, pendingArtifactReview: null };
+        });
         break;
       }
       case "session_restored": {

@@ -3,6 +3,7 @@ import { Box, Text } from "ink";
 import { useEngine } from "./hooks/useEngine.js";
 import { useEvents } from "./hooks/useEvents.js";
 import ArtifactView from "./components/ArtifactView.js";
+import ArtifactReviewPrompt from "./components/ArtifactReviewPrompt.js";
 import Input from "./components/Input.js";
 import PlanPanel from "./components/PlanPanel.js";
 import PromptFooter from "./components/PromptFooter.js";
@@ -192,6 +193,19 @@ const App: FC<AppProps> = ({ enginePath, model, mode }) => {
     }
   };
 
+  const handleArtifactReviewResponse = (
+    decision: "approve" | "revise" | "cancel",
+    feedback?: string,
+  ) => {
+    if (uiState.pendingArtifactReview) {
+      engine.sendArtifactReviewResponse(
+        uiState.pendingArtifactReview.requestId,
+        decision,
+        feedback,
+      );
+    }
+  };
+
   const handleCancel = () => {
     if (!uiState.isStreaming) {
       return;
@@ -291,6 +305,11 @@ const App: FC<AppProps> = ({ enginePath, model, mode }) => {
           workingDir={uiState.pendingPermission.working_dir}
           onRespond={handlePermissionResponse}
           onCancelTurn={handleCancel}
+        />
+      ) : uiState.pendingArtifactReview ? (
+        <ArtifactReviewPrompt
+          review={uiState.pendingArtifactReview}
+          onRespond={handleArtifactReviewResponse}
         />
       ) : (
         <Box flexDirection="column">
