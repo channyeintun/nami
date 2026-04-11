@@ -7,15 +7,17 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/channyeintun/gocode/internal/config"
 )
 
 // MemoryFile represents a loaded instruction or memory index file.
 type MemoryFile struct {
-	Path    string
-	Type    string
-	Content string
+	Path      string
+	Type      string
+	Content   string
+	UpdatedAt time.Time
 }
 
 const (
@@ -66,18 +68,20 @@ func LoadMemoryFiles() []MemoryFile {
 func appendConfigMemoryIndexes(files []MemoryFile, cwd string) []MemoryFile {
 	if content, err := readMemoryIndex(userMemoryIndexPath()); err == nil {
 		files = append(files, MemoryFile{
-			Path:    userMemoryIndexPath(),
-			Type:    memoryTypeUserIndex,
-			Content: content,
+			Path:      userMemoryIndexPath(),
+			Type:      memoryTypeUserIndex,
+			Content:   content,
+			UpdatedAt: fileUpdatedAt(userMemoryIndexPath()),
 		})
 	}
 
 	projectIndexPath := projectMemoryIndexPath(cwd)
 	if content, err := readMemoryIndex(projectIndexPath); err == nil {
 		files = append(files, MemoryFile{
-			Path:    projectIndexPath,
-			Type:    memoryTypeProjectIndex,
-			Content: content,
+			Path:      projectIndexPath,
+			Type:      memoryTypeProjectIndex,
+			Content:   content,
+			UpdatedAt: fileUpdatedAt(projectIndexPath),
 		})
 	}
 
@@ -86,11 +90,13 @@ func appendConfigMemoryIndexes(files []MemoryFile, cwd string) []MemoryFile {
 
 func appendProjectFiles(files []MemoryFile, dir string) []MemoryFile {
 	if content, err := readMemoryFile(filepath.Join(dir, "AGENTS.md")); err == nil {
-		files = append(files, MemoryFile{Path: filepath.Join(dir, "AGENTS.md"), Type: memoryTypeProject, Content: content})
+		path := filepath.Join(dir, "AGENTS.md")
+		files = append(files, MemoryFile{Path: path, Type: memoryTypeProject, Content: content, UpdatedAt: fileUpdatedAt(path)})
 	}
 
 	if content, err := readMemoryFile(filepath.Join(dir, "AGENTS.local.md")); err == nil {
-		files = append(files, MemoryFile{Path: filepath.Join(dir, "AGENTS.local.md"), Type: memoryTypeLocal, Content: content})
+		path := filepath.Join(dir, "AGENTS.local.md")
+		files = append(files, MemoryFile{Path: path, Type: memoryTypeLocal, Content: content, UpdatedAt: fileUpdatedAt(path)})
 	}
 
 	return files
@@ -193,7 +199,7 @@ func FormatMemoryPrompt(files []MemoryFile) string {
 			b.WriteString("\" type=\"")
 			b.WriteString(f.Type)
 			b.WriteString("\">\n")
-			b.WriteString(f.Content)
+			b.WriteString(formatMemoryIndexContent(f))
 			b.WriteString("\n</memory_file>\n\n")
 		}
 	}
@@ -234,4 +240,57 @@ func projectSlug(root string) string {
 	hasher := fnv.New32a()
 	_, _ = hasher.Write([]byte(cleaned))
 	return fmt.Sprintf("%s-%08x", base, hasher.Sum32())
+}
+
+func fileUpdatedAt(path string) time.Time {
+	info, err := os.Stat(path)
+	if err != nil {
+		return time.Time{}
+	}
+	return info.ModTime()
+}
+
+func formatMemoryIndexContent(file MemoryFile) string {
+	note := memoryAgeNote(file.UpdatedAt)
+	if note == "" {
+		return file.Content
+	}
+	return note + "\n" + file.Content
+}
+
+func memoryAgeNote(updatedAt time.Time) string {
+	if updatedAt.IsZero() {
+		return ""
+	}
+
+	age := time.Since(updatedAt)
+	if age < 48*time.Hour {
+		return ""
+	}
+
+	return fmt.Sprintf("[staleness-warning] This memory index was last updated %s ago. Treat it as historical context and verify important details against the live repository.", formatMemoryAge(age))
+}
+
+func formatMemoryAge(age time.Duration) string {
+	if age < 7*24*time.Hour {
+		days := int(age / (24 * time.Hour))
+		if days <= 1 {
+			return "1 day"
+		}
+		return fmt.Sprintf("%d days", days)
+	}
+
+	weeks := int(age / (7 * 24 * time.Hour))
+	if weeks < 5 {
+		if weeks <= 1 {
+			return "1 week"
+		}
+		return fmt.Sprintf("%d weeks", weeks)
+	}
+
+	months := int(age / (30 * 24 * time.Hour))
+	if months <= 1 {
+		return "1 month"
+	}
+	return fmt.Sprintf("%d months", months)
 }
