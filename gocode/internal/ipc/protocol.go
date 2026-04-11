@@ -41,6 +41,7 @@ const (
 	EventArtifactStatusChanged   EventType = "artifact_status_changed"
 	EventArtifactReviewRequested EventType = "artifact_review_requested"
 	EventArtifactReviewResolved  EventType = "artifact_review_resolved"
+	EventBackgroundAgentUpdated  EventType = "background_agent_updated"
 
 	// Engine status
 	EventReady           EventType = "ready"
@@ -242,6 +243,19 @@ type ArtifactFocusedPayload struct {
 type ArtifactStatusChangedPayload struct {
 	ID     string `json:"id"`
 	Status string `json:"status"`
+}
+
+// BackgroundAgentUpdatedPayload is emitted when a background child agent changes state.
+type BackgroundAgentUpdatedPayload struct {
+	AgentID        string `json:"agent_id"`
+	Description    string `json:"description,omitempty"`
+	SubagentType   string `json:"subagent_type,omitempty"`
+	Status         string `json:"status"`
+	Summary        string `json:"summary,omitempty"`
+	SessionID      string `json:"session_id,omitempty"`
+	TranscriptPath string `json:"transcript_path,omitempty"`
+	OutputFile     string `json:"output_file,omitempty"`
+	Error          string `json:"error,omitempty"`
 }
 
 // ArtifactReviewRequestedPayload is emitted when an implementation-plan artifact

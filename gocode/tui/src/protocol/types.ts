@@ -21,6 +21,7 @@ export type EventType =
   | "artifact_status_changed"
   | "artifact_review_requested"
   | "artifact_review_resolved"
+  | "background_agent_updated"
   | "ready"
   | "error"
   | "session_updated"
@@ -221,6 +222,18 @@ export interface ArtifactReviewRequestedPayload {
 export interface ArtifactReviewResolvedPayload {
   request_id: string;
   decision: string; // "approved" | "revised" | "cancelled"
+}
+
+export interface BackgroundAgentUpdatedPayload {
+  agent_id: string;
+  description?: string;
+  subagent_type?: string;
+  status: string;
+  summary?: string;
+  session_id?: string;
+  transcript_path?: string;
+  output_file?: string;
+  error?: string;
 }
 
 export interface ArtifactReviewResponsePayload {

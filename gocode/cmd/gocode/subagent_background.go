@@ -10,18 +10,21 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/channyeintun/gocode/internal/ipc"
 	toolpkg "github.com/channyeintun/gocode/internal/tools"
 )
 
 const backgroundAgentRetention = 5 * time.Minute
 
 type backgroundAgent struct {
-	mu      sync.Mutex
-	id      string
-	result  toolpkg.AgentRunResult
-	running bool
-	done    chan struct{}
-	cancel  context.CancelFunc
+	mu           sync.Mutex
+	id           string
+	description  string
+	subagentType string
+	result       toolpkg.AgentRunResult
+	running      bool
+	done         chan struct{}
+	cancel       context.CancelFunc
 }
 
 var (
@@ -80,20 +83,56 @@ func writeBackgroundAgentResultFile(result toolpkg.AgentRunResult) {
 	_ = os.WriteFile(result.OutputFile, data, 0o644)
 }
 
-func launchBackgroundAgent(parentCtx context.Context, execute func(context.Context) (toolpkg.AgentRunResult, error)) toolpkg.AgentRunResult {
+func emitBackgroundAgentUpdated(bridge *ipc.Bridge, bg *backgroundAgent, result toolpkg.AgentRunResult) {
+	if bridge == nil || bg == nil {
+		return
+	}
+	_ = bridge.Emit(ipc.EventBackgroundAgentUpdated, ipc.BackgroundAgentUpdatedPayload{
+		AgentID:        bg.id,
+		Description:    bg.description,
+		SubagentType:   firstNonEmpty(result.SubagentType, bg.subagentType),
+		Status:         result.Status,
+		Summary:        result.Summary,
+		SessionID:      result.SessionID,
+		TranscriptPath: result.TranscriptPath,
+		OutputFile:     result.OutputFile,
+		Error:          result.Error,
+	})
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func launchBackgroundAgent(
+	parentCtx context.Context,
+	bridge *ipc.Bridge,
+	description string,
+	subagentType string,
+	execute func(context.Context) (toolpkg.AgentRunResult, error),
+) toolpkg.AgentRunResult {
 	agentID := newBackgroundAgentID()
 	ctx, cancel := context.WithCancel(context.Background())
 	bg := &backgroundAgent{
-		id:      agentID,
-		done:    make(chan struct{}),
-		cancel:  cancel,
-		running: true,
+		id:           agentID,
+		description:  description,
+		subagentType: subagentType,
+		done:         make(chan struct{}),
+		cancel:       cancel,
+		running:      true,
 		result: toolpkg.AgentRunResult{
-			Status:  "running",
-			AgentID: agentID,
+			Status:       "running",
+			AgentID:      agentID,
+			SubagentType: subagentType,
 		},
 	}
 	registerBackgroundAgent(bg)
+	emitBackgroundAgentUpdated(bridge, bg, bg.result)
 
 	go func() {
 		defer close(bg.done)
@@ -107,17 +146,20 @@ func launchBackgroundAgent(parentCtx context.Context, execute func(context.Conte
 				bg.result.Status = "cancelled"
 				bg.result.Error = "background child agent cancelled"
 				writeBackgroundAgentResultFile(bg.result)
+				emitBackgroundAgentUpdated(bridge, bg, bg.result)
 				return
 			}
 			bg.result.Status = "failed"
 			bg.result.Error = err.Error()
 			writeBackgroundAgentResultFile(bg.result)
+			emitBackgroundAgentUpdated(bridge, bg, bg.result)
 			return
 		}
 		result.Status = "completed"
 		result.AgentID = agentID
 		bg.result = result
 		writeBackgroundAgentResultFile(bg.result)
+		emitBackgroundAgentUpdated(bridge, bg, bg.result)
 	}()
 
 	go func() {
@@ -128,8 +170,9 @@ func launchBackgroundAgent(parentCtx context.Context, execute func(context.Conte
 	}()
 
 	return toolpkg.AgentRunResult{
-		Status:  "async_launched",
-		AgentID: agentID,
+		Status:       "async_launched",
+		AgentID:      agentID,
+		SubagentType: subagentType,
 	}
 }
 
@@ -158,17 +201,26 @@ func lookupBackgroundAgentStatus(ctx context.Context, req toolpkg.AgentStatusReq
 	return result, nil
 }
 
-func stopBackgroundAgent(ctx context.Context, req toolpkg.AgentStopRequest) (toolpkg.AgentRunResult, error) {
+func stopBackgroundAgent(ctx context.Context, bridge *ipc.Bridge, req toolpkg.AgentStopRequest) (toolpkg.AgentRunResult, error) {
 	bg, err := getBackgroundAgent(req.AgentID)
 	if err != nil {
 		return toolpkg.AgentRunResult{}, err
 	}
 
+	shouldEmit := false
 	bg.mu.Lock()
 	if bg.running && bg.cancel != nil {
 		bg.cancel()
 	}
+	if bg.running {
+		bg.result.Status = "cancelling"
+		shouldEmit = true
+	}
+	current := bg.result
 	bg.mu.Unlock()
+	if shouldEmit {
+		emitBackgroundAgentUpdated(bridge, bg, current)
+	}
 
 	if req.WaitMs > 0 {
 		timer := time.NewTimer(time.Duration(req.WaitMs) * time.Millisecond)

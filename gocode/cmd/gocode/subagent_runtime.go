@@ -87,7 +87,7 @@ func makeSubagentRunner(
 			return executeSubagent(runCtx, req, subagentType, bridge, registry, permissionCtx, parentTracker, sessionStore, artifactManager, client, activeModelID, cwd)
 		}
 		if req.Background {
-			launch := launchBackgroundAgent(ctx, execute)
+			launch := launchBackgroundAgent(ctx, bridge, strings.TrimSpace(req.Description), subagentType, execute)
 			launch.SubagentType = subagentType
 			launch.Tools = subagentToolNames(subagentType)
 			return launch, nil

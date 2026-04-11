@@ -4,6 +4,7 @@ import type {
   ArtifactFocusedPayload,
   ArtifactReviewRequestedPayload,
   ArtifactReviewResolvedPayload,
+  BackgroundAgentUpdatedPayload,
   ArtifactStatusChangedPayload,
   ArtifactUpdatedPayload,
   CompactEndPayload,
@@ -632,6 +633,25 @@ export function useEvents(initialModel: string, initialMode: string) {
           if (s.pendingArtifactReview?.requestId !== p.request_id) return s;
           return { ...s, pendingArtifactReview: null };
         });
+        break;
+      }
+      case "background_agent_updated": {
+        const p = event.payload as BackgroundAgentUpdatedPayload;
+        setUIState((s) => ({
+          ...s,
+          backgroundAgents: upsertBackgroundAgent(s.backgroundAgents, {
+            agentId: p.agent_id,
+            description: stringOrEmpty(p.description),
+            subagentType: stringOrEmpty(p.subagent_type),
+            status: normalizeBackgroundAgentStatus(p.status),
+            summary: summarizeBackgroundAgent(p.status, p.summary, p.error),
+            sessionId: stringOrUndefined(p.session_id),
+            transcriptPath: stringOrUndefined(p.transcript_path),
+            outputFile: stringOrUndefined(p.output_file),
+            error: stringOrUndefined(p.error),
+            updatedAt: new Date().toISOString(),
+          }),
+        }));
         break;
       }
       case "session_restored": {

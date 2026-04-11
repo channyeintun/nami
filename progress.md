@@ -68,6 +68,8 @@
 - Completed: added an execute-gated `agent_stop` tool and background cancellation path so async child agents can be moved from `running` to `cancelling` and settle into `cancelled` status without killing the parent session.
 - Completed: taught the Ink TUI to parse `agent`, `agent_status`, and `agent_stop` tool results into a dedicated background-agent state list instead of leaving child lifecycle updates buried in raw JSON tool output.
 - Completed: added a compact Background Agents panel plus human-readable agent tool summaries so active and recent child runs are visible directly in the terminal UI while the parent session continues.
+- Completed: added a dedicated `background_agent_updated` IPC event so the engine now pushes background child launch, completion, failure, cancellation, and stop-request state changes directly to the TUI.
+- Completed: wired the TUI reducer to merge live background-agent events with existing tool-result-derived state, so the Background Agents panel updates even when no follow-up `agent_status` poll is run.
 
 ## Next Planning Baseline
 
