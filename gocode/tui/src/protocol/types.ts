@@ -12,6 +12,7 @@ export type EventType =
   | "model_changed"
   | "context_window"
   | "cost_update"
+  | "memory_recalled"
   | "turn_timing"
   | "rate_limit_update"
   | "compact_start"
@@ -150,6 +151,21 @@ export interface CostUpdatePayload {
   memory_recall_usd?: number;
   memory_recall_input_tokens?: number;
   memory_recall_output_tokens?: number;
+}
+
+export interface MemoryRecallEntryPayload {
+  title: string;
+  note_type?: string;
+  source?: string;
+  index_path?: string;
+  note_path?: string;
+  line?: string;
+}
+
+export interface MemoryRecalledPayload {
+  count: number;
+  source?: string;
+  entries?: MemoryRecallEntryPayload[];
 }
 
 export interface RateLimitWindowPayload {

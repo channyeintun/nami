@@ -40,6 +40,9 @@ func runIteration(
 
 	pressure := EvaluateContextPressure(state.Messages, state.ContextWindow, state.MaxTokens, state.Continuation)
 	memoryRecalls := recallMemoryIndexes(ctx, deps.RecallMemory, state.SystemContext.MemoryFiles, currentUserPrompt, pressure)
+	if err := emitMemoryRecallTelemetry(deps.EmitTelemetry, state.SystemContext.MemoryFiles, memoryRecalls); err != nil {
+		return err
+	}
 	selectedSkills := skillspkg.SelectRelevant(state.Skills, currentUserPrompt)
 	skillPrompt := skillspkg.FormatPromptSection(selectedSkills)
 	basePrompt := state.BasePrompt
@@ -150,6 +153,47 @@ func recallMemoryIndexes(
 		return nil
 	}
 	return results
+}
+
+func emitMemoryRecallTelemetry(
+	emit func(ipc.StreamEvent) error,
+	files []MemoryFile,
+	recalls []MemoryRecallResult,
+) error {
+	if emit == nil || len(recalls) == 0 {
+		return nil
+	}
+
+	entries := SummarizeMemoryRecalls(files, recalls)
+	if len(entries) == 0 {
+		return nil
+	}
+
+	source := strings.TrimSpace(recalls[0].Source)
+	for _, recall := range recalls[1:] {
+		if strings.TrimSpace(recall.Source) != source {
+			source = "mixed"
+			break
+		}
+	}
+
+	payload := ipc.MemoryRecalledPayload{
+		Count:   len(entries),
+		Source:  source,
+		Entries: make([]ipc.MemoryRecallEntryPayload, 0, len(entries)),
+	}
+	for _, entry := range entries {
+		payload.Entries = append(payload.Entries, ipc.MemoryRecallEntryPayload{
+			Title:     entry.Title,
+			NoteType:  entry.NoteType,
+			Source:    entry.Source,
+			IndexPath: entry.IndexPath,
+			NotePath:  entry.NotePath,
+			Line:      entry.Line,
+		})
+	}
+
+	return emit(newEvent(ipc.EventMemoryRecalled, payload))
 }
 
 func invokeModelWithRecovery(

@@ -28,6 +28,16 @@ type MemoryRecallResult struct {
 	Source string
 }
 
+// MemoryRecallEntrySummary describes one recalled durable memory entry for UI or telemetry surfaces.
+type MemoryRecallEntrySummary struct {
+	Title     string
+	NoteType  string
+	Source    string
+	IndexPath string
+	NotePath  string
+	Line      string
+}
+
 // MemoryIndexEntry represents one parsed MEMORY.md index entry.
 type MemoryIndexEntry struct {
 	IndexPath string
@@ -530,6 +540,71 @@ func memoryRecallLookup(recalls []MemoryRecallResult) map[string]MemoryRecallRes
 		}
 	}
 	return lookup
+}
+
+// SummarizeMemoryRecalls maps recalled MEMORY.md lines back to parsed metadata for compact UI surfaces.
+func SummarizeMemoryRecalls(files []MemoryFile, recalls []MemoryRecallResult) []MemoryRecallEntrySummary {
+	if len(files) == 0 || len(recalls) == 0 {
+		return nil
+	}
+
+	fileByPath := make(map[string]MemoryFile, len(files))
+	for _, file := range files {
+		fileByPath[file.Path] = file
+	}
+
+	summaries := make([]MemoryRecallEntrySummary, 0, len(recalls)*2)
+	seen := make(map[string]struct{}, len(recalls)*2)
+	for _, recall := range recalls {
+		file, ok := fileByPath[recall.Path]
+		if !ok {
+			continue
+		}
+		entryByLine := make(map[string]MemoryIndexEntry)
+		for _, entry := range ParseMemoryIndexEntries(file) {
+			entryByLine[entry.RawLine] = entry
+		}
+
+		for _, rawLine := range recall.Lines {
+			line := strings.TrimSpace(rawLine)
+			if line == "" {
+				continue
+			}
+			key := recall.Path + "\n" + line
+			if _, ok := seen[key]; ok {
+				continue
+			}
+			seen[key] = struct{}{}
+
+			summary := MemoryRecallEntrySummary{
+				Title:     memoryRecallSummaryTitle(line),
+				Source:    strings.TrimSpace(recall.Source),
+				IndexPath: recall.Path,
+				Line:      line,
+			}
+			if entry, ok := entryByLine[line]; ok {
+				if strings.TrimSpace(entry.Title) != "" {
+					summary.Title = entry.Title
+				}
+				summary.NoteType = entry.NoteType
+				summary.NotePath = entry.NotePath
+			}
+			summaries = append(summaries, summary)
+		}
+	}
+
+	return summaries
+}
+
+func memoryRecallSummaryTitle(line string) string {
+	if _, title, _, ok := parseMemoryIndexEntryLine(line); ok && strings.TrimSpace(title) != "" {
+		return title
+	}
+	trimmed := strings.TrimSpace(strings.TrimPrefix(strings.TrimPrefix(line, "- "), "* "))
+	if trimmed == "" {
+		return "recalled memory"
+	}
+	return trimmed
 }
 
 func selectRelevantMemoryLines(content, currentUserPrompt string) []string {

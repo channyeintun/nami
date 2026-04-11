@@ -12,6 +12,7 @@ import type {
   ContextWindowPayload,
   CostUpdatePayload,
   ErrorPayload,
+  MemoryRecalledPayload,
   ModeChangedPayload,
   ModelChangedPayload,
   PermissionRequestPayload,
@@ -117,6 +118,15 @@ export interface UIBackgroundAgent {
   updatedAt: string;
 }
 
+export interface UIMemoryRecallEntry {
+  title: string;
+  noteType?: string;
+  source?: string;
+  indexPath?: string;
+  notePath?: string;
+  line?: string;
+}
+
 export interface UIRateLimitWindow {
   usedPercentage: number;
   resetsAt: number;
@@ -157,6 +167,10 @@ export interface EngineUIState {
     memoryRecallUsd: number;
     memoryRecallInputTokens: number;
     memoryRecallOutputTokens: number;
+  };
+  memoryRecall: {
+    source: string | null;
+    entries: UIMemoryRecallEntry[];
   };
   rateLimits: UIRateLimits;
   artifacts: UIArtifact[];
@@ -205,6 +219,10 @@ const initialState = (model: string, mode: string): EngineUIState => ({
     memoryRecallUsd: 0,
     memoryRecallInputTokens: 0,
     memoryRecallOutputTokens: 0,
+  },
+  memoryRecall: {
+    source: null,
+    entries: [],
   },
   rateLimits: { fiveHour: null, sevenDay: null },
   artifacts: [],
@@ -594,6 +612,28 @@ export function useEvents(initialModel: string, initialMode: string) {
         }));
         break;
       }
+      case "memory_recalled": {
+    const p = event.payload as MemoryRecalledPayload;
+    setUIState((s) => ({
+      ...s,
+      memoryRecall: {
+        source: typeof p.source === "string" && p.source.trim() ? p.source : null,
+        entries: Array.isArray(p.entries)
+          ? p.entries
+              .filter((entry) => typeof entry?.title === "string" && entry.title.trim())
+              .map((entry) => ({
+                title: entry.title.trim(),
+                noteType: stringOrUndefined(entry.note_type),
+                source: stringOrUndefined(entry.source),
+                indexPath: stringOrUndefined(entry.index_path),
+                notePath: stringOrUndefined(entry.note_path),
+                line: stringOrUndefined(entry.line),
+              }))
+          : [],
+      },
+    }));
+    break;
+    }
       case "rate_limit_update": {
         const p = event.payload as RateLimitUpdatePayload;
         setUIState((s) => ({
@@ -823,6 +863,10 @@ export function useEvents(initialModel: string, initialMode: string) {
         firstArtifactFocusMs: null,
         totalMs: null,
       },
+      memoryRecall: {
+        source: null,
+        entries: [],
+      },
       statusLine: null,
       error: null,
     }));
@@ -899,6 +943,10 @@ export function useEvents(initialModel: string, initialMode: string) {
         firstToolResultMs: null,
         firstArtifactFocusMs: null,
         totalMs: null,
+      },
+      memoryRecall: {
+        source: null,
+        entries: [],
       },
       error: null,
       statusLine: null,

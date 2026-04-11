@@ -378,6 +378,7 @@ const App: FC<AppProps> = ({ enginePath, model, mode }) => {
             totalCostUsd={uiState.cost.totalUsd}
             inputTokens={uiState.cost.inputTokens}
             outputTokens={uiState.cost.outputTokens}
+            memoryRecall={uiState.memoryRecall}
             turnTiming={uiState.turnTiming}
           />
         </Box>

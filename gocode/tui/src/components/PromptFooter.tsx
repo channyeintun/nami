@@ -4,6 +4,7 @@ import {
   calculateTokenWarningState,
   formatTokenCount,
 } from "../utils/modelContext.js";
+import type { UIMemoryRecallEntry } from "../hooks/useEvents.js";
 
 interface PromptFooterProps {
   mode: string;
@@ -17,6 +18,10 @@ interface PromptFooterProps {
   totalCostUsd: number;
   inputTokens: number;
   outputTokens: number;
+  memoryRecall: {
+    source: string | null;
+    entries: UIMemoryRecallEntry[];
+  };
   turnTiming: {
     firstTokenMs: number | null;
     firstToolResultMs: number | null;
@@ -42,6 +47,7 @@ const PromptFooter: FC<PromptFooterProps> = ({
   totalCostUsd,
   inputTokens,
   outputTokens,
+  memoryRecall,
   turnTiming,
 }) => {
   const [terminalColumns, setTerminalColumns] = useState(
@@ -88,6 +94,10 @@ const PromptFooter: FC<PromptFooterProps> = ({
     () => buildCostWarningText(totalCostUsd),
     [totalCostUsd],
   );
+  const memoryRecallText = useMemo(
+    () => buildMemoryRecallText(memoryRecall),
+    [memoryRecall],
+  );
   const latencyText = useMemo(() => buildLatencyText(turnTiming), [turnTiming]);
   const warningText = tokenWarning.isWarning
     ? `Compact soon (~${tokenWarning.percentLeft}% until threshold) · ${formatTokenCount(tokenUsage)}/${formatTokenCount(tokenWarning.effectiveContextWindow)} used · Run /compact before the next long turn`
@@ -107,9 +117,17 @@ const PromptFooter: FC<PromptFooterProps> = ({
           </Text>
         </Box>
       ) : null}
+      {memoryRecallText ? (
+        <Box
+          paddingX={2}
+          paddingTop={warningText || costWarningText ? 0 : 1}
+        >
+          <Text dimColor>{memoryRecallText}</Text>
+        </Box>
+      ) : null}
       <Box
         paddingX={2}
-        paddingTop={warningText || costWarningText ? 0 : 1}
+        paddingTop={warningText || costWarningText || memoryRecallText ? 0 : 1}
         flexDirection={footerLayout}
         justifyContent="space-between"
       >
@@ -193,6 +211,29 @@ function buildLatencyText(turnTiming: PromptFooterProps["turnTiming"]): string |
     parts.push(`total:${formatLatencyMs(turnTiming.totalMs)}`);
   }
   return parts.length > 0 ? parts.join("  ") : null;
+}
+
+function buildMemoryRecallText(memoryRecall: PromptFooterProps["memoryRecall"]): string | null {
+  if (!Array.isArray(memoryRecall.entries) || memoryRecall.entries.length === 0) {
+    return null;
+  }
+
+  const labels = memoryRecall.entries
+    .map((entry) => entry.title.trim())
+    .filter((title, index, items) => title.length > 0 && items.indexOf(title) === index);
+  if (labels.length === 0) {
+    return null;
+  }
+
+  const visible = labels.slice(0, 2);
+  const parts = [`Memory recall: ${visible.join(", ")}`];
+  if (labels.length > visible.length) {
+    parts.push(`+${labels.length - visible.length} more`);
+  }
+  if (memoryRecall.source) {
+    parts.push(`via ${memoryRecall.source}`);
+  }
+  return parts.join(" · ");
 }
 
 function formatLatencyMs(value: number): string {

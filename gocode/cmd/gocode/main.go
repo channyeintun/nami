@@ -423,6 +423,7 @@ func runStdioEngine(ctx context.Context, cfg config.Config) error {
 						turnStats.ContinuationStopReason = reason
 						turnStats.ContinuationUsedTokens = tracker.BudgetUsedTokens
 					},
+					EmitTelemetry: bridge.EmitEvent,
 					PersistMessages: func(updated []api.Message) {
 						messages = updated
 						persistCurrentMessages()

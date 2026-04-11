@@ -40,7 +40,7 @@ type QueryDeps struct {
 	RecallMemory        func(context.Context, []MemoryFile, string) ([]MemoryRecallResult, error)
 	ApplyResultBudget   func([]api.Message) []api.Message
 	ObserveContinuation func(ContinuationTracker, string)
-	EmitTelemetry       func(ipc.StreamEvent)
+	EmitTelemetry       func(ipc.StreamEvent) error
 	PersistMessages     func([]api.Message)
 	Cleanup             func()
 	Clock               func() time.Time

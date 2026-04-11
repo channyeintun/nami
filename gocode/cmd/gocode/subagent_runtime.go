@@ -176,6 +176,7 @@ func executeSubagent(
 		ApplyResultBudget: func(current []api.Message) []api.Message {
 			return current
 		},
+		EmitTelemetry: childBridge.EmitEvent,
 		PersistMessages: func(updated []api.Message) {
 			childMessages = updated
 			_ = persistSessionState(sessionStore, sessionStateParams{

@@ -30,6 +30,7 @@ const (
 	EventModelChanged    EventType = "model_changed"
 	EventContextWindow   EventType = "context_window"
 	EventCostUpdate      EventType = "cost_update"
+	EventMemoryRecalled  EventType = "memory_recalled"
 	EventRateLimitUpdate EventType = "rate_limit_update"
 	EventTurnTiming      EventType = "turn_timing"
 	EventCompactStart    EventType = "compact_start"
@@ -156,6 +157,21 @@ type CostUpdatePayload struct {
 	MemoryRecallUSD          float64 `json:"memory_recall_usd,omitempty"`
 	MemoryRecallInputTokens  int     `json:"memory_recall_input_tokens,omitempty"`
 	MemoryRecallOutputTokens int     `json:"memory_recall_output_tokens,omitempty"`
+}
+
+type MemoryRecallEntryPayload struct {
+	Title     string `json:"title"`
+	NoteType  string `json:"note_type,omitempty"`
+	Source    string `json:"source,omitempty"`
+	IndexPath string `json:"index_path,omitempty"`
+	NotePath  string `json:"note_path,omitempty"`
+	Line      string `json:"line,omitempty"`
+}
+
+type MemoryRecalledPayload struct {
+	Count   int                        `json:"count"`
+	Source  string                     `json:"source,omitempty"`
+	Entries []MemoryRecallEntryPayload `json:"entries,omitempty"`
 }
 
 type RateLimitWindowPayload struct {
