@@ -113,7 +113,7 @@ This section is the canonical phase tracker. A phase is only complete when its `
 
 ### Phase 6: UI and Developer Experience
 
-**Status:** in progress
+**Status:** completed
 
 **Landed**
 
@@ -225,6 +225,9 @@ This section is the canonical phase tracker. A phase is only complete when its `
 - Completed: closed Phase 3 after confirming child sessions stay bounded by explicit tool allowlists, artifact mutation remains excluded from child execution, and non-auto-approved child write/execute requests degrade to denial instead of interactive permission deadlocks.
 - Completed: closed Phase 4 after confirming durable memory writes already have explicit on-disk guidance, memory recall stays bounded through side-query selection plus safe fallback behavior, and recalled memory remains separate from artifact ownership and review flows.
 - Completed: closed Phase 5 after confirming prompt assembly already memoizes stable sections, provider-specific cache ordering is explicitly gated by model capabilities, and compaction remains reviewable through existing compact-summary artifact handling rather than needing a separate sticky-latch feature first.
+- Fixed: restricted session-wide `allow_all_session` permission grants to read-only tools and non-destructive shell commands, and clarified the session-allow prompt and README text to match the runtime behavior.
+- Fixed: resolved shell execution through a supported local shell fallback chain instead of hardcoding `/bin/zsh`, so foreground and background shell tools continue to work on Linux environments without zsh.
+- Fixed: surfaced partial failures from `file_history_rewind`, surfaced unreadable session-artifact warnings during resume and lookup, taught schema validation to enforce `anyOf`/`allOf` required-field contracts, and corrected the Phase 6 dashboard status to match the completed tracker.
 - Completed: emitted structured `memory_recalled` telemetry from the query loop using existing MEMORY.md recall metadata so each turn can report which durable notes were selected without polluting the transcript.
 - Completed: surfaced low-noise per-turn memory recall summaries in the TUI footer, showing recalled note titles and recall source while keeping full recall content out of the main conversation flow.
 - Completed: switched MEMORY.md index injection from whole-file dumping to bounded heuristic recall so only a small set of lines relevant to the current request enters the prompt by default.

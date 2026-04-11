@@ -35,6 +35,12 @@ type FileBackup struct {
 	Hash       string
 }
 
+// FileRewindResult reports the outcome of restoring a snapshot.
+type FileRewindResult struct {
+	Restored int
+	Failed   []string
+}
+
 const maxSnapshots = 100
 
 // NewFileHistory creates a file history tracker using the given directory for backup storage.
@@ -125,7 +131,7 @@ func (h *FileHistory) MakeSnapshot(label string) string {
 }
 
 // Rewind restores all files to the state captured in the given snapshot.
-func (h *FileHistory) Rewind(snapshotID string) (int, error) {
+func (h *FileHistory) Rewind(snapshotID string) (FileRewindResult, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -137,37 +143,41 @@ func (h *FileHistory) Rewind(snapshotID string) (int, error) {
 		}
 	}
 	if target == nil {
-		return 0, fmt.Errorf("snapshot %q not found", snapshotID)
+		return FileRewindResult{}, fmt.Errorf("snapshot %q not found", snapshotID)
 	}
 
-	restored := 0
+	result := FileRewindResult{}
 	for _, backup := range target.Files {
 		if !backup.Existed {
 			// File didn't exist at snapshot time — remove it
 			if err := os.Remove(backup.Path); err != nil && !os.IsNotExist(err) {
+				result.Failed = append(result.Failed, fmt.Sprintf("%s: remove file: %v", backup.Path, err))
 				continue
 			}
-			restored++
+			result.Restored++
 			continue
 		}
 
 		data, err := os.ReadFile(backup.BackupPath)
 		if err != nil {
+			result.Failed = append(result.Failed, fmt.Sprintf("%s: read backup: %v", backup.Path, err))
 			continue
 		}
 
 		parentDir := filepath.Dir(backup.Path)
 		if err := os.MkdirAll(parentDir, 0o755); err != nil {
+			result.Failed = append(result.Failed, fmt.Sprintf("%s: create parent dir: %v", backup.Path, err))
 			continue
 		}
 
 		if err := os.WriteFile(backup.Path, data, 0o644); err != nil {
+			result.Failed = append(result.Failed, fmt.Sprintf("%s: write restored file: %v", backup.Path, err))
 			continue
 		}
-		restored++
+		result.Restored++
 	}
 
-	return restored, nil
+	return result, nil
 }
 
 // LatestSnapshotID returns the ID of the most recent snapshot, or empty string.

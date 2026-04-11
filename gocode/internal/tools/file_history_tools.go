@@ -159,10 +159,27 @@ func (t *FileHistoryRewindTool) Execute(ctx context.Context, input ToolInput) (T
 		return ToolOutput{}, fmt.Errorf("file_history_rewind requires snapshot_id")
 	}
 
-	restored, err := history.Rewind(strings.TrimSpace(snapshotID))
+	result, err := history.Rewind(strings.TrimSpace(snapshotID))
 	if err != nil {
 		return ToolOutput{}, err
 	}
 
-	return ToolOutput{Output: fmt.Sprintf("Restored %d file%s from snapshot %s", restored, pluralSuffix(restored), strings.TrimSpace(snapshotID))}, nil
+	if len(result.Failed) > 0 {
+		lines := []string{
+			fmt.Sprintf(
+				"Restored %d file%s from snapshot %s with %d failure%s.",
+				result.Restored,
+				pluralSuffix(result.Restored),
+				strings.TrimSpace(snapshotID),
+				len(result.Failed),
+				pluralSuffix(len(result.Failed)),
+			),
+		}
+		for _, failure := range result.Failed {
+			lines = append(lines, "- "+failure)
+		}
+		return ToolOutput{Output: strings.Join(lines, "\n"), IsError: true}, nil
+	}
+
+	return ToolOutput{Output: fmt.Sprintf("Restored %d file%s from snapshot %s", result.Restored, pluralSuffix(result.Restored), strings.TrimSpace(snapshotID))}, nil
 }

@@ -70,7 +70,7 @@ var bashDestructivePatterns = []struct {
 	{regexp.MustCompile(`\bterraform\s+destroy\b`), "terraform destroy"},
 }
 
-// BashTool executes shell commands through zsh with basic security validation.
+// BashTool executes shell commands through the preferred local shell with basic security validation.
 type BashTool struct{}
 
 // NewBashTool constructs the Bash execution tool.
@@ -83,7 +83,7 @@ func (t *BashTool) Name() string {
 }
 
 func (t *BashTool) Description() string {
-	return "Execute a zsh shell command in the local workspace."
+	return "Execute a shell command in the local workspace."
 }
 
 func (t *BashTool) InputSchema() any {
@@ -92,7 +92,7 @@ func (t *BashTool) InputSchema() any {
 		"properties": map[string]any{
 			"command": map[string]any{
 				"type":        "string",
-				"description": "The zsh command to execute.",
+				"description": "The shell command to execute.",
 			},
 			"background": map[string]any{
 				"type":        "boolean",
@@ -176,7 +176,10 @@ func (t *BashTool) Execute(ctx context.Context, input ToolInput) (ToolOutput, er
 		defer cancel()
 	}
 
-	cmd := exec.CommandContext(commandCtx, "/bin/zsh", "-lc", command)
+	cmd, err := shellCommandContext(commandCtx, command)
+	if err != nil {
+		return ToolOutput{}, err
+	}
 	cmd.Dir = workingDir
 
 	var stdout bytes.Buffer
@@ -251,6 +254,75 @@ func timeoutFromParams(params map[string]any) time.Duration {
 		}
 	}
 	return defaultBashTimeout
+}
+
+func shellCommandContext(ctx context.Context, command string) (*exec.Cmd, error) {
+	shellPath, err := resolveShellPath()
+	if err != nil {
+		return nil, err
+	}
+	return exec.CommandContext(ctx, shellPath, "-lc", command), nil
+}
+
+func shellCommand(command string) (*exec.Cmd, error) {
+	shellPath, err := resolveShellPath()
+	if err != nil {
+		return nil, err
+	}
+	return exec.Command(shellPath, "-lc", command), nil
+}
+
+func resolveShellPath() (string, error) {
+	candidates := []string{
+		strings.TrimSpace(os.Getenv("SHELL")),
+		"zsh",
+		"bash",
+		"sh",
+		"/bin/zsh",
+		"/bin/bash",
+		"/bin/sh",
+	}
+	seen := make(map[string]struct{}, len(candidates))
+	for _, candidate := range candidates {
+		candidate = strings.TrimSpace(candidate)
+		if candidate == "" {
+			continue
+		}
+
+		resolved := candidate
+		if !filepath.IsAbs(candidate) {
+			lookup, err := exec.LookPath(candidate)
+			if err != nil {
+				continue
+			}
+			resolved = lookup
+		}
+
+		resolved = filepath.Clean(resolved)
+		if _, ok := seen[resolved]; ok {
+			continue
+		}
+		seen[resolved] = struct{}{}
+		if !isSupportedShellBinary(resolved) {
+			continue
+		}
+		info, err := os.Stat(resolved)
+		if err != nil || info.IsDir() || info.Mode()&0o111 == 0 {
+			continue
+		}
+		return resolved, nil
+	}
+
+	return "", fmt.Errorf("no supported shell found; checked $SHELL, zsh, bash, and sh")
+}
+
+func isSupportedShellBinary(path string) bool {
+	switch filepath.Base(path) {
+	case "zsh", "bash", "sh", "dash":
+		return true
+	default:
+		return false
+	}
 }
 
 func stringParam(params map[string]any, key string) (string, bool) {

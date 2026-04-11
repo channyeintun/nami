@@ -87,7 +87,10 @@ func listBackgroundCommands(includeCompleted bool) []backgroundCommandSummary {
 
 func startBackgroundShellCommand(command, cwd string) (*backgroundCommand, error) {
 	id := fmt.Sprintf("cmd_%d", atomic.AddUint64(&backgroundCounter, 1))
-	cmd := exec.Command("/bin/zsh", "-lc", command)
+	cmd, err := shellCommand(command)
+	if err != nil {
+		return nil, err
+	}
 	cmd.Dir = cwd
 	streamCtx, cancel := context.WithCancel(context.Background())
 

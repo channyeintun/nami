@@ -24,7 +24,7 @@ type Rule struct {
 // Context holds the current permission state.
 type Context struct {
 	Mode             Mode
-	SessionAllowAll  bool // allow all non-destructive commands for this session
+	SessionAllowAll  bool // auto-approve read-only tools and non-destructive bash commands for this session
 	AlwaysAllowRules []Rule
 	AlwaysDenyRules  []Rule
 	AlwaysAskRules   []Rule
@@ -67,6 +67,9 @@ func (c *Context) Check(toolName string, input tools.ToolInput, permLevel tools.
 
 	// Session-wide allow-all: approve non-destructive commands
 	if c.SessionAllowAll {
+		if permLevel == tools.PermissionReadOnly {
+			return DecisionAllow
+		}
 		if toolName == "bash" {
 			command := ""
 			if params, ok := input.Params["command"]; ok {
@@ -76,8 +79,6 @@ func (c *Context) Check(toolName string, input tools.ToolInput, permLevel tools.
 				return DecisionAllow
 			}
 			// destructive bash commands still require explicit approval
-		} else {
-			return DecisionAllow
 		}
 	}
 

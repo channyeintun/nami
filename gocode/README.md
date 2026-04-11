@@ -143,16 +143,16 @@ When the agent wants to run a command or write a file, you'll see a permission p
 │ Risk: execute                               │
 │                                             │
 │ [y] Allow  [n] Deny  [a] Always Allow       │
-│ [s] Allow All (This Session)                │
+│ [s] Allow Safe (This Session)               │
 ╰─────────────────────────────────────────────╯
 ```
 
-| Key | Action                                              |
-| --- | --------------------------------------------------- |
-| `y` | Allow this one command                              |
-| `n` | Deny this command                                   |
-| `a` | Always allow this exact command                     |
-| `s` | Allow all non-destructive commands for this session |
+| Key | Action                                                                              |
+| --- | ----------------------------------------------------------------------------------- |
+| `y` | Allow this one command                                                              |
+| `n` | Deny this command                                                                   |
+| `a` | Always allow this exact command                                                     |
+| `s` | Allow future read-only requests and non-destructive shell commands for this session |
 
 Destructive commands (`rm -rf`, `git push --force`, `DROP TABLE`, etc.) always require explicit approval, even with `[s]`.
 

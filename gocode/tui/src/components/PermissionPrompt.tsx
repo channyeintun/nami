@@ -49,8 +49,9 @@ const OPTIONS: PermissionOption[] = [
   },
   {
     decision: "allow_all_session",
-    label: "Allow This Session",
-    description: "Skip this permission prompt for the rest of the session.",
+    label: "Allow Safe This Session",
+    description:
+      "Auto-approve future read-only requests and safe shell commands in this session.",
     shortcut: "S",
     color: "magenta",
   },
@@ -294,7 +295,8 @@ const PermissionPrompt: FC<PermissionPromptProps> = ({
       <Box marginTop={1} flexDirection="column">
         <Text dimColor>
           Enter confirm · Up/Down change selection · Tab{" "}
-          {isEditingFeedback ? "return to actions" : "edit note"} · Esc cancel turn
+          {isEditingFeedback ? "return to actions" : "edit note"} · Esc cancel
+          turn
         </Text>
         <Text dimColor>
           Selected:{" "}

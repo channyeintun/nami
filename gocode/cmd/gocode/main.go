@@ -1771,7 +1771,13 @@ func emitSessionArtifacts(ctx context.Context, bridge *ipc.Bridge, artifactManag
 
 	artifacts, err := artifactManager.LoadSessionArtifacts(ctx, sessionID)
 	if err != nil {
-		return err
+		if warning, ok := err.(*artifactspkg.ArtifactLoadWarning); ok {
+			if emitErr := bridge.Emit(ipc.EventError, ipc.ErrorPayload{Message: warning.Error(), Recoverable: true}); emitErr != nil {
+				return emitErr
+			}
+		} else {
+			return err
+		}
 	}
 
 	for index := len(artifacts) - 1; index >= 0; index-- {

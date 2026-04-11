@@ -32,6 +32,20 @@ type SessionArtifact struct {
 	Content  string
 }
 
+// ArtifactLoadWarning reports unreadable artifacts that were skipped while
+// still returning the readable subset.
+type ArtifactLoadWarning struct {
+	Operation string
+	Failures  []string
+}
+
+func (w *ArtifactLoadWarning) Error() string {
+	if w == nil || len(w.Failures) == 0 {
+		return ""
+	}
+	return fmt.Sprintf("%s skipped unreadable session artifacts: %s", strings.TrimSpace(w.Operation), strings.Join(w.Failures, "; "))
+}
+
 // NewManager constructs a markdown artifact manager.
 func NewManager(store Service) *Manager {
 	return &Manager{store: store}
@@ -97,15 +111,20 @@ func (m *Manager) LoadSessionArtifacts(ctx context.Context, sessionID string) ([
 	}
 
 	artifacts := make([]SessionArtifact, 0, len(refs))
+	var failures []string
 	for _, ref := range refs {
 		art, content, err := m.LoadMarkdown(ctx, ref.ID, 0)
 		if err != nil {
+			failures = append(failures, fmt.Sprintf("%s: %v", ref.ID, err))
 			continue
 		}
 		if sessionOwnerID(art.Metadata) != sessionID {
 			continue
 		}
 		artifacts = append(artifacts, SessionArtifact{Artifact: art, Content: content})
+	}
+	if len(failures) > 0 {
+		return artifacts, &ArtifactLoadWarning{Operation: "loading session artifacts", Failures: failures}
 	}
 
 	return artifacts, nil
@@ -122,9 +141,11 @@ func (m *Manager) FindSessionArtifact(ctx context.Context, kind Kind, scope Scop
 		return Artifact{}, false, err
 	}
 
+	var failures []string
 	for _, ref := range refs {
 		art, err := m.store.Load(ctx, LoadRequest{ID: ref.ID})
 		if err != nil {
+			failures = append(failures, fmt.Sprintf("%s: %v", ref.ID, err))
 			continue
 		}
 		if sessionOwnerID(art.Metadata) != sessionID {
@@ -134,6 +155,9 @@ func (m *Manager) FindSessionArtifact(ctx context.Context, kind Kind, scope Scop
 			continue
 		}
 		return art, true, nil
+	}
+	if len(failures) > 0 {
+		return Artifact{}, false, &ArtifactLoadWarning{Operation: "finding session artifact", Failures: failures}
 	}
 
 	return Artifact{}, false, nil
