@@ -17,7 +17,7 @@
 | Phase 1 runtime measurement         | completed   | S     | Checkpoint logging, artifact ownership, aggregate tool-result budgeting, and continuation stop telemetry are in place.                                                                                                    |
 | Phase 2 tool depth                  | in progress | L     | File-history tools, semantic validation, input-aware bash concurrency, Think, stronger Go-aware navigation, repository overview tooling, and fuller background command lifecycle tools landed; follow-up tooling remains. |
 | Phase 3 subagents                   | in progress | XL    | Fresh-context explore, permission-isolated general-purpose child agents, and full background child launch/status/stop lifecycle are landed.                                                                               |
-| Phase 4 memory                      | planned     | L     | Four-type taxonomy, MEMORY.md index, async recall, staleness warnings.                                                                                                                                                    |
+| Phase 4 memory                      | in progress | L     | Project and user MEMORY.md index loading is now wired into prompt assembly; recall, write-path support, and staleness handling remain.                                                                                    |
 | Phase 5 compaction and cache        | planned     | M     | Output slot reservation, prompt memoization, provider-gated cache stability.                                                                                                                                              |
 | Phase 6 UI and developer experience | planned     | M     | Data-driven: API preconnect, measured Ink optimizations, subagent/memory UI surfaces.                                                                                                                                     |
 
@@ -73,6 +73,8 @@
 - Completed: added transcript-level background-agent notices for launch, stop, completion, cancellation, and failure so important child-agent state transitions are visible in the main conversation flow instead of only in the side panel.
 - Completed: upgraded the Background Agents panel to separate active and recent child runs, show compact status counts, and surface transcript/result/update hints so the panel is useful without digging through raw session files.
 - Completed: capped retained background-agent entries in TUI state so long sessions do not accumulate an unbounded child-agent list after repeated background runs.
+- Completed: extended the prompt memory loader to discover user-global and project-scoped `MEMORY.md` indexes from the config tree alongside existing `AGENTS.md` instruction files.
+- Completed: applied tighter `MEMORY.md` index caps (200 lines / 25KB) and separated durable memory indexes from hard instructions in the formatted system-prompt section.
 
 ## Next Planning Baseline
 
