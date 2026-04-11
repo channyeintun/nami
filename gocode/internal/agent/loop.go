@@ -29,7 +29,17 @@ func runIteration(
 	state.TurnCount++
 	state.TurnContext = LoadTurnContext()
 	currentUserPrompt := latestUserPrompt(state.Messages)
-	memoryRecalls := recallMemoryIndexes(ctx, deps.RecallMemory, state.SystemContext.MemoryFiles, currentUserPrompt)
+
+	if deps.ApplyResultBudget != nil {
+		state.Messages = deps.ApplyResultBudget(state.Messages)
+	}
+
+	if err := runProactiveCompaction(ctx, state, deps, yield); err != nil {
+		return err
+	}
+
+	pressure := EvaluateContextPressure(state.Messages, state.ContextWindow, state.MaxTokens, state.Continuation)
+	memoryRecalls := recallMemoryIndexes(ctx, deps.RecallMemory, state.SystemContext.MemoryFiles, currentUserPrompt, pressure)
 	selectedSkills := skillspkg.SelectRelevant(state.Skills, currentUserPrompt)
 	skillPrompt := skillspkg.FormatPromptSection(selectedSkills)
 	basePrompt := state.BasePrompt
@@ -54,14 +64,6 @@ func runIteration(
 			memoryRecalls,
 			skillPrompt,
 		)
-	}
-
-	if deps.ApplyResultBudget != nil {
-		state.Messages = deps.ApplyResultBudget(state.Messages)
-	}
-
-	if err := runProactiveCompaction(ctx, state, deps, yield); err != nil {
-		return err
 	}
 
 	if err := warnUnsupportedThinking(currentUserPrompt, state.Capabilities, yield); err != nil {
@@ -120,8 +122,9 @@ func recallMemoryIndexes(
 	recall func(context.Context, []MemoryFile, string) ([]MemoryRecallResult, error),
 	files []MemoryFile,
 	currentUserPrompt string,
+	pressure ContextPressureDecision,
 ) []MemoryRecallResult {
-	if recall == nil || strings.TrimSpace(currentUserPrompt) == "" {
+	if recall == nil || strings.TrimSpace(currentUserPrompt) == "" || pressure.SkipMemoryRecall {
 		return nil
 	}
 
@@ -347,14 +350,12 @@ func runProactiveCompaction(
 		return nil
 	}
 
-	effectiveWindow := compact.EffectiveContextWindow(state.ContextWindow, state.MaxTokens)
-	threshold := compact.AutocompactThreshold(effectiveWindow)
-	if threshold <= 0 {
+	pressure := EvaluateContextPressure(state.Messages, state.ContextWindow, state.MaxTokens, state.Continuation)
+	if !pressure.ShouldCompact {
 		return nil
 	}
-
-	tokensBefore := compact.EstimateConversationTokens(state.Messages)
-	if tokensBefore < threshold {
+	tokensBefore := pressure.ConversationTokens
+	if tokensBefore <= 0 {
 		return nil
 	}
 
