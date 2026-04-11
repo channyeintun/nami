@@ -20,7 +20,7 @@ func (t *FileEditTool) Name() string {
 }
 
 func (t *FileEditTool) Description() string {
-	return "Perform exact string replacements in an existing text file. Use create_file to create new files and file_write to overwrite full file contents."
+	return "Perform exact string replacements in an existing text file. Use apply_patch for larger structural edits, create_file for new files, and file_write for full overwrites."
 }
 
 func (t *FileEditTool) InputSchema() any {

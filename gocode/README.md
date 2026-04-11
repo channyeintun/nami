@@ -172,7 +172,8 @@ The agent has access to:
 | **file_read**                  | Read text files with range support and safer partial-read guidance       |
 | **file_write**                 | Overwrite the full contents of an existing file                          |
 | **file_edit**                  | Exact find-and-replace edits in existing files                           |
-| **multi_replace_file_content** | Apply multiple validated block replacements in one file write            |
+| **apply_patch**                | Apply structured multi-hunk or multi-file text patches                   |
+| **multi_replace_file_content** | Apply multiple validated block replacements in one existing file write   |
 | **file_diff_preview**          | Preview a compact diff against another file or inline content            |
 | **glob**                       | Find files by pattern                                                    |
 | **grep**                       | Search file contents (ripgrep)                                           |

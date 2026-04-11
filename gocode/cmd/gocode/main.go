@@ -801,7 +801,7 @@ func defaultSystemPrompt() string {
 
 IMPORTANT: Always use absolute paths with file tools. The working directory is provided in the environment context below — use it to construct absolute paths. For example, if the working directory is /home/user/project, use /home/user/project/file.txt instead of file.txt.
 Always use tools to answer questions — do NOT just make a plan without acting. Call tools immediately when you need information.
-Use the exact runtime tool names when calling tools, including agent, agent_status, agent_stop, bash, think, list_dir, create_file, file_read, file_write, file_edit, multi_replace_file_content, file_diff_preview, glob, grep, go_definition, go_references, project_overview, dependency_overview, symbol_search, web_search, web_fetch, git, list_commands, command_status, send_command_input, stop_command, forget_command, file_history, file_history_rewind, save_implementation_plan, upsert_task_list, and save_walkthrough. Do not invent alternate names like file_search or read_file.
+Use the exact runtime tool names when calling tools, including agent, agent_status, agent_stop, bash, think, list_dir, create_file, file_read, file_write, file_edit, apply_patch, multi_replace_file_content, file_diff_preview, glob, grep, go_definition, go_references, project_overview, dependency_overview, symbol_search, web_search, web_fetch, git, list_commands, command_status, send_command_input, stop_command, forget_command, file_history, file_history_rewind, save_implementation_plan, upsert_task_list, and save_walkthrough. Do not invent alternate names like file_search or read_file.
 
 Artifacts are first-class outputs in this runtime — durable, reviewable work products, not just overflow containers for long text. Use them intentionally:
 - save_implementation_plan: real implementation plans that the user will review before execution begins.
@@ -1229,6 +1229,15 @@ func permissionTargetKind(call toolpkg.PendingCall) string {
 	if command, ok := stringParamFromMap(call.Input.Params, "command"); ok && strings.TrimSpace(command) != "" {
 		return "command"
 	}
+	if call.Tool.Name() == "apply_patch" {
+		targets, _ := applyPatchPermissionTargets(call)
+		if len(targets) == 1 {
+			return "file"
+		}
+		if len(targets) > 1 {
+			return "target"
+		}
+	}
 	if filePath, ok := stringParamFromMap(call.Input.Params, "file_path"); ok && strings.TrimSpace(filePath) != "" {
 		return "file"
 	}
@@ -1256,6 +1265,15 @@ func summarizePermissionTarget(call toolpkg.PendingCall) string {
 	if command, ok := stringParamFromMap(call.Input.Params, "command"); ok && strings.TrimSpace(command) != "" {
 		return command
 	}
+	if call.Tool.Name() == "apply_patch" {
+		targets, summary := applyPatchPermissionTargets(call)
+		if len(targets) == 1 {
+			return targets[0]
+		}
+		if summary != "" {
+			return summary
+		}
+	}
 	if filePath, ok := stringParamFromMap(call.Input.Params, "file_path"); ok && strings.TrimSpace(filePath) != "" {
 		return filePath
 	}
@@ -1272,6 +1290,25 @@ func summarizePermissionTarget(call toolpkg.PendingCall) string {
 		return raw
 	}
 	return call.Tool.Name()
+}
+
+func applyPatchPermissionTargets(call toolpkg.PendingCall) ([]string, string) {
+	patchText, ok := stringParamFromMap(call.Input.Params, "patch")
+	if !ok || strings.TrimSpace(patchText) == "" {
+		return nil, ""
+	}
+	targets, err := toolpkg.ExtractApplyPatchTargets(patchText)
+	if err != nil || len(targets) == 0 {
+		return nil, ""
+	}
+	if len(targets) == 1 {
+		return targets, targets[0]
+	}
+	previewTargets := targets
+	if len(previewTargets) > 3 {
+		previewTargets = previewTargets[:3]
+	}
+	return targets, fmt.Sprintf("%d files: %s", len(targets), strings.Join(previewTargets, ", "))
 }
 
 func toolPermissionMessage(action string, call toolpkg.PendingCall, reason string) string {

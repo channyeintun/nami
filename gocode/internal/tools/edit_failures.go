@@ -8,14 +8,16 @@ import (
 type EditFailureKind string
 
 const (
-	EditFailureInvalidRequest  EditFailureKind = "invalid_request"
-	EditFailureTargetMissing   EditFailureKind = "target_missing"
-	EditFailureNoMatch         EditFailureKind = "no_match"
-	EditFailureMultipleMatch   EditFailureKind = "multiple_matches"
-	EditFailureNoOp            EditFailureKind = "no_op"
-	EditFailureInvalidRange    EditFailureKind = "invalid_range"
-	EditFailureOverlap         EditFailureKind = "overlapping_ranges"
-	EditFailureContentMismatch EditFailureKind = "content_mismatch"
+	EditFailureInvalidRequest       EditFailureKind = "invalid_request"
+	EditFailureInvalidPatchFormat   EditFailureKind = "invalid_patch_format"
+	EditFailureTargetMissing        EditFailureKind = "target_missing"
+	EditFailureNoMatch              EditFailureKind = "no_match"
+	EditFailureMultipleMatch        EditFailureKind = "multiple_matches"
+	EditFailureNoOp                 EditFailureKind = "no_op"
+	EditFailureInvalidRange         EditFailureKind = "invalid_range"
+	EditFailureOverlap              EditFailureKind = "overlapping_ranges"
+	EditFailureContentMismatch      EditFailureKind = "content_mismatch"
+	EditFailureUnsupportedOperation EditFailureKind = "unsupported_operation"
 )
 
 type EditFailure struct {

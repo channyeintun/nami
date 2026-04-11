@@ -141,6 +141,25 @@ func AssessRisk(toolName string, input tools.ToolInput, permLevel tools.Permissi
 		}
 	}
 
+	if toolName == "apply_patch" {
+		patchText, ok := firstStringParam(input.Params, "patch")
+		if !ok || strings.TrimSpace(patchText) == "" {
+			return RiskAssessment{Level: "write"}
+		}
+		targets, err := tools.ExtractApplyPatchTargets(patchText)
+		if err != nil || len(targets) == 0 {
+			return RiskAssessment{Level: "write"}
+		}
+		for _, target := range targets {
+			assessment := assessSensitiveFilePath(target)
+			if assessment.Level == "high" {
+				assessment.Reason = "patch touches sensitive files and requires explicit approval every time"
+				return assessment
+			}
+		}
+		return RiskAssessment{Level: "write"}
+	}
+
 	filePath, ok := firstStringParam(input.Params,
 		"file_path",
 		"target_file",

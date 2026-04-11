@@ -15,7 +15,7 @@
 | ---------------------------------------- | ----------- | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Enhancement planning baseline            | completed   | S     | 2026-04-12 created a new execution baseline from `enhancement.md` focused on file-tool robustness and subagent orchestration.                           |
 | Phase 1 file semantics and safety        | completed   | L     | Create, overwrite, and edit intent are now split; read hardening, high-risk file approvals, stable diff previews, and file-history coverage are landed. |
-| Phase 2 edit engine hardening            | in progress | L     | Structured edit failure kinds and recovery hints are landing first; `apply_patch` and post-edit diagnostics are still pending.                           |
+| Phase 2 edit engine hardening            | in progress | L     | `apply_patch` is landing with the structured edit-failure model; post-edit diagnostics are still pending.                                               |
 | Phase 3 subagent lineage and metadata    | not started | M     | Stable invocation ids, structured child metadata, and stronger TUI attribution are planned but not started.                                             |
 | Phase 4 child lifecycle and policy hooks | not started | M     | Shared loop alignment plus subagent start/stop hooks and block-stop reasons are planned but not started.                                                |
 
@@ -58,17 +58,18 @@ This section is the canonical phase tracker. A phase is only complete when its `
 - `file_edit` and `multi_replace_file_content` now classify edit failures with explicit kinds such as `no_match`, `multiple_matches`, `content_mismatch`, and `invalid_range`.
 - Recovery hints now travel through Go tool output, IPC payloads, and the TUI so edit failures surface actionable next steps instead of flat strings.
 - `multi_replace_file_content` now renders as a first-class file mutation in the TUI, including structured file-update failures.
+- Added `apply_patch` as a dedicated patch-grade edit tool for structured multi-hunk and multi-file text edits.
+- Permission summaries, risk checks, compaction rules, subagent allowlists, runtime tool guidance, and TUI rendering now recognize `apply_patch` as part of the file-edit ladder.
 
 **Remaining to Finish**
 
-- Add `apply_patch` as a dedicated patch-grade edit path.
 - Extend the edit failure taxonomy and recovery hints to the future `apply_patch` path and any remaining file mutation surfaces.
 - Define explicit tool-selection guidance for exact edit, multi-replace, and patch flows.
 - Surface post-edit diagnostics when available.
 
 **Exit Criteria Check**
 
-- [ ] `gocode` has a dedicated patch-grade edit path for larger structural changes.
+- [x] `gocode` has a dedicated patch-grade edit path for larger structural changes.
 - [x] File-edit failures are machine-distinguishable and actionable.
 - [ ] The edit ladder is explicit enough that structural edits do not overuse exact replacement tools.
 - [ ] Post-edit diagnostics catch broken edits earlier when the environment can provide them.
@@ -128,6 +129,7 @@ This section is the canonical phase tracker. A phase is only complete when its `
 - Completed: added high-risk file approval rules for sensitive project-local paths, surfaced policy reasons in the permission prompt, and prevented persistent `always_allow` approval on those targets while keeping cwd containment unchanged.
 - Completed: finished Phase 1 by adding a dedicated `create_file` tool, narrowing `file_write` to overwrite-only behavior, updating tool labels/prompts/docs to reflect the split, and confirming diff-preview plus file-history coverage across the direct write tool surface.
 - Completed: started Phase 2 by standardizing edit failure kinds and recovery hints across `file_edit` and `multi_replace_file_content`, and by surfacing those structured failures in the TUI.
+- Completed: added a dedicated `apply_patch` tool for structured multi-file edits and wired it through permission summaries, risk assessment, compaction, runtime tool guidance, and TUI file-mutation rendering.
 
 ## Next Planning Baseline
 

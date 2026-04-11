@@ -34,6 +34,9 @@ function summarizeInput(name: string, raw: string): string {
     if (name === "multi_replace_file_content" && obj.target_file) {
       return obj.target_file;
     }
+    if (name === "apply_patch" && typeof obj.patch === "string") {
+      return summarizePatchTarget(obj.patch);
+    }
     if (name === "glob" && obj.pattern) return obj.pattern;
     if (name === "grep" && obj.pattern) return obj.pattern;
     if (name === "git" && obj.subcommand) return obj.subcommand;
@@ -135,6 +138,13 @@ function describeTool(toolCall: UIToolCall): ToolDescriptor {
           summarizeInput(toolCall.name, toolCall.input),
         ),
       };
+    case "apply_patch":
+      return {
+        title: "Apply Patch",
+        summary: basenameOrFallback(
+          summarizeInput(toolCall.name, toolCall.input),
+        ),
+      };
     case "multi_replace_file_content":
       return {
         title: "Multi Replace",
@@ -197,6 +207,8 @@ function permissionLabel(toolCall: UIToolCall): string {
       return "Waiting for permission to overwrite file…";
     case "file_edit":
       return "Waiting for permission to modify file…";
+    case "apply_patch":
+      return "Waiting for permission to apply patch…";
     case "multi_replace_file_content":
       return "Waiting for permission to modify file ranges…";
     case "web_fetch":
@@ -223,6 +235,8 @@ function runningLabel(toolCall: UIToolCall): string {
       return `Overwriting file…${progressSuffix}`;
     case "file_edit":
       return `Editing file…${progressSuffix}`;
+    case "apply_patch":
+      return `Applying patch…${progressSuffix}`;
     case "multi_replace_file_content":
       return `Replacing file ranges…${progressSuffix}`;
     case "grep":
@@ -251,6 +265,7 @@ function renderError(toolCall: UIToolCall) {
     toolCall.name === "create_file" ||
     toolCall.name === "file_write" ||
     toolCall.name === "file_edit" ||
+    toolCall.name === "apply_patch" ||
     toolCall.name === "multi_replace_file_content"
   ) {
     return renderFileMutationError(toolCall);
@@ -274,6 +289,7 @@ function renderSuccess(toolCall: UIToolCall) {
     case "file_write":
     case "create_file":
     case "file_edit":
+    case "apply_patch":
     case "multi_replace_file_content":
       return renderFileMutation(toolCall);
     case "file_read":
@@ -567,6 +583,19 @@ function summarizeGitInput(raw: string): string {
   } catch {
     return summarizeInput("git", raw);
   }
+}
+
+function summarizePatchTarget(patch: string): string {
+  const matches = [
+    ...patch.matchAll(/^\*\*\* (?:Add|Update|Delete) File:\s+(.+)$/gm),
+  ];
+  if (matches.length === 0) {
+    return "patch";
+  }
+  if (matches.length === 1) {
+    return matches[0]?.[1]?.trim() || "patch";
+  }
+  return `${matches.length} files`;
 }
 
 function basenameOrFallback(value: string): string {

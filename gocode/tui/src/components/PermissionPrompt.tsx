@@ -324,6 +324,9 @@ function buildQuestion(
     if (tool === "file_edit") {
       return `Allow edits to ${fileName}?`;
     }
+    if (tool === "apply_patch") {
+      return `Allow patch updates to ${fileName}?`;
+    }
     if (tool === "create_file") {
       return `Allow creation of ${fileName}?`;
     }
@@ -365,6 +368,8 @@ function formatToolLabel(tool: string): string {
   switch (tool) {
     case "bash":
       return "Bash";
+    case "apply_patch":
+      return "Apply Patch";
     case "create_file":
       return "Create File";
     case "file_write":
@@ -380,7 +385,12 @@ function inferAccessLabel(tool: string): string {
   if (tool === "bash") {
     return "execute";
   }
-  if (tool === "create_file" || tool === "file_write" || tool === "file_edit") {
+  if (
+    tool === "apply_patch" ||
+    tool === "create_file" ||
+    tool === "file_write" ||
+    tool === "file_edit"
+  ) {
     return "write";
   }
   return "ask";

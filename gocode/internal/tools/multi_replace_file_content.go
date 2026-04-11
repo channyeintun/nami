@@ -27,7 +27,7 @@ func (t *MultiReplaceFileContentTool) Name() string {
 }
 
 func (t *MultiReplaceFileContentTool) Description() string {
-	return "Apply multiple validated non-contiguous replacements to a single file in one write."
+	return "Apply multiple validated non-contiguous replacements to one existing text file in one write. Use apply_patch for multi-file or larger structural edits."
 }
 
 func (t *MultiReplaceFileContentTool) Validate(input ToolInput) error {

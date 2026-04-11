@@ -8,6 +8,7 @@ import (
 
 // CompactableTools lists tools whose old results can be safely truncated.
 var CompactableTools = map[string]bool{
+	"apply_patch": true,
 	"create_file": true,
 	"file_read":   true,
 	"bash":        true,
@@ -74,6 +75,8 @@ func TruncateToolResults(messages []api.Message) []api.Message {
 func canonicalCompactableToolName(name string) string {
 	normalized := strings.ToLower(strings.TrimSpace(name))
 	switch normalized {
+	case "applypatch", "apply_patch":
+		return "apply_patch"
 	case "fileread", "file_read", "read_file":
 		return "file_read"
 	case "createfile", "create_file":

@@ -50,6 +50,7 @@ var generalPurposeSubagentTools = []string{
 	"create_file",
 	"file_write",
 	"file_edit",
+	"apply_patch",
 	"multi_replace_file_content",
 	"glob",
 	"grep",

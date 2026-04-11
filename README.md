@@ -179,6 +179,7 @@ The agent has access to:
 | **file_read**   | Read text file contents                            |
 | **file_write**  | Overwrite the full contents of an existing file    |
 | **file_edit**   | Find-and-replace edits in existing files           |
+| **apply_patch** | Apply structured multi-hunk or multi-file patches  |
 | **glob**       | Find files by pattern                               |
 | **grep**       | Search file contents (ripgrep)                      |
 | **web_search** | Search the web                                      |

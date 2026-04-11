@@ -19,7 +19,7 @@ const (
 	taskListArtifactSlot           = "active"
 	taskListArtifactTitle          = "Task List"
 	saveImplementationPlanToolName = "save_implementation_plan"
-	planModePromptHint             = "When plan mode is active, you MUST still use read tools (file_read, glob, grep, bash with read-only commands like ls/cat/find) to gather information. Only avoid write tools (create_file, file_write, file_edit, multi_replace_file_content). When you have a real implementation plan, save or update it with save_implementation_plan so it remains the primary review artifact for the task. Ask the user to review the plan, revise it in place when needed, and only move to /fast when they want implementation to begin."
+	planModePromptHint             = "When plan mode is active, you MUST still use read tools (file_read, glob, grep, bash with read-only commands like ls/cat/find) to gather information. Only avoid write tools (create_file, file_write, file_edit, apply_patch, multi_replace_file_content). When you have a real implementation plan, save or update it with save_implementation_plan so it remains the primary review artifact for the task. Ask the user to review the plan, revise it in place when needed, and only move to /fast when they want implementation to begin."
 )
 
 // ArtifactUpdate describes an artifact mutation that should be emitted to the UI.

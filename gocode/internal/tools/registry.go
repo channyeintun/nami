@@ -26,6 +26,7 @@ func NewRegistry() *Registry {
 	r.Register(NewFileReadTool())
 	r.Register(NewFileWriteTool())
 	r.Register(NewFileEditTool())
+	r.Register(NewApplyPatchTool())
 	r.Register(NewMultiReplaceFileContentTool())
 	r.Register(NewFileDiffPreviewTool())
 	r.Register(NewGlobTool())
