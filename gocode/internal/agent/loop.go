@@ -85,6 +85,9 @@ func runIteration(
 	if turn.outputTokens > 0 {
 		state.Continuation.Record(turn.outputTokens)
 	}
+	if turn.stopReason == "max_tokens" {
+		state.MaxTokens = nextOutputBudget(state.MaxTokens, state.MaxOutputCeiling)
+	}
 
 	if turn.stopReason == "tool_use" && len(turn.toolCalls) > 0 {
 		results, err := deps.ExecuteToolBatch(ctx, turn.toolCalls)

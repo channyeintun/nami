@@ -61,6 +61,7 @@ type QueryState struct {
 	Capabilities        api.ModelCapabilities
 	ContextWindow       int
 	MaxTokens           int
+	MaxOutputCeiling    int
 	TurnCount           int
 	MaxTurns            int
 	StopRequested       bool
@@ -70,21 +71,23 @@ type QueryState struct {
 
 // NewQueryState creates initial state from a request.
 func NewQueryState(req QueryRequest) *QueryState {
+	initialOutputBudget := defaultOutputBudget(req.MaxTokens)
 	return &QueryState{
-		Messages:      req.Messages,
-		BasePrompt:    req.SystemPrompt,
-		SystemPrompt:  req.SystemPrompt,
-		SystemContext: LoadSystemContext(),
-		PromptCache:   NewPromptAssemblyCache(),
-		Mode:          req.Mode,
-		Profile:       ProfileForMode(req.Mode),
-		Skills:        req.Skills,
-		Tools:         req.Tools,
-		Capabilities:  req.Capabilities,
-		ContextWindow: req.ContextWindow,
-		MaxTokens:     req.MaxTokens,
-		MaxTurns:      50,
-		Continuation:  NewContinuationTracker(req.MaxTokens),
+		Messages:         req.Messages,
+		BasePrompt:       req.SystemPrompt,
+		SystemPrompt:     req.SystemPrompt,
+		SystemContext:    LoadSystemContext(),
+		PromptCache:      NewPromptAssemblyCache(),
+		Mode:             req.Mode,
+		Profile:          ProfileForMode(req.Mode),
+		Skills:           req.Skills,
+		Tools:            req.Tools,
+		Capabilities:     req.Capabilities,
+		ContextWindow:    req.ContextWindow,
+		MaxTokens:        initialOutputBudget,
+		MaxOutputCeiling: req.MaxTokens,
+		MaxTurns:         50,
+		Continuation:     NewContinuationTracker(req.MaxTokens),
 	}
 }
 
