@@ -146,7 +146,7 @@ func buildMemoryRecallCandidates(files []agent.MemoryFile) []memoryRecallCandida
 		entries := agent.ParseMemoryIndexEntries(file)
 		for _, entry := range entries {
 			line := strings.TrimSpace(entry.RawLine)
-			if line == "" {
+			if line == "" || strings.TrimSpace(entry.Issue) != "" {
 				continue
 			}
 			candidates = append(candidates, memoryRecallCandidate{

@@ -37,6 +37,7 @@ type MemoryIndexEntry struct {
 	NoteType  string
 	NotePath  string
 	Order     int
+	Issue     string
 }
 
 const (
@@ -323,6 +324,7 @@ func formatRelevantMemoryIndexContent(file MemoryFile, currentUserPrompt string,
 	if note := memoryAgeNote(file.UpdatedAt); note != "" {
 		parts = append(parts, note)
 	}
+	parts = append(parts, formatMemoryIndexValidationWarnings(file)...)
 	parts = append(parts, fmt.Sprintf("[memory-recall] Selected %d relevant index entr%s for the current request via %s.", len(selectedLines), pluralSuffix(len(selectedLines), "y", "ies"), selectionSource))
 	parts = append(parts, formatRecalledMemoryEntries(file, selectedLines)...)
 	return strings.Join(parts, "\n")
@@ -347,11 +349,46 @@ func ParseMemoryIndexEntries(file MemoryFile) []MemoryIndexEntry {
 			entry.Filename = filename
 			entry.Title = title
 			entry.NoteType = noteType
-			entry.NotePath = filepath.Join(filepath.Dir(file.Path), filepath.Clean(filename))
+			entry.NotePath, entry.Issue = resolveMemoryNotePath(file.Path, filename)
+		} else if looksLikeMalformedMemoryEntry(line) {
+			entry.Issue = "Malformed MEMORY.md entry. Expected '- [file.md] Title (type)'."
 		}
 		entries = append(entries, entry)
 	}
 	return entries
+}
+
+func looksLikeMalformedMemoryEntry(line string) bool {
+	trimmed := strings.TrimSpace(line)
+	trimmed = strings.TrimPrefix(trimmed, "- ")
+	trimmed = strings.TrimPrefix(trimmed, "* ")
+	if trimmed == "" {
+		return false
+	}
+	return strings.Contains(trimmed, "[") || strings.Contains(trimmed, "]") || strings.Contains(trimmed, "(") || strings.Contains(trimmed, ")")
+}
+
+func resolveMemoryNotePath(indexPath, filename string) (string, string) {
+	baseDir := filepath.Clean(filepath.Dir(indexPath))
+	resolved := filepath.Clean(filepath.Join(baseDir, filename))
+	if !pathWithinBaseDir(baseDir, resolved) {
+		return "", "Referenced memory note resolves outside the memory directory and was skipped."
+	}
+	if _, err := os.Stat(resolved); err != nil {
+		if os.IsNotExist(err) {
+			return resolved, "Referenced memory note file does not exist."
+		}
+		return resolved, fmt.Sprintf("Referenced memory note could not be read: %v", err)
+	}
+	return resolved, ""
+}
+
+func pathWithinBaseDir(baseDir, candidate string) bool {
+	if baseDir == candidate {
+		return true
+	}
+	baseWithSep := baseDir + string(filepath.Separator)
+	return strings.HasPrefix(candidate, baseWithSep)
 }
 
 func parseMemoryIndexEntryLine(line string) (filename, title, noteType string, ok bool) {
@@ -407,13 +444,40 @@ func formatRecalledMemoryEntries(file MemoryFile, selectedLines []string) []stri
 		if !ok || strings.TrimSpace(entry.NotePath) == "" {
 			continue
 		}
+		if strings.TrimSpace(entry.Issue) != "" {
+			parts = append(parts, fmt.Sprintf("[memory-index-warning] %s Entry: %s", entry.Issue, entry.RawLine))
+			continue
+		}
 		excerpt := loadMemoryNoteExcerpt(entry.NotePath)
 		if excerpt == "" {
+			parts = append(parts, fmt.Sprintf("[memory-index-warning] Referenced memory note could not be loaded. Entry: %s", entry.RawLine))
 			continue
 		}
 		parts = append(parts, fmt.Sprintf("<memory_note path=\"%s\" type=\"%s\">\n%s\n</memory_note>", entry.NotePath, entry.NoteType, excerpt))
 	}
 	return parts
+}
+
+func formatMemoryIndexValidationWarnings(file MemoryFile) []string {
+	entries := ParseMemoryIndexEntries(file)
+	issues := make([]string, 0, 3)
+	invalidCount := 0
+	for _, entry := range entries {
+		if strings.TrimSpace(entry.Issue) == "" {
+			continue
+		}
+		invalidCount++
+		if len(issues) < 3 {
+			issues = append(issues, fmt.Sprintf("[memory-index-warning] %s Entry: %s", entry.Issue, entry.RawLine))
+		}
+	}
+	if invalidCount == 0 {
+		return nil
+	}
+	if invalidCount > len(issues) {
+		issues = append(issues, fmt.Sprintf("[memory-index-warning] %d additional invalid MEMORY.md entr%s were skipped.", invalidCount-len(issues), pluralSuffix(invalidCount-len(issues), "y", "ies")))
+	}
+	return issues
 }
 
 func loadMemoryNoteExcerpt(path string) string {
