@@ -277,7 +277,56 @@ func buildGeminiContents(systemPrompt string, messages []Message) ([]geminiConte
 	if len(systemParts) > 0 {
 		instruction = &geminiContent{Role: "system", Parts: systemParts}
 	}
+	contents = ensureGeminiActiveLoopThoughtSignatures(contents)
 	return contents, instruction, nil
+}
+
+const geminiSyntheticThoughtSignature = "skip_thought_signature_validator"
+
+func ensureGeminiActiveLoopThoughtSignatures(contents []geminiContent) []geminiContent {
+	activeLoopStart := -1
+	for index := len(contents) - 1; index >= 0; index-- {
+		content := contents[index]
+		if content.Role != "user" {
+			continue
+		}
+		for _, part := range content.Parts {
+			if strings.TrimSpace(part.Text) != "" {
+				activeLoopStart = index
+				break
+			}
+		}
+		if activeLoopStart >= 0 {
+			break
+		}
+	}
+
+	if activeLoopStart < 0 {
+		return contents
+	}
+
+	updated := make([]geminiContent, len(contents))
+	copy(updated, contents)
+	for index := activeLoopStart; index < len(updated); index++ {
+		content := updated[index]
+		if content.Role != "model" || len(content.Parts) == 0 {
+			continue
+		}
+		parts := make([]geminiPart, len(content.Parts))
+		copy(parts, content.Parts)
+		for partIndex := range parts {
+			if parts[partIndex].FunctionCall == nil {
+				continue
+			}
+			if strings.TrimSpace(parts[partIndex].ThoughtSignature) == "" {
+				parts[partIndex].ThoughtSignature = geminiSyntheticThoughtSignature
+				updated[index] = geminiContent{Role: content.Role, Parts: parts}
+			}
+			break
+		}
+	}
+
+	return updated
 }
 
 func convertGeminiMessage(msg Message, toolNames map[string]string) ([]geminiContent, error) {
@@ -370,6 +419,7 @@ func geminiFunctionResponsePart(result ToolResult, toolNames map[string]string) 
 	}
 	return geminiPart{
 		FunctionResponse: &geminiFunctionResponse{
+			ID:       result.ToolCallID,
 			Name:     name,
 			Response: response,
 		},
@@ -798,6 +848,7 @@ type geminiFunctionCall struct {
 }
 
 type geminiFunctionResponse struct {
+	ID       string         `json:"id,omitempty"`
 	Name     string         `json:"name"`
 	Response map[string]any `json:"response,omitempty"`
 }

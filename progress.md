@@ -188,3 +188,11 @@ Tracking fixes per plan.md.
 - Rebuilt the current release with `cd gocode/tui && make release-local`.
 - Installed updated `gocode` and `gocode-engine` into `~/.local/bin` using `install -m 755`.
 - Verified `gocode` resolves from `~/.local/bin/gocode` and `gocode --help` runs successfully.
+
+### Task 24 — Backfill Gemini Active-Loop Signatures and FunctionResponse IDs ✅
+
+- **File:** `gocode/internal/api/gemini.go`
+- Added `ensureGeminiActiveLoopThoughtSignatures(...)` so the first function-call part in each model step of the active tool loop always carries a valid thought signature; when the original signature is missing, the adapter uses Gemini's documented validator-bypass token `skip_thought_signature_validator`.
+- Added `id` to `functionResponse` replay so Gemini receives the original tool-call identifier along with the function name and response payload.
+- This closes the remaining Gemini tool-loop metadata gap for strict function-calling validation and multi-step tool turns.
+- Verified with `gofmt -w internal/api/gemini.go && go build ./...`.
