@@ -86,15 +86,43 @@ export ANTHROPIC_API_KEY="sk-ant-..."
 
 Supported providers and their environment variables:
 
-| Provider  | Env Variable          |
-| --------- | --------------------- |
-| Anthropic | `ANTHROPIC_API_KEY`   |
-| OpenAI    | `OPENAI_API_KEY`      |
-| Google    | `GEMINI_API_KEY`      |
-| DeepSeek  | `DEEPSEEK_API_KEY`    |
-| Groq      | `GROQ_API_KEY`        |
-| Mistral   | `MISTRAL_API_KEY`     |
-| Ollama    | (none — runs locally) |
+| Provider       | Env Variable          |
+| -------------- | --------------------- |
+| Anthropic      | `ANTHROPIC_API_KEY`   |
+| GitHub Copilot | (use `/connect`)      |
+| OpenAI         | `OPENAI_API_KEY`      |
+| Google         | `GEMINI_API_KEY`      |
+| DeepSeek       | `DEEPSEEK_API_KEY`    |
+| Groq           | `GROQ_API_KEY`        |
+| Mistral        | `MISTRAL_API_KEY`     |
+| Ollama         | (none — runs locally) |
+
+### GitHub Copilot Setup
+
+GitHub Copilot uses an interactive device-login flow instead of a static API key.
+
+Start `gocode`, then run:
+
+```text
+/connect
+```
+
+`gocode` will:
+
+- print the GitHub verification URL and device code in the transcript
+- try to open the verification URL in your browser automatically
+- wait for you to finish the GitHub authorization flow
+- save the resulting credentials in `~/.config/gocode/config.json`
+- switch the main model to `github-copilot/gpt-5.4`
+- set the subagent model to `github-copilot/claude-haiku-4.5`
+
+For GitHub Enterprise, pass the domain explicitly:
+
+```text
+/connect github-copilot your-company.example
+```
+
+After the first successful `/connect`, future `gocode` launches can use GitHub Copilot directly without reconnecting unless your saved GitHub authorization is revoked.
 
 ## Usage
 
@@ -126,6 +154,7 @@ gocode --help                        # Show help
 
 | Command      | Description                                |
 | ------------ | ------------------------------------------ |
+| `/connect`   | Connect GitHub Copilot with device login   |
 | `/plan`      | Switch to plan mode (think before writing) |
 | `/fast`      | Switch to fast mode (execute directly)     |
 | `/model <m>` | Change model (e.g. `/model openai/gpt-4o`) |
@@ -220,6 +249,8 @@ Environment variables override the config file:
 | `GOCODE_API_KEY`         | API key (overrides provider-specific keys)       |
 | `GOCODE_BASE_URL`        | Custom API base URL                              |
 | `GOCODE_PERMISSION_MODE` | `default`, `autoApprove`, or `bypassPermissions` |
+
+If you use GitHub Copilot, the config file will also persist Copilot credentials and may include a `subagent_model` field after `/connect` completes.
 
 ## Architecture
 

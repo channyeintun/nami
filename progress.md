@@ -79,4 +79,20 @@ sees these fields explicitly on every turn:
 listing, so this change keeps the existing context and makes the high-signal
 environment details explicit and easier for the model to use reliably.
 
+## Task 4 — Document GitHub Copilot /connect usage in the README
+
+**Files**: `README.md`, `gocode/README.md`, `progress.md`
+
+Added a dedicated GitHub Copilot setup section to both user-facing README files.
+The docs now explain:
+
+- that GitHub Copilot uses `/connect` instead of a static API key
+- what happens during the device-login flow
+- how to use GitHub Enterprise with `/connect github-copilot <domain>`
+- that the main model becomes `github-copilot/gpt-5.4`
+- that the subagent model becomes `github-copilot/claude-haiku-4.5`
+- that future launches can use the saved Copilot connection directly
+
+The slash-command table was also updated to include `/connect`.
+
 ---
