@@ -482,16 +482,20 @@ func buildAnthropicMessages(systemPrompt string, messages []Message) (string, []
 }
 
 func convertAnthropicMessage(msg Message) (anthropicMessage, bool, error) {
+	trimmed := strings.TrimSpace(msg.Content)
 	blocks := make([]map[string]any, 0, 1+len(msg.ToolCalls)+len(msg.Images))
-	if trimmed := strings.TrimSpace(msg.Content); trimmed != "" {
-		blocks = append(blocks, map[string]any{
-			"type": "text",
-			"text": trimmed,
-		})
-	}
 
 	switch msg.Role {
 	case RoleUser:
+		if msg.ToolResult != nil {
+			blocks = append(blocks, toolResultBlock(*msg.ToolResult))
+		}
+		if trimmed != "" {
+			blocks = append(blocks, map[string]any{
+				"type": "text",
+				"text": trimmed,
+			})
+		}
 		for _, image := range msg.Images {
 			blocks = append(blocks, map[string]any{
 				"type": "image",
@@ -502,20 +506,29 @@ func convertAnthropicMessage(msg Message) (anthropicMessage, bool, error) {
 				},
 			})
 		}
-		if msg.ToolResult != nil {
-			blocks = append(blocks, toolResultBlock(*msg.ToolResult))
-		}
 		if len(blocks) == 0 {
 			return anthropicMessage{}, true, nil
 		}
 		return anthropicMessage{Role: "user", Content: blocks}, false, nil
 	case RoleTool:
 		if msg.ToolResult == nil {
-			return anthropicMessage{}, true, nil
+			if trimmed == "" {
+				return anthropicMessage{}, true, nil
+			}
+			return anthropicMessage{Role: "user", Content: []map[string]any{{
+				"type": "text",
+				"text": trimmed,
+			}}}, false, nil
 		}
 		blocks = append(blocks, toolResultBlock(*msg.ToolResult))
 		return anthropicMessage{Role: "user", Content: blocks}, false, nil
 	case RoleAssistant:
+		if trimmed != "" {
+			blocks = append(blocks, map[string]any{
+				"type": "text",
+				"text": trimmed,
+			})
+		}
 		for _, toolCall := range msg.ToolCalls {
 			input, err := decodeToolInput(toolCall.Input)
 			if err != nil {
@@ -533,6 +546,12 @@ func convertAnthropicMessage(msg Message) (anthropicMessage, bool, error) {
 		}
 		return anthropicMessage{Role: "assistant", Content: blocks}, false, nil
 	default:
+		if trimmed != "" {
+			blocks = append(blocks, map[string]any{
+				"type": "text",
+				"text": trimmed,
+			})
+		}
 		if len(blocks) == 0 {
 			return anthropicMessage{}, true, nil
 		}
