@@ -287,4 +287,34 @@ Verification completed:
 - ran `bunx tsc` in `gocode/tui`
 - ran `make release-local` in `gocode/tui`
 
+## Task 11 — Handle Responses incomplete completions
+
+**Files**: `gocode/internal/api/openai_responses.go`, `progress.md`
+
+Fixed another OpenAI Responses termination path that could still surface as
+`(Model returned an empty response)` during review-style prompts.
+
+Root cause:
+
+- the Responses adapter handled `response.completed`
+- but it ignored `response.incomplete`, which the reference implementations also
+  treat as a terminal event
+- when Copilot ended a turn with `response.incomplete`, `gocode` reached EOF
+  without emitting a model stop event
+- the agent loop then normalized the empty stop reason to `end_turn`, and the
+  TUI rendered the empty-response fallback
+
+Implementation completed:
+
+- updated the Responses event handler to treat `response.incomplete` as a normal
+  terminal event alongside `response.completed`
+- this ensures usage and stop-reason handling still run and prevents the empty
+  synthetic assistant message caused by a missing terminal event
+
+Verification completed:
+
+- ran `gofmt -w` on the changed Go file
+- ran `go build ./...`
+- ran `make release-local` in `gocode/tui`
+
 ---

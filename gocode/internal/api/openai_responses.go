@@ -270,7 +270,7 @@ func (c *OpenAIResponsesClient) handleEvent(data string, state *openAIResponsesS
 		return nil
 	case "response.output_item.done":
 		return state.handleOutputItemDone(trimmed, yield)
-	case "response.completed":
+	case "response.completed", "response.incomplete":
 		var evt openAIResponsesCompletedEvent
 		if err := json.Unmarshal([]byte(trimmed), &evt); err != nil {
 			return fmt.Errorf("decode OpenAI Responses completed event: %w", err)
