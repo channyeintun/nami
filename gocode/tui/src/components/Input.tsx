@@ -321,7 +321,6 @@ const Input: FC<InputProps> = ({
         borderColor="gray"
         borderLeft={false}
         borderRight={false}
-        paddingX={2}
       >
         <Box flexDirection="column">
           {showPlaceholder ? (
