@@ -93,8 +93,13 @@ Tracking fixes per plan.md.
 
 ## Phase 4: Structural Improvements
 
-### Task 12 — Extract Engine Loop from `main.go` ⏭️
-- Deferred: large-scope file reorganization only; no logic changes needed.
+### Task 12 — Extract Engine Loop from `main.go` ✅
+- **Files:** `cmd/gocode/main.go` (trimmed to ~147 lines), new files:
+  - `cmd/gocode/engine.go` (~1065 lines) — `runStdioEngine`, model helpers, stream emitters, plan review gate
+  - `cmd/gocode/tool_executor.go` (~686 lines) — `executeToolCalls`, permission helpers, tool param utilities
+  - `cmd/gocode/slash_commands.go` (~495 lines) — `handleSlashCommand`, format helpers, `gitDiff`
+  - `cmd/gocode/session_helpers.go` (~368 lines) — artifact emitters, compaction, `persistSessionState`
+- Pure file reorganization; no logic changes. Build verified after split.
 
 ### Task 13 — Add Foundational Tests ⏭️
 - Skipped per project policy.
