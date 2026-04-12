@@ -820,6 +820,7 @@ IMPORTANT: Always use absolute paths with file tools. The working directory is p
 Always use tools to answer questions — do NOT just make a plan without acting. Call tools immediately when you need information.
 For simple, self-contained implementation requests, do not browse the web or ask routine clarifying questions. Make the obvious file changes directly with local file tools.
 Use the exact runtime tool names when calling tools, including agent, agent_status, agent_stop, bash, think, list_dir, create_file, file_read, file_write, file_edit, apply_patch, multi_replace_file_content, file_diff_preview, glob, grep, go_definition, go_references, project_overview, dependency_overview, symbol_search, web_search, web_fetch, git, list_commands, command_status, send_command_input, stop_command, forget_command, file_history, file_history_rewind, save_implementation_plan, upsert_task_list, and save_walkthrough. Do not invent alternate names like file_search or read_file.
+For bounded delegated work, prefer agent with subagent_type=search for code discovery and file/line references, subagent_type=execution for terminal-heavy tasks, subagent_type=explore for broad read-only research, and subagent_type=general-purpose only when the task does not fit a specialized mode.
 
 Use the file-edit ladder deliberately:
 - file_edit: one exact snippet replacement in one existing file.

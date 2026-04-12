@@ -125,7 +125,18 @@ function statusColor(status: string): "cyan" | "yellow" | "green" | "red" {
 }
 
 function formatSubagentType(subagentType: string): string {
-  return subagentType ? `(${subagentType})` : "";
+  switch (subagentType) {
+    case "search":
+      return "(Search)";
+    case "execution":
+      return "(Execution)";
+    case "general-purpose":
+      return "(General Purpose)";
+    case "explore":
+      return "(Explore)";
+    default:
+      return subagentType ? `(${subagentType})` : "";
+  }
 }
 
 function formatMeta(agent: UIBackgroundAgent): string {

@@ -153,22 +153,22 @@ gocode --help                        # Show help
 
 ### Slash Commands
 
-| Command | Description |
-| ------------ | ----------------------------------------------- |
-| `/connect` | Connect GitHub Copilot with device login |
-| `/plan` | Switch to plan mode (read-only until approved) |
-| `/fast` | Switch to fast mode (direct execution) |
-| `/model [name]` | Show or switch the active model |
-| `/reasoning [level]` | Show or set GPT-5 reasoning effort |
-| `/cost` | Show token usage and cost breakdown |
-| `/usage` | Alias for `/cost` |
-| `/compact` | Compact the conversation to save context |
-| `/resume [id]` | Resume a previous session |
-| `/clear` | Clear the conversation and start a new session |
-| `/status` | Show the current session status |
-| `/sessions` | List recent sessions |
-| `/diff [args]` | Show git diff (for example `/diff --staged`) |
-| `/help` | Show the slash-command help text |
+| Command              | Description                                    |
+| -------------------- | ---------------------------------------------- |
+| `/connect`           | Connect GitHub Copilot with device login       |
+| `/plan`              | Switch to plan mode (read-only until approved) |
+| `/fast`              | Switch to fast mode (direct execution)         |
+| `/model [name]`      | Show or switch the active model                |
+| `/reasoning [level]` | Show or set GPT-5 reasoning effort             |
+| `/cost`              | Show token usage and cost breakdown            |
+| `/usage`             | Alias for `/cost`                              |
+| `/compact`           | Compact the conversation to save context       |
+| `/resume [id]`       | Resume a previous session                      |
+| `/clear`             | Clear the conversation and start a new session |
+| `/status`            | Show the current session status                |
+| `/sessions`          | List recent sessions                           |
+| `/diff [args]`       | Show git diff (for example `/diff --staged`)   |
+| `/help`              | Show the slash-command help text               |
 
 ### Permission System
 
@@ -229,6 +229,25 @@ The agent has access to:
 | **file_history**               | Inspect tracked file history, create snapshots, and diff them                                                   |
 | **file_history_rewind**        | Restore tracked files to a previous file-history snapshot                                                       |
 | **git**                        | Read-only git operations (status, diff, log, blame)                                                             |
+
+### Child Agent Modes
+
+The `agent` tool supports four bounded child-agent modes:
+
+| Mode              | Intended use                                                                      |
+| ----------------- | --------------------------------------------------------------------------------- |
+| `explore`         | Broad read-only codebase research and architectural investigation                 |
+| `search`          | Iterative code discovery that returns compact file-and-line references            |
+| `execution`       | Terminal-heavy delegated work such as builds, tests, installs, and log inspection |
+| `general-purpose` | Broader delegated work when the task does not fit a specialized mode              |
+
+`explore` remains the default for backward compatibility.
+
+The `search` mode is workspace-focused: it can inspect the repository and report references, but it does not include web search tools.
+
+The `execution` mode is intentionally narrow and non-writing by default. It can run commands and inspect local context, but there is no nested interactive approval flow inside a child session. If the cloned permission policy would require approval for a command, the child agent will report that the action was not approved instead of prompting interactively.
+
+Background child agents continue to surface through `agent_status` and `agent_stop`, and the TUI background agent panel now distinguishes explore, search, execution, and general-purpose runs.
 
 ### Edit Tool Selection
 

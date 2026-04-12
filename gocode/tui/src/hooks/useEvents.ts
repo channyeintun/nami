@@ -887,6 +887,7 @@ export function useEvents(initialModel: string, initialMode: string) {
             status: normalizeBackgroundAgentStatus(p.status),
             summary: summarizeBackgroundAgent(
               p.status,
+              metadata.subagentType,
               p.summary,
               p.error,
               metadata.statusMessage,
@@ -1440,6 +1441,7 @@ function parseBackgroundAgentResult(
     status,
     summary: summarizeBackgroundAgent(
       status,
+      metadata.subagentType,
       result.summary,
       result.error,
       metadata.statusMessage,
@@ -1870,6 +1872,7 @@ function normalizeBackgroundAgentStatus(status?: string): string {
 
 function summarizeBackgroundAgent(
   status: string,
+  subagentType: string,
   summary?: string,
   error?: string,
   statusMessage?: string,
@@ -1889,19 +1892,21 @@ function summarizeBackgroundAgent(
     return normalizedError;
   }
 
+  const subject = friendlySubagentLabel(subagentType) || "child agent";
+
   switch (status) {
     case "running":
-      return "Child agent running in the background.";
+      return `${capitalize(subject)} running in the background.`;
     case "cancelling":
-      return "Cancellation requested for the background child agent.";
+      return `Cancellation requested for the background ${subject}.`;
     case "completed":
-      return "Background child agent completed.";
+      return `Background ${subject} completed.`;
     case "cancelled":
-      return "Background child agent cancelled.";
+      return `Background ${subject} cancelled.`;
     case "failed":
-      return "Background child agent failed.";
+      return `Background ${subject} failed.`;
     default:
-      return "Background child agent updated.";
+      return `Background ${subject} updated.`;
   }
 }
 
@@ -2038,7 +2043,31 @@ function truncateNoticeLabel(value: string): string {
 
 function backgroundAgentSubject(agent: UIBackgroundAgent): string {
   const label = agent.description || agent.invocationId || agent.agentId;
-  return `Background agent ${label}`;
+  const subject =
+    friendlySubagentLabel(agent.subagentType) || "background agent";
+  return `${capitalize(subject)} ${label}`;
+}
+
+function friendlySubagentLabel(subagentType: string): string {
+  switch (subagentType) {
+    case "search":
+      return "search agent";
+    case "execution":
+      return "execution agent";
+    case "general-purpose":
+      return "general-purpose agent";
+    case "explore":
+      return "explore agent";
+    default:
+      return "";
+  }
+}
+
+function capitalize(value: string): string {
+  if (value.length === 0) {
+    return value;
+  }
+  return value[0].toUpperCase() + value.slice(1);
 }
 
 function summarizeNoticeWithDetail(prefix: string, detail: string): string {

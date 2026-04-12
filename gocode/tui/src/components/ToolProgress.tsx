@@ -166,7 +166,7 @@ function describeTool(toolCall: UIToolCall): ToolDescriptor {
       return { title: "Git", summary: summarizeGitInput(toolCall.input) };
     case "agent":
       return {
-        title: "Agent",
+        title: agentToolTitle(toolCall.input),
         summary: summarizeInput(toolCall.name, toolCall.input),
       };
     case "agent_status":
@@ -430,7 +430,9 @@ function summarizeAgentOutput(output?: string): string {
       lines.push(`Agent ID: ${result.agent_id}`);
     }
     if (result.subagent_type || metadata?.subagent_type) {
-      lines.push(`Type: ${result.subagent_type || metadata?.subagent_type}`);
+      lines.push(
+        `Type: ${formatSubagentType(result.subagent_type || metadata?.subagent_type || "")}`,
+      );
     }
     if (result.session_id) {
       lines.push(`Session: ${result.session_id}`);
@@ -483,6 +485,31 @@ function summarizeAgentStatus(status?: string): string {
       return "Background child agent failed.";
     default:
       return "Agent call completed.";
+  }
+}
+
+function agentToolTitle(rawInput: string): string {
+  try {
+    const input = JSON.parse(rawInput) as { subagent_type?: string };
+    const subagentType = formatSubagentType(input.subagent_type ?? "");
+    return subagentType ? `${subagentType} Agent` : "Agent";
+  } catch {
+    return "Agent";
+  }
+}
+
+function formatSubagentType(subagentType: string): string {
+  switch (subagentType) {
+    case "search":
+      return "Search";
+    case "execution":
+      return "Execution";
+    case "general-purpose":
+      return "General Purpose";
+    case "explore":
+      return "Explore";
+    default:
+      return subagentType;
   }
 }
 

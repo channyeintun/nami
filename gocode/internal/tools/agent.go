@@ -8,6 +8,8 @@ import (
 )
 
 const subagentTypeExplore = "explore"
+const subagentTypeSearch = "search"
+const subagentTypeExecution = "execution"
 const subagentTypeGeneralPurpose = "general-purpose"
 
 type AgentRunRequest struct {
@@ -78,7 +80,7 @@ func (t *AgentTool) Name() string {
 }
 
 func (t *AgentTool) Description() string {
-	return "Spawn a bounded child agent in a fresh context and return its final report."
+	return "Spawn a bounded child agent in a fresh context. Prefer search for code discovery, execution for terminal-heavy tasks, explore for broad read-only research, and general-purpose for broader delegated work."
 }
 
 func (t *AgentTool) InputSchema() any {
@@ -95,8 +97,8 @@ func (t *AgentTool) InputSchema() any {
 			},
 			"subagent_type": map[string]any{
 				"type":        "string",
-				"description": "The child agent type. Supported values are explore and general-purpose.",
-				"enum":        []string{subagentTypeExplore, subagentTypeGeneralPurpose},
+				"description": "The child agent type: explore for broad read-only research, search for iterative code discovery that returns file and line references, execution for terminal-heavy tasks like builds, tests, and log inspection, and general-purpose for broader delegated work.",
+				"enum":        []string{subagentTypeExplore, subagentTypeSearch, subagentTypeExecution, subagentTypeGeneralPurpose},
 			},
 			"run_in_background": map[string]any{
 				"type":        "boolean",
@@ -124,7 +126,7 @@ func (t *AgentTool) Validate(input ToolInput) error {
 	if !ok || strings.TrimSpace(prompt) == "" {
 		return fmt.Errorf("agent requires prompt")
 	}
-	if subagentType, ok := stringParam(input.Params, "subagent_type"); ok && strings.TrimSpace(subagentType) != "" && strings.TrimSpace(subagentType) != subagentTypeExplore && strings.TrimSpace(subagentType) != subagentTypeGeneralPurpose {
+	if subagentType, ok := stringParam(input.Params, "subagent_type"); ok && strings.TrimSpace(subagentType) != "" && !isSupportedAgentSubagentType(strings.TrimSpace(subagentType)) {
 		return fmt.Errorf("agent subagent_type %q is not supported", subagentType)
 	}
 	return nil
@@ -157,6 +159,15 @@ func (t *AgentTool) Execute(ctx context.Context, input ToolInput) (ToolOutput, e
 		return ToolOutput{}, fmt.Errorf("marshal agent result: %w", err)
 	}
 	return ToolOutput{Output: string(encoded)}, nil
+}
+
+func isSupportedAgentSubagentType(subagentType string) bool {
+	switch subagentType {
+	case subagentTypeExplore, subagentTypeSearch, subagentTypeExecution, subagentTypeGeneralPurpose:
+		return true
+	default:
+		return false
+	}
 }
 
 type AgentStatusTool struct {

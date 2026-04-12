@@ -25,6 +25,8 @@ import (
 )
 
 const exploreSubagentType = "explore"
+const searchSubagentType = "search"
+const executionSubagentType = "execution"
 const generalPurposeSubagentType = "general-purpose"
 
 var exploreSubagentTools = []string{
@@ -42,6 +44,34 @@ var exploreSubagentTools = []string{
 	"web_search",
 	"web_fetch",
 	"git",
+}
+
+var searchSubagentTools = []string{
+	"think",
+	"list_dir",
+	"file_read",
+	"file_diff_preview",
+	"glob",
+	"grep",
+	"go_definition",
+	"go_references",
+	"project_overview",
+	"dependency_overview",
+	"symbol_search",
+	"git",
+}
+
+var executionSubagentTools = []string{
+	"bash",
+	"list_commands",
+	"command_status",
+	"send_command_input",
+	"stop_command",
+	"forget_command",
+	"list_dir",
+	"file_read",
+	"file_diff_preview",
+	"think",
 }
 
 var generalPurposeSubagentTools = []string{
@@ -94,7 +124,7 @@ func makeSubagentRunner(
 		if subagentType == "" {
 			subagentType = exploreSubagentType
 		}
-		if subagentType != exploreSubagentType && subagentType != generalPurposeSubagentType {
+		if !isSupportedSubagentType(subagentType) {
 			return toolpkg.AgentRunResult{}, fmt.Errorf("agent subagent_type %q is not supported yet", subagentType)
 		}
 
@@ -581,23 +611,67 @@ func childStatusMessage(result toolpkg.AgentRunResult) string {
 func subagentSystemPrompt(subagentType string, defs []api.ToolDefinition) string {
 	names := toolDefinitionNames(defs)
 	toolList := strings.Join(names, ", ")
-	behavior := "This subagent is read-only and artifact-safe: do not modify files, do not create or update session artifacts, and do not attempt background process control."
-	if subagentType == generalPurposeSubagentType {
-		behavior = "This subagent is artifact-safe: do not create or update session artifacts. You may use broader tools, but there is no interactive approval path inside the child session. Any write or execute action that the cloned permission policy would not auto-approve will be denied. Avoid background process control tools."
-	}
-	return strings.TrimSpace(fmt.Sprintf(`You are Go CLI %s, a bounded subagent running in a fresh context.
+	common := fmt.Sprintf(`You are Go CLI %s, a bounded subagent running in a fresh context.
 
 IMPORTANT: Always use absolute paths with file tools. The working directory is provided in the environment context below.
-Use only the tools exposed to you in this session. The exact runtime tool names available are: %s.
-%s
-Work only on the delegated task. Keep the final response concise and report concrete findings with file paths and next steps when useful.`, strings.Title(subagentType), toolList, behavior))
+Use only the tools exposed to you in this session. The exact runtime tool names available are: %s.`, subagentDisplayName(subagentType), toolList)
+
+	switch subagentType {
+	case searchSubagentType:
+		return strings.TrimSpace(fmt.Sprintf(`%s
+
+You are an AI coding research assistant that uses search tools to gather information. Stay workspace-focused: search the repository, inspect files, and return compact references instead of long prose.
+This subagent is read-only and artifact-safe: do not modify files, do not create or update session artifacts, and do not attempt background process control.
+Search iteratively until you have enough evidence. Prefer concise findings tied to concrete file paths.
+
+Once you have thoroughly searched the repository, return a message with ONLY the <final_answer> tag containing relevant absolute file paths and line ranges.
+
+Example:
+<final_answer>
+/absolute/path/to/file.go:10-40
+/absolute/path/to/other.go:88-130
+</final_answer>`, common))
+	case executionSubagentType:
+		return strings.TrimSpace(fmt.Sprintf(`%s
+
+You are a terminal-focused execution assistant. You may run commands and adapt them as needed to complete the delegated task efficiently.
+This subagent is artifact-safe and non-writing by default: do not modify files, do not create or update session artifacts, and do not attempt background process control beyond the command-management tools already provided.
+There is no interactive approval path inside the child session. Any execute action that the cloned permission policy would not auto-approve will be denied. If a command is denied, report that clearly and continue with any safe read-only inspection that still helps.
+
+Once you have finished, return a message with ONLY the <final_answer> tag containing a compact summary of each important command that was run.
+
+Example:
+<final_answer>
+Command: go test ./...
+Summary: 2 packages failed. Key error excerpt: ...
+
+Command: go test ./internal/api
+Summary: Package passes after isolating the failure.
+</final_answer>`, common))
+	case generalPurposeSubagentType:
+		return strings.TrimSpace(fmt.Sprintf(`%s
+
+This subagent is artifact-safe: do not create or update session artifacts. You may use broader tools, but there is no interactive approval path inside the child session. Any write or execute action that the cloned permission policy would not auto-approve will be denied. Avoid background process control tools.
+Work only on the delegated task. Keep the final response concise and report concrete outcomes, files, and next steps when useful.`, common))
+	default:
+		return strings.TrimSpace(fmt.Sprintf(`%s
+
+This subagent is read-only and artifact-safe: do not modify files, do not create or update session artifacts, and do not attempt background process control.
+Work only on the delegated task. Prefer parallel read-only exploration where it helps. Keep the final response concise and report concrete findings with file paths and next steps when useful.`, common))
+	}
 }
 
 func subagentToolNames(subagentType string) []string {
-	if subagentType == generalPurposeSubagentType {
+	switch subagentType {
+	case searchSubagentType:
+		return searchSubagentTools
+	case executionSubagentType:
+		return executionSubagentTools
+	case generalPurposeSubagentType:
 		return generalPurposeSubagentTools
+	default:
+		return exploreSubagentTools
 	}
-	return exploreSubagentTools
 }
 
 func toolDefinitionNames(defs []api.ToolDefinition) []string {
@@ -617,7 +691,7 @@ func latestAssistantContent(messages []api.Message) string {
 		if strings.TrimSpace(msg.Content) == "" {
 			continue
 		}
-		return strings.TrimSpace(msg.Content)
+		return normalizeSubagentFinalAnswer(msg.Content)
 	}
 	return "Subagent completed without a final text response. See the child transcript for details."
 }
@@ -660,8 +734,8 @@ func executeToolCallsForSubagent(
 			results[index] = api.ToolResult{ToolCallID: normalized.ID, Output: err.Error(), IsError: true}
 			continue
 		}
-		if subagentType == exploreSubagentType && tool.Permission() != toolpkg.PermissionReadOnly {
-			results[index] = api.ToolResult{ToolCallID: normalized.ID, Output: fmt.Sprintf("tool %q is not allowed in the explore subagent", tool.Name()), IsError: true}
+		if !subagentAllowsTool(subagentType, tool.Permission()) {
+			results[index] = api.ToolResult{ToolCallID: normalized.ID, Output: fmt.Sprintf("tool %q is not allowed in the %s subagent", tool.Name(), subagentType), IsError: true}
 			continue
 		}
 		pending = append(pending, toolpkg.PendingCall{Index: index, Tool: tool, Input: input})
@@ -699,4 +773,55 @@ func executeToolCallsForSubagent(
 	}
 
 	return results, nil
+}
+
+func isSupportedSubagentType(subagentType string) bool {
+	switch strings.TrimSpace(subagentType) {
+	case exploreSubagentType, searchSubagentType, executionSubagentType, generalPurposeSubagentType:
+		return true
+	default:
+		return false
+	}
+}
+
+func subagentDisplayName(subagentType string) string {
+	switch strings.TrimSpace(subagentType) {
+	case searchSubagentType:
+		return "Search"
+	case executionSubagentType:
+		return "Execution"
+	case generalPurposeSubagentType:
+		return "General Purpose"
+	default:
+		return "Explore"
+	}
+}
+
+func subagentAllowsTool(subagentType string, permission toolpkg.PermissionLevel) bool {
+	switch strings.TrimSpace(subagentType) {
+	case exploreSubagentType, searchSubagentType:
+		return permission == toolpkg.PermissionReadOnly
+	case executionSubagentType:
+		return permission != toolpkg.PermissionWrite
+	default:
+		return true
+	}
+}
+
+func normalizeSubagentFinalAnswer(content string) string {
+	trimmed := strings.TrimSpace(content)
+	if trimmed == "" {
+		return ""
+	}
+	lower := strings.ToLower(trimmed)
+	start := strings.Index(lower, "<final_answer>")
+	end := strings.LastIndex(lower, "</final_answer>")
+	if start == -1 || end == -1 || end <= start {
+		return trimmed
+	}
+	inner := strings.TrimSpace(trimmed[start+len("<final_answer>") : end])
+	if inner == "" {
+		return trimmed
+	}
+	return inner
 }
