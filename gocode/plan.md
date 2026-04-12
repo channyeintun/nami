@@ -38,6 +38,7 @@ Scope:
 - Move each slash command branch (~13 commands: connect, plan, fast, model, reasoning, cost/usage, compact, resume, clear, help, status, sessions, diff) into focused handler functions or types.
 - Replace the 8-value return tuple `(bool, string, time.Time, ExecutionMode, string, string, []Message, error)` with a structured state object that handlers receive and return.
 - Keep shared helpers for persistence and event emission where that reduces duplication.
+- Extract `/connect` provider dispatch into a secondary registry (`connectProviderRegistry`) so new provider connect flows are additive — one function + one map entry — with common client setup and event emission handled by the dispatcher.
 
 Guardrails:
 

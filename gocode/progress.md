@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Implementation complete.
+Future-proofing complete.
 
 ## Completed
 
@@ -16,6 +16,18 @@ Implementation complete.
 ## Pending
 
 None.
+
+### Task 4: Connect Provider Registry Extraction
+
+Status: Completed
+
+Steps completed:
+
+1. Introduced `connectResult`, `connectProviderFunc`, and `connectProviderRegistry` types.
+2. Extracted the GitHub Copilot OAuth flow into `connectGitHubCopilot`.
+3. Refactored `handleConnectSlashCommand` into a registry lookup + common finalization (client creation, debug proxy, state persist, event emission).
+4. Adding a new provider's connect flow now requires one function + one map entry; no changes to the dispatcher.
+5. Verified the CLI still builds with `go build ./cmd/gocode`.
 
 ## Detailed Step Log
 

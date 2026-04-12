@@ -127,127 +127,164 @@ func (cmd *slashCommandContext) persistState() error {
 	})
 }
 
+type connectResult struct {
+	Provider      string
+	Model         string
+	Config        config.Config
+	FormatMessage func(activeModelID string) string
+}
+
+type connectProviderFunc func(cmd *slashCommandContext, extraArgs string) (*connectResult, error)
+
+var connectProviderRegistry = map[string]connectProviderFunc{
+	"github-copilot": connectGitHubCopilot,
+}
+
 func handleConnectSlashCommand(cmd *slashCommandContext) error {
-	providerName, enterpriseInput, err := parseConnectArgs(cmd.args)
+	providerName, extraArgs, err := parseConnectArgs(cmd.args)
 	if err != nil {
 		return emitTextResponse(cmd.bridge, err.Error())
 	}
 
-	switch providerName {
-	case "github-copilot":
-		persisted := config.Load()
-		domain, err := api.NormalizeGitHubCopilotDomain(enterpriseInput)
-		if err != nil {
-			return emitTextResponse(cmd.bridge, err.Error())
-		}
-
-		copilotAuth := persisted.GitHubCopilot
-		if strings.TrimSpace(domain) != "" {
-			copilotAuth.EnterpriseDomain = domain
-		}
-
-		appendSlashResponse(cmd.bridge, "Connecting GitHub Copilot...\n\n")
-
-		refreshCtx, cancel := context.WithTimeout(cmd.ctx, 2*time.Minute)
-		defer cancel()
-
-		if strings.TrimSpace(copilotAuth.GitHubToken) != "" {
-			appendSlashResponse(cmd.bridge, "Refreshing saved credentials...\n\n")
-			refreshed, refreshErr := api.RefreshGitHubCopilotToken(refreshCtx, copilotAuth.GitHubToken, copilotAuth.EnterpriseDomain)
-			if refreshErr == nil {
-				copilotAuth.AccessToken = refreshed.AccessToken
-				copilotAuth.ExpiresAtUnixMS = refreshed.ExpiresAt.UnixMilli()
-			} else {
-				appendSlashResponse(cmd.bridge, "Saved credentials could not be refreshed. Starting device login...\n\n")
-				copilotAuth.AccessToken = ""
-				copilotAuth.ExpiresAtUnixMS = 0
-			}
-		}
-
-		if strings.TrimSpace(copilotAuth.AccessToken) == "" {
-			device, err := api.StartGitHubCopilotDeviceFlow(refreshCtx, copilotAuth.EnterpriseDomain)
-			if err != nil {
-				return emitTextResponse(cmd.bridge, fmt.Sprintf("GitHub Copilot connect failed: %v", err))
-			}
-
-			browserMessage := ""
-			if err := openBrowserURL(device.VerificationURI); err == nil {
-				browserMessage = "Opened the browser automatically.\n"
-			}
-			appendSlashResponse(cmd.bridge, fmt.Sprintf("%sVisit: %s\nEnter code: %s\n\nWaiting for GitHub authorization...\n\n", browserMessage, device.VerificationURI, device.UserCode))
-
-			githubToken, err := api.PollGitHubCopilotGitHubToken(
-				refreshCtx,
-				copilotAuth.EnterpriseDomain,
-				device.DeviceCode,
-				device.IntervalSeconds,
-				device.ExpiresIn,
-			)
-			if err != nil {
-				return emitTextResponse(cmd.bridge, fmt.Sprintf("GitHub Copilot connect failed: %v", err))
-			}
-
-			refreshed, err := api.RefreshGitHubCopilotToken(refreshCtx, githubToken, copilotAuth.EnterpriseDomain)
-			if err != nil {
-				return emitTextResponse(cmd.bridge, fmt.Sprintf("GitHub Copilot token exchange failed: %v", err))
-			}
-
-			copilotAuth.GitHubToken = githubToken
-			copilotAuth.AccessToken = refreshed.AccessToken
-			copilotAuth.ExpiresAtUnixMS = refreshed.ExpiresAt.UnixMilli()
-		}
-
-		policySummary := ""
-		if strings.TrimSpace(copilotAuth.AccessToken) != "" {
-			appendSlashResponse(cmd.bridge, "Enabling GitHub Copilot model policies...\n\n")
-			policyCtx, policyCancel := context.WithTimeout(cmd.ctx, 20*time.Second)
-			modelIDs := gitHubCopilotPolicyModels(persisted)
-			if discovered, discoverErr := api.ListGitHubCopilotModelIDs(policyCtx, copilotAuth.AccessToken, copilotAuth.EnterpriseDomain); discoverErr == nil {
-				modelIDs = mergeGitHubCopilotModelIDs(modelIDs, discovered)
-			}
-			failures := api.EnableGitHubCopilotModels(policyCtx, copilotAuth.AccessToken, copilotAuth.EnterpriseDomain, modelIDs)
-			policyCancel()
-			if total := len(modelIDs); total > 0 {
-				policySummary = fmt.Sprintf(" Enabled policy for %d/%d Copilot models.", total-len(failures), total)
-			}
-		}
-
-		persisted.GitHubCopilot = copilotAuth
-		persisted.Model = modelRef("github-copilot", api.Presets["github-copilot"].DefaultModel)
-		persisted.SubagentModel = modelRef("github-copilot", api.GitHubCopilotDefaultSubagentModel)
-		if strings.TrimSpace(persisted.ReasoningEffort) == "" {
-			persisted.ReasoningEffort = api.ReasoningEffortMedium
-		}
-		if err := config.Save(persisted); err != nil {
-			return emitTextResponse(cmd.bridge, fmt.Sprintf("save GitHub Copilot credentials: %v", err))
-		}
-
-		nextClient, err := newLLMClient("github-copilot", api.Presets["github-copilot"].DefaultModel, persisted)
-		if err != nil {
-			return emitTextResponse(cmd.bridge, fmt.Sprintf("initialize GitHub Copilot client: %v", err))
-		}
-
-		if debuglog.Enabled {
-			nextClient = newDebugClientProxy(nextClient)
-		}
-		*cmd.client = nextClient
-		cmd.state.ActiveModelID = modelRef("github-copilot", nextClient.ModelID())
-		if err := emitToolUseCapabilityNotice(cmd.bridge, cmd.state.ActiveModelID, *cmd.client, nil); err != nil {
-			return err
-		}
-		if err := cmd.persistState(); err != nil {
-			return err
-		}
-		if err := emitModelChanged(cmd.bridge, cmd.state.ActiveModelID, *cmd.client); err != nil {
-			return err
-		}
-		if err := emitContextWindowUsage(cmd.bridge, *cmd.client, cmd.state.Messages); err != nil {
-			return err
-		}
-		return emitTextResponse(cmd.bridge, fmt.Sprintf("GitHub Copilot connected. Set main model to %s, subagent model to github-copilot/%s, and reasoning effort to %s.%s", cmd.state.ActiveModelID, api.GitHubCopilotDefaultSubagentModel, persisted.ReasoningEffort, policySummary))
-	default:
+	handler, ok := connectProviderRegistry[providerName]
+	if !ok {
 		return emitTextResponse(cmd.bridge, fmt.Sprintf("unsupported connect provider: %s", providerName))
 	}
+
+	result, err := handler(cmd, extraArgs)
+	if err != nil {
+		return err
+	}
+	if result == nil {
+		return nil
+	}
+
+	nextClient, err := newLLMClient(result.Provider, result.Model, result.Config)
+	if err != nil {
+		return emitTextResponse(cmd.bridge, fmt.Sprintf("initialize %s client: %v", result.Provider, err))
+	}
+	if debuglog.Enabled {
+		nextClient = newDebugClientProxy(nextClient)
+	}
+	*cmd.client = nextClient
+	cmd.state.ActiveModelID = modelRef(result.Provider, nextClient.ModelID())
+	if err := emitToolUseCapabilityNotice(cmd.bridge, cmd.state.ActiveModelID, *cmd.client, nil); err != nil {
+		return err
+	}
+	if err := cmd.persistState(); err != nil {
+		return err
+	}
+	if err := emitModelChanged(cmd.bridge, cmd.state.ActiveModelID, *cmd.client); err != nil {
+		return err
+	}
+	if err := emitContextWindowUsage(cmd.bridge, *cmd.client, cmd.state.Messages); err != nil {
+		return err
+	}
+	return emitTextResponse(cmd.bridge, result.FormatMessage(cmd.state.ActiveModelID))
+}
+
+func connectGitHubCopilot(cmd *slashCommandContext, enterpriseInput string) (*connectResult, error) {
+	persisted := config.Load()
+	domain, err := api.NormalizeGitHubCopilotDomain(enterpriseInput)
+	if err != nil {
+		return nil, emitTextResponse(cmd.bridge, err.Error())
+	}
+
+	copilotAuth := persisted.GitHubCopilot
+	if strings.TrimSpace(domain) != "" {
+		copilotAuth.EnterpriseDomain = domain
+	}
+
+	appendSlashResponse(cmd.bridge, "Connecting GitHub Copilot...\n\n")
+
+	refreshCtx, cancel := context.WithTimeout(cmd.ctx, 2*time.Minute)
+	defer cancel()
+
+	if strings.TrimSpace(copilotAuth.GitHubToken) != "" {
+		appendSlashResponse(cmd.bridge, "Refreshing saved credentials...\n\n")
+		refreshed, refreshErr := api.RefreshGitHubCopilotToken(refreshCtx, copilotAuth.GitHubToken, copilotAuth.EnterpriseDomain)
+		if refreshErr == nil {
+			copilotAuth.AccessToken = refreshed.AccessToken
+			copilotAuth.ExpiresAtUnixMS = refreshed.ExpiresAt.UnixMilli()
+		} else {
+			appendSlashResponse(cmd.bridge, "Saved credentials could not be refreshed. Starting device login...\n\n")
+			copilotAuth.AccessToken = ""
+			copilotAuth.ExpiresAtUnixMS = 0
+		}
+	}
+
+	if strings.TrimSpace(copilotAuth.AccessToken) == "" {
+		device, err := api.StartGitHubCopilotDeviceFlow(refreshCtx, copilotAuth.EnterpriseDomain)
+		if err != nil {
+			return nil, emitTextResponse(cmd.bridge, fmt.Sprintf("GitHub Copilot connect failed: %v", err))
+		}
+
+		browserMessage := ""
+		if err := openBrowserURL(device.VerificationURI); err == nil {
+			browserMessage = "Opened the browser automatically.\n"
+		}
+		appendSlashResponse(cmd.bridge, fmt.Sprintf("%sVisit: %s\nEnter code: %s\n\nWaiting for GitHub authorization...\n\n", browserMessage, device.VerificationURI, device.UserCode))
+
+		githubToken, err := api.PollGitHubCopilotGitHubToken(
+			refreshCtx,
+			copilotAuth.EnterpriseDomain,
+			device.DeviceCode,
+			device.IntervalSeconds,
+			device.ExpiresIn,
+		)
+		if err != nil {
+			return nil, emitTextResponse(cmd.bridge, fmt.Sprintf("GitHub Copilot connect failed: %v", err))
+		}
+
+		refreshed, err := api.RefreshGitHubCopilotToken(refreshCtx, githubToken, copilotAuth.EnterpriseDomain)
+		if err != nil {
+			return nil, emitTextResponse(cmd.bridge, fmt.Sprintf("GitHub Copilot token exchange failed: %v", err))
+		}
+
+		copilotAuth.GitHubToken = githubToken
+		copilotAuth.AccessToken = refreshed.AccessToken
+		copilotAuth.ExpiresAtUnixMS = refreshed.ExpiresAt.UnixMilli()
+	}
+
+	policySummary := ""
+	if strings.TrimSpace(copilotAuth.AccessToken) != "" {
+		appendSlashResponse(cmd.bridge, "Enabling GitHub Copilot model policies...\n\n")
+		policyCtx, policyCancel := context.WithTimeout(cmd.ctx, 20*time.Second)
+		modelIDs := gitHubCopilotPolicyModels(persisted)
+		if discovered, discoverErr := api.ListGitHubCopilotModelIDs(policyCtx, copilotAuth.AccessToken, copilotAuth.EnterpriseDomain); discoverErr == nil {
+			modelIDs = mergeGitHubCopilotModelIDs(modelIDs, discovered)
+		}
+		failures := api.EnableGitHubCopilotModels(policyCtx, copilotAuth.AccessToken, copilotAuth.EnterpriseDomain, modelIDs)
+		policyCancel()
+		if total := len(modelIDs); total > 0 {
+			policySummary = fmt.Sprintf(" Enabled policy for %d/%d Copilot models.", total-len(failures), total)
+		}
+	}
+
+	persisted.GitHubCopilot = copilotAuth
+	persisted.Model = modelRef("github-copilot", api.Presets["github-copilot"].DefaultModel)
+	persisted.SubagentModel = modelRef("github-copilot", api.GitHubCopilotDefaultSubagentModel)
+	if strings.TrimSpace(persisted.ReasoningEffort) == "" {
+		persisted.ReasoningEffort = api.ReasoningEffortMedium
+	}
+	if err := config.Save(persisted); err != nil {
+		return nil, emitTextResponse(cmd.bridge, fmt.Sprintf("save GitHub Copilot credentials: %v", err))
+	}
+
+	return &connectResult{
+		Provider: "github-copilot",
+		Model:    api.Presets["github-copilot"].DefaultModel,
+		Config:   persisted,
+		FormatMessage: func(activeModelID string) string {
+			return fmt.Sprintf(
+				"GitHub Copilot connected. Set main model to %s, subagent model to github-copilot/%s, and reasoning effort to %s.%s",
+				activeModelID,
+				api.GitHubCopilotDefaultSubagentModel,
+				persisted.ReasoningEffort,
+				policySummary,
+			)
+		},
+	}, nil
 }
 
 func handlePlanSlashCommand(cmd *slashCommandContext) error {
