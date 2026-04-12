@@ -181,3 +181,10 @@ Tracking fixes per plan.md.
 - The Gemini stream adapter now captures `thoughtSignature` from function-call parts, and `convertGeminiMessage(...)` reattaches that exact signature to the same function-call part when sending the next request.
 - This fixes Gemini validation failures like missing `thought_signature` on `functionCall` parts during tool loops.
 - Verified with `gofmt -w internal/api/client.go internal/api/gemini.go && go build ./...`.
+
+### Task 23 — Install Latest Local Build After Gemini Thought-Signature Fix ✅
+
+- **Method:** Re-ran the documented local-clone install flow from `gocode/README.md` after Task 22.
+- Rebuilt the current release with `cd gocode/tui && make release-local`.
+- Installed updated `gocode` and `gocode-engine` into `~/.local/bin` using `install -m 755`.
+- Verified `gocode` resolves from `~/.local/bin/gocode` and `gocode --help` runs successfully.
