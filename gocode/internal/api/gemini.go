@@ -240,6 +240,20 @@ func (c *GeminiClient) handleEvent(
 	return nil
 }
 
+// geminiContentIsOnlyFunctionResponses reports whether all parts in c are
+// functionResponse parts (no text, inlineData, or functionCall parts).
+func geminiContentIsOnlyFunctionResponses(c geminiContent) bool {
+	if len(c.Parts) == 0 {
+		return false
+	}
+	for _, p := range c.Parts {
+		if p.FunctionResponse == nil {
+			return false
+		}
+	}
+	return true
+}
+
 func buildGeminiContents(systemPrompt string, messages []Message) ([]geminiContent, *geminiContent, error) {
 	systemParts := make([]geminiPart, 0, len(messages)+1)
 	if trimmed := strings.TrimSpace(systemPrompt); trimmed != "" {
@@ -270,7 +284,19 @@ func buildGeminiContents(systemPrompt string, messages []Message) ([]geminiConte
 		if err != nil {
 			return nil, nil, err
 		}
-		contents = append(contents, converted...)
+		for _, c := range converted {
+			// Gemini requires all functionResponse parts for a given model turn to be
+			// in a single user Content. Merge consecutive tool-result user turns so
+			// parallel tool results don't produce separate Content entries.
+			if c.Role == "user" && geminiContentIsOnlyFunctionResponses(c) && len(contents) > 0 {
+				last := &contents[len(contents)-1]
+				if last.Role == "user" && geminiContentIsOnlyFunctionResponses(*last) {
+					last.Parts = append(last.Parts, c.Parts...)
+					continue
+				}
+			}
+			contents = append(contents, c)
+		}
 	}
 
 	var instruction *geminiContent
