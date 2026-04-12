@@ -50,3 +50,14 @@ receiving a malformed conversation where a `functionCall` has no following
 `functionResponse`.
 
 ---
+
+## Task 30 — Scope thought signature sentinel to Gemini 3+ models
+
+**File**: `gocode/internal/api/gemini.go`
+
+Added `geminiMajorVersion(modelID string) int` helper (parses `gemini[-live]-<N>`
+prefix). `ensureGeminiActiveLoopThoughtSignatures` now takes a `modelID` parameter
+and only injects `"skip_thought_signature_validator"` when the major version is >= 3.
+On Gemini 2.x, thought signatures are optional so the sentinel is suppressed.
+
+---

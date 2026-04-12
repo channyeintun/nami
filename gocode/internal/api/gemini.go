@@ -139,7 +139,7 @@ func (c *GeminiClient) openStream(ctx context.Context, payload geminiGenerateCon
 }
 
 func (c *GeminiClient) buildRequest(req ModelRequest) (geminiGenerateContentRequest, error) {
-	contents, systemInstruction, err := buildGeminiContents(req.SystemPrompt, req.Messages)
+	contents, systemInstruction, err := buildGeminiContents(c.model, req.SystemPrompt, req.Messages)
 	if err != nil {
 		return geminiGenerateContentRequest{}, err
 	}
@@ -254,7 +254,7 @@ func geminiContentIsOnlyFunctionResponses(c geminiContent) bool {
 	return true
 }
 
-func buildGeminiContents(systemPrompt string, messages []Message) ([]geminiContent, *geminiContent, error) {
+func buildGeminiContents(modelID, systemPrompt string, messages []Message) ([]geminiContent, *geminiContent, error) {
 	systemParts := make([]geminiPart, 0, len(messages)+1)
 	if trimmed := strings.TrimSpace(systemPrompt); trimmed != "" {
 		systemParts = append(systemParts, geminiPart{Text: trimmed})
@@ -366,13 +366,41 @@ func buildGeminiContents(systemPrompt string, messages []Message) ([]geminiConte
 	if len(systemParts) > 0 {
 		instruction = &geminiContent{Role: "system", Parts: systemParts}
 	}
-	contents = ensureGeminiActiveLoopThoughtSignatures(contents)
+	contents = ensureGeminiActiveLoopThoughtSignatures(contents, modelID)
 	return contents, instruction, nil
 }
 
 const geminiSyntheticThoughtSignature = "skip_thought_signature_validator"
 
-func ensureGeminiActiveLoopThoughtSignatures(contents []geminiContent) []geminiContent {
+// geminiMajorVersion extracts the major version number from a Gemini model ID
+// (e.g. "gemini-2.5-flash" → 2, "gemini-3.0-pro" → 3). Returns 0 if unparseable.
+func geminiMajorVersion(modelID string) int {
+	lower := strings.ToLower(modelID)
+	// Strip optional "models/" prefix and match "gemini[-live]-<major>"
+	lower = strings.TrimPrefix(lower, "models/")
+	for _, prefix := range []string{"gemini-live-", "gemini-"} {
+		if !strings.HasPrefix(lower, prefix) {
+			continue
+		}
+		rest := lower[len(prefix):]
+		// Parse leading digit(s)
+		i := 0
+		for i < len(rest) && rest[i] >= '0' && rest[i] <= '9' {
+			i++
+		}
+		if i == 0 {
+			return 0
+		}
+		v := 0
+		for _, ch := range rest[:i] {
+			v = v*10 + int(ch-'0')
+		}
+		return v
+	}
+	return 0
+}
+
+func ensureGeminiActiveLoopThoughtSignatures(contents []geminiContent, modelID string) []geminiContent {
 	activeLoopStart := -1
 	for index := len(contents) - 1; index >= 0; index-- {
 		content := contents[index]
@@ -407,7 +435,9 @@ func ensureGeminiActiveLoopThoughtSignatures(contents []geminiContent) []geminiC
 			if parts[partIndex].FunctionCall == nil {
 				continue
 			}
-			if strings.TrimSpace(parts[partIndex].ThoughtSignature) == "" {
+			// Only inject the sentinel on Gemini 3+ where thought signatures are mandatory.
+			// On Gemini 2.x, omitting the signature is valid and the sentinel is unnecessary.
+			if strings.TrimSpace(parts[partIndex].ThoughtSignature) == "" && geminiMajorVersion(modelID) >= 3 {
 				parts[partIndex].ThoughtSignature = geminiSyntheticThoughtSignature
 				updated[index] = geminiContent{Role: content.Role, Parts: parts}
 			}
