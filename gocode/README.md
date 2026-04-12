@@ -277,12 +277,12 @@ This writes a structured `debug.log` into the current session directory under `~
 ┌──────────────────────────────┐
 │  gocode (Bun launcher)       │  ← Terminal UI (React Ink)
 │    Renders TUI, handles I/O  │
-│         │ stdin/stdout NDJSON │
+│         │ stdin/stdout NDJSON│
 │  ┌──────▼────────────────┐   │
-│  │ gocode-engine (Go)     │   │  ← LLM client, tools, agent loop
-│  │  Streams events out    │   │
-│  │  Reads commands in     │   │
-│  └────────────────────────┘   │
+│  │ gocode-engine (Go)     │  │  ← LLM client, tools,agent loop
+│  │  Streams events out    │  │
+│  │  Reads commands in     │  │
+│  └────────────────────────┘  │
 └──────────────────────────────┘
 ```
 
