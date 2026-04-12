@@ -405,7 +405,7 @@ func buildOpenAICompatTools(tools []ToolDefinition) []openAICompatToolDefinition
 			Function: openAICompatFunctionDefinition{
 				Name:        tool.Name,
 				Description: tool.Description,
-				Parameters:  tool.InputSchema,
+				Parameters:  sanitizeGeminiSchema(tool.InputSchema),
 			},
 		})
 	}

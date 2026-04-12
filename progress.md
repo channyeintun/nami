@@ -162,4 +162,36 @@ Verification completed:
 - ran `go build ./...`
 - ran `make release-local` in `gocode/tui`
 
+## Task 7 — Sanitize OpenAI-style tool schemas for alias-based command tools
+
+**Files**: `gocode/internal/api/openai_responses.go`, `gocode/internal/api/openai_compat.go`, `progress.md`
+
+Fixed a tool-registration failure exposed by the `send_command_input` command
+tool when running on GitHub Copilot's OpenAI Responses path.
+
+Root cause:
+
+- several runtime tools use top-level `anyOf` or `allOf` in their JSON Schema to
+  express camelCase and snake_case aliases
+- the OpenAI Responses tool validator rejects top-level combinators and expects
+  a plain object schema at the root
+- `send_command_input` hit this first because its schema requires both command
+  id and input aliases through a top-level `allOf`
+
+Implementation completed:
+
+- updated the OpenAI Responses tool builder to sanitize tool schemas before
+  sending them to the provider
+- applied the same sanitization to the OpenAI-compatible chat-completions tool
+  builder so the same schema shape does not break other OpenAI-style providers
+- reused the existing alias-flattening sanitizer that already converts top-level
+  `anyOf` and `allOf` alias patterns into a provider-safe object schema with
+  concrete required fields
+
+Verification completed:
+
+- ran `gofmt -w` on the changed Go files
+- ran `go build ./...`
+- ran `make release-local` in `gocode/tui`
+
 ---

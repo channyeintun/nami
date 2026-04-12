@@ -426,7 +426,7 @@ func buildOpenAIResponsesTools(tools []ToolDefinition) []openAIResponsesToolDefi
 			Type:        "function",
 			Name:        tool.Name,
 			Description: tool.Description,
-			Parameters:  tool.InputSchema,
+			Parameters:  sanitizeGeminiSchema(tool.InputSchema),
 			Strict:      false,
 		})
 	}
