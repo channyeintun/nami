@@ -109,3 +109,9 @@ Tracking fixes per plan.md.
 - Normalized invented tool names like `google:search`/`google_search` into the native `web_search` tool and mapped `queries[0]` to `query` so local-model compatibility errors stop derailing turns.
 - When the model asks a routine clarification for a concrete implementation request, the engine now emits a visible recoverable status and retries once with a stronger directive that forbids unnecessary web search for basic scaffold/syntax tasks.
 - Tightened the default system prompt so simple self-contained requests are handled by direct file edits instead of pointless browsing or clarification loops.
+
+### Task 15 — Audit Subagent Implementation ✅
+- **Files reviewed:** `gocode/cmd/gocode/subagent_runtime.go`, `gocode/cmd/gocode/subagent_background.go`, `gocode/internal/tools/agent.go`, `gocode/internal/hooks/types.go`, `gocode/internal/tools/registry.go`, plus `vscode-copilot-chat/src/extension/agents/vscode-node/*` and `vscode-copilot-chat/src/extension/intents/node/toolCallingLoop.ts`
+- Confirmed a high-severity bug: `makeSubagentRunner(...)` captures the startup `client` and `activeModelID` once, so child agents do not follow later lazy model initialization or `/model` switches.
+- Confirmed a hook-model mismatch versus VS Code Copilot Chat: child agents reuse generic `session_start` / `stop` hooks instead of dedicated subagent hook types, so parent hooks can unintentionally affect child-agent startup and completion.
+- No code fixes applied in this task; findings recorded for follow-up implementation.
