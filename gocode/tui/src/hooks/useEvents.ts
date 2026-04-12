@@ -20,6 +20,7 @@ import type {
   RateLimitUpdatePayload,
   ReadyPayload,
   SessionRestoredPayload,
+  SlashCommandDescriptorPayload,
   SessionUpdatedPayload,
   StreamEvent,
   TurnTimingPayload,
@@ -147,6 +148,13 @@ export interface UIBackgroundCommand {
   retainedAt: string;
 }
 
+export interface UISlashCommand {
+  name: string;
+  description: string;
+  usage?: string;
+  takesArguments: boolean;
+}
+
 export interface UIMemoryRecallEntry {
   title: string;
   noteType?: string;
@@ -177,6 +185,7 @@ export type UIActiveTurnStatus =
 
 export interface EngineUIState {
   ready: boolean;
+  slashCommands: UISlashCommand[];
   messages: UIMessage[];
   transcript: UITranscriptEntry[];
   liveAssistantBlocks: UIAssistantBlock[];
@@ -233,6 +242,7 @@ const MAX_RETAINED_BACKGROUND_AGENTS = 24;
 
 const initialState = (model: string, mode: string): EngineUIState => ({
   ready: false,
+  slashCommands: [],
   messages: [],
   transcript: [],
   liveAssistantBlocks: [],
@@ -332,6 +342,7 @@ export function useEvents(initialModel: string, initialMode: string) {
         setUIState((s) => ({
           ...s,
           ready: p.protocol_version > 0,
+          slashCommands: normalizeSlashCommands(p.slash_commands),
           statusLine: null,
         }));
         break;
@@ -1086,6 +1097,32 @@ export function useEvents(initialModel: string, initialMode: string) {
     appendUserMessage,
     beginAssistantTurn,
   };
+}
+
+function normalizeSlashCommands(
+  payload: SlashCommandDescriptorPayload[] | undefined,
+): UISlashCommand[] {
+  if (!Array.isArray(payload)) {
+    return [];
+  }
+
+  return payload
+    .filter(
+      (command) =>
+        typeof command?.name === "string" &&
+        command.name.trim().length > 0 &&
+        typeof command?.description === "string" &&
+        command.description.trim().length > 0,
+    )
+    .map((command) => ({
+      name: command.name.trim(),
+      description: command.description.trim(),
+      usage:
+        typeof command.usage === "string" && command.usage.trim().length > 0
+          ? command.usage.trim()
+          : undefined,
+      takesArguments: command.takes_arguments === true,
+    }));
 }
 
 function applyTurnTimingUpdate(

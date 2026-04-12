@@ -18,6 +18,125 @@ import (
 	"github.com/channyeintun/gocode/internal/timing"
 )
 
+type slashCommandDescriptor struct {
+	Name           string
+	Description    string
+	Usage          string
+	TakesArguments bool
+	Hidden         bool
+}
+
+var slashCommandCatalog = []slashCommandDescriptor{
+	{
+		Name:           "connect",
+		Description:    "Connect GitHub Copilot with device login",
+		Usage:          "/connect [github-copilot [enterprise-domain]]",
+		TakesArguments: true,
+	},
+	{
+		Name:        "plan",
+		Description: "Switch to plan mode (read-only until approved)",
+		Usage:       "/plan",
+	},
+	{
+		Name:        "fast",
+		Description: "Switch to fast mode (direct execution)",
+		Usage:       "/fast",
+	},
+	{
+		Name:           "model",
+		Description:    "Show or switch the active model",
+		Usage:          "/model [name]",
+		TakesArguments: true,
+	},
+	{
+		Name:           "reasoning",
+		Description:    "Show or set GPT-5 reasoning effort",
+		Usage:          "/reasoning [low|medium|high|xhigh|default]",
+		TakesArguments: true,
+	},
+	{
+		Name:        "cost",
+		Description: "Show token usage and cost breakdown",
+		Usage:       "/cost",
+	},
+	{
+		Name:        "usage",
+		Description: "Alias for /cost",
+		Usage:       "/usage",
+	},
+	{
+		Name:        "compact",
+		Description: "Compact the conversation to save context",
+		Usage:       "/compact",
+	},
+	{
+		Name:           "resume",
+		Description:    "Resume a previous session",
+		Usage:          "/resume [id]",
+		TakesArguments: true,
+	},
+	{
+		Name:        "clear",
+		Description: "Clear the conversation and start a new session",
+		Usage:       "/clear",
+	},
+	{
+		Name:        "status",
+		Description: "Show the current session status",
+		Usage:       "/status",
+	},
+	{
+		Name:        "sessions",
+		Description: "List recent sessions",
+		Usage:       "/sessions",
+	},
+	{
+		Name:           "diff",
+		Description:    "Show git diff (for example /diff --staged)",
+		Usage:          "/diff [args]",
+		TakesArguments: true,
+	},
+	{
+		Name:        "help",
+		Description: "Show the slash-command help text",
+		Usage:       "/help",
+	},
+	{
+		Name:        "plan-mode",
+		Description: "Alias for /plan",
+		Usage:       "/plan-mode",
+		Hidden:      true,
+	},
+}
+
+func slashCommandDescriptors() []ipc.SlashCommandDescriptorPayload {
+	descriptors := make([]ipc.SlashCommandDescriptorPayload, 0, len(slashCommandCatalog))
+	for _, descriptor := range slashCommandCatalog {
+		if descriptor.Hidden {
+			continue
+		}
+		descriptors = append(descriptors, ipc.SlashCommandDescriptorPayload{
+			Name:           descriptor.Name,
+			Description:    descriptor.Description,
+			Usage:          descriptor.Usage,
+			TakesArguments: descriptor.TakesArguments,
+		})
+	}
+	return descriptors
+}
+
+func sortedVisibleSlashCommands() []slashCommandDescriptor {
+	visible := make([]slashCommandDescriptor, 0, len(slashCommandCatalog))
+	for _, descriptor := range slashCommandCatalog {
+		if descriptor.Hidden {
+			continue
+		}
+		visible = append(visible, descriptor)
+	}
+	return visible
+}
+
 func handleSlashCommand(
 	ctx context.Context,
 	bridge *ipc.Bridge,
@@ -231,22 +350,16 @@ func formatCostSummary(snapshot costpkg.TrackerSnapshot, activeModelID string) s
 }
 
 func formatHelpText() string {
-	return `Available slash commands:
-
-	/connect       Connect GitHub Copilot and switch to a Copilot model
-  /plan          Switch to plan mode (read-only until approved)
-  /fast          Switch to fast mode (direct execution)
-  /model [name]  Show or switch the active model
-	/reasoning     Show or set GPT-5 reasoning effort: low, medium, high, xhigh, or default
-  /cost          Show token usage and cost breakdown
-  /usage         Alias for /cost
-  /compact       Compact the conversation to save context
-  /resume [id]   Resume a previous session
-  /clear         Clear conversation and start a new session
-  /status        Show current session status
-  /sessions      List recent sessions
-  /diff [args]   Show git diff (optionally with args like --staged)
-  /help          Show this help message`
+	var b strings.Builder
+	b.WriteString("Available slash commands:\n\n")
+	for _, descriptor := range sortedVisibleSlashCommands() {
+		usage := descriptor.Usage
+		if strings.TrimSpace(usage) == "" {
+			usage = "/" + descriptor.Name
+		}
+		b.WriteString(fmt.Sprintf("  %-38s %s\n", usage, descriptor.Description))
+	}
+	return strings.TrimRight(b.String(), "\n")
 }
 
 func formatStatusText(sessionID string, startedAt time.Time, mode agent.ExecutionMode, model string, cwd string, msgCount int, tracker *costpkg.Tracker) string {

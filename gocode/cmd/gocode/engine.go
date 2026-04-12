@@ -116,7 +116,7 @@ func runStdioEngine(ctx context.Context, cfg config.Config) error {
 	startupMetrics.Mark("session_persisted")
 
 	// Emit ready event
-	if err := bridge.EmitReady(); err != nil {
+	if err := bridge.EmitReady(slashCommandDescriptors()); err != nil {
 		return fmt.Errorf("emit ready: %w", err)
 	}
 	startupMetrics.Mark("ready_emitted")

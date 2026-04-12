@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Planning complete. Implementation has not started.
+Implementation complete. Code formatting and build verification passed; interactive manual verification is still pending.
 
 ## Completed
 
@@ -10,22 +10,35 @@ Planning complete. Implementation has not started.
 - [x] Located the current gocode input and submit path in `tui/src/components/Input.tsx`, `tui/src/App.tsx`, and `tui/src/hooks/usePromptHistory.ts`.
 - [x] Confirmed that gocode currently has no slash-command preview path; slash commands are only recognized on submit.
 - [x] Reviewed the original source references in:
-	- `sourcecode/components/PromptInput/PromptInput.tsx`
-	- `sourcecode/components/PromptInput/PromptInputFooter.tsx`
-	- `sourcecode/components/PromptInput/PromptInputFooterSuggestions.tsx`
-	- `sourcecode/utils/suggestions/commandSuggestions.ts`
-	- `sourcecode/context/promptOverlayContext.tsx`
-	- `sourcecode/components/FullscreenLayout.tsx`
+  - `sourcecode/components/PromptInput/PromptInput.tsx`
+  - `sourcecode/components/PromptInput/PromptInputFooter.tsx`
+  - `sourcecode/components/PromptInput/PromptInputFooterSuggestions.tsx`
+  - `sourcecode/utils/suggestions/commandSuggestions.ts`
+  - `sourcecode/context/promptOverlayContext.tsx`
+  - `sourcecode/components/FullscreenLayout.tsx`
 - [x] Determined that the existing `plan.md` and `progress.md` were stale for this task and replaced the planning docs with slash-preview work.
 - [x] Wrote a task-specific implementation plan for slash preview and the prompt chrome restyle.
 
 ## Pending
 
-- [ ] Expose slash command metadata from the Go engine to the TUI.
-- [ ] Add TUI slash preview state and rendering.
-- [ ] Restyle the input border and padding to match the screenshot.
+- [x] Expose slash command metadata from the Go engine to the TUI.
+- [x] Add TUI slash preview state and rendering.
+- [x] Restyle the input border and padding to match the screenshot.
 - [ ] Manually verify key handling and narrow-terminal behavior.
-- [ ] Update user-facing docs only if the final implementation changes visible prompt behavior or keybindings.
+- [x] Update user-facing docs only if the final implementation changes visible prompt behavior or keybindings.
+
+## Completed This Pass
+
+- Added Go-side slash command descriptors to the ready payload so the TUI consumes backend-authoritative command metadata.
+- Added TUI slash preview filtering, selection, and apply behavior for leading slash commands.
+- Updated the input prompt chrome to use top-and-bottom-only borders with larger padding.
+- Ran `gofmt` and `prettier` on the changed files.
+- Verified the implementation compiles with `go build ./cmd/gocode` and `cd tui && bun run build`.
+
+## Notes
+
+- No user-facing documentation changes were needed for this pass.
+- Interactive verification of Up/Down, Tab, Enter, Escape, and narrow-terminal rendering still needs a live TUI check.
 
 ## Decisions
 

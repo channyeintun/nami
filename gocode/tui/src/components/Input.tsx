@@ -1,11 +1,15 @@
 import React, { type FC, useEffect, useMemo, useState } from "react";
 import { Box, Text, useInput, usePaste } from "ink";
 import type { PromptController } from "../hooks/usePromptHistory.js";
+import type { UISlashCommand } from "../hooks/useEvents.js";
+import { useSlashCommandPreview } from "../hooks/useSlashCommandPreview.js";
 import { parsePasteParts, type PastedImageData } from "../utils/imagePaste.js";
+import SlashCommandPreview from "./SlashCommandPreview.js";
 
 interface InputProps {
   prompt: PromptController;
   mode: string;
+  slashCommands: UISlashCommand[];
   isLoading: boolean;
   onSubmit: () => void;
   onOpenTranscriptSearch: () => void;
@@ -18,7 +22,7 @@ interface InputProps {
 
 // Reserve enough room for the border, padding, and "> " prompt marker while
 // still leaving a minimally usable wrapped editor width on narrow terminals.
-const PROMPT_CHROME_COLUMNS = 7;
+const PROMPT_CHROME_COLUMNS = 8;
 const MIN_PROMPT_TEXT_COLUMNS = 8;
 
 function getPromptTextColumns(terminalColumns: number): number {
@@ -98,6 +102,7 @@ function renderInputLines(
 const Input: FC<InputProps> = ({
   prompt,
   mode,
+  slashCommands,
   isLoading,
   onSubmit,
   onOpenTranscriptSearch,
@@ -128,15 +133,33 @@ const Input: FC<InputProps> = ({
     () => getPromptTextColumns(terminalColumns),
     [terminalColumns],
   );
+  const slashPreview = useSlashCommandPreview({
+    value: prompt.value,
+    cursorOffset: prompt.cursorOffset,
+    slashCommands,
+  });
 
   useInput((input, key) => {
     if (key.escape) {
+      if (slashPreview.visible) {
+        prompt.clear();
+        return;
+      }
+
       onCancel();
       return;
     }
     if (disabled) return;
 
     if (key.tab) {
+      if (slashPreview.visible) {
+        const nextValue = slashPreview.applySelection();
+        if (nextValue) {
+          prompt.setValue(nextValue);
+        }
+        return;
+      }
+
       onModeToggle();
       return;
     }
@@ -146,10 +169,30 @@ const Input: FC<InputProps> = ({
         return;
       }
 
+      if (slashPreview.visible) {
+        if (slashPreview.selectedCommand?.takesArguments) {
+          const nextValue = slashPreview.applySelection();
+          if (nextValue) {
+            prompt.setValue(nextValue);
+          }
+          return;
+        }
+
+        if (slashPreview.selectedCommand) {
+          onSubmit();
+          return;
+        }
+      }
+
       onSubmit();
       return;
     }
     if (key.upArrow) {
+      if (slashPreview.visible) {
+        slashPreview.selectPrevious();
+        return;
+      }
+
       if (!prompt.moveVisualUp(promptTextColumns)) {
         prompt.navigateUp();
       }
@@ -157,6 +200,11 @@ const Input: FC<InputProps> = ({
       return;
     }
     if (key.downArrow) {
+      if (slashPreview.visible) {
+        slashPreview.selectNext();
+        return;
+      }
+
       if (!prompt.moveVisualDown(promptTextColumns)) {
         prompt.navigateDown();
       }
@@ -274,7 +322,10 @@ const Input: FC<InputProps> = ({
       flexDirection="column"
       borderStyle="round"
       borderColor="cyan"
-      paddingX={1}
+      borderLeft={false}
+      borderRight={false}
+      paddingX={2}
+      paddingY={1}
     >
       <Box flexDirection="column">
         {showPlaceholder ? (
@@ -296,6 +347,12 @@ const Input: FC<InputProps> = ({
           ))
         )}
       </Box>
+      {slashPreview.visible && slashPreview.matches.length > 0 && (
+        <SlashCommandPreview
+          commands={slashPreview.matches}
+          selectedIndex={slashPreview.selectedIndex}
+        />
+      )}
     </Box>
   );
 };

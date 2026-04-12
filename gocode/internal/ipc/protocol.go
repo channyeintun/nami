@@ -3,7 +3,7 @@ package ipc
 import "encoding/json"
 
 // ProtocolVersion is the current IPC protocol version.
-const ProtocolVersion = 1
+const ProtocolVersion = 2
 
 // --- Go → Ink (stdout): StreamEvent ---
 
@@ -220,8 +220,16 @@ type ArtifactUpdatedPayload struct {
 	Status  string `json:"status,omitempty"`
 }
 
+type SlashCommandDescriptorPayload struct {
+	Name           string `json:"name"`
+	Description    string `json:"description"`
+	Usage          string `json:"usage,omitempty"`
+	TakesArguments bool   `json:"takes_arguments,omitempty"`
+}
+
 type ReadyPayload struct {
-	ProtocolVersion int `json:"protocol_version"`
+	ProtocolVersion int                             `json:"protocol_version"`
+	SlashCommands   []SlashCommandDescriptorPayload `json:"slash_commands,omitempty"`
 }
 
 type ErrorPayload struct {

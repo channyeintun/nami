@@ -103,10 +103,11 @@ func (b *Bridge) Emit(eventType EventType, payload any) error {
 	})
 }
 
-// EmitReady sends the ready event with protocol version.
-func (b *Bridge) EmitReady() error {
+// EmitReady sends the ready event with protocol version and startup metadata.
+func (b *Bridge) EmitReady(slashCommands []SlashCommandDescriptorPayload) error {
 	return b.Emit(EventReady, ReadyPayload{
 		ProtocolVersion: ProtocolVersion,
+		SlashCommands:   slashCommands,
 	})
 }
 

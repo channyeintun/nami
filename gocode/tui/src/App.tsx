@@ -450,6 +450,7 @@ const App: FC<AppProps> = ({ enginePath, model, mode }) => {
             <Input
               prompt={prompt}
               mode={uiState.mode}
+              slashCommands={uiState.slashCommands}
               isLoading={uiState.isStreaming}
               onSubmit={handleSubmit}
               onOpenTranscriptSearch={openTranscriptSearch}

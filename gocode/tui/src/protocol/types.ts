@@ -224,8 +224,16 @@ export interface SessionUpdatedPayload {
   title?: string;
 }
 
+export interface SlashCommandDescriptorPayload {
+  name: string;
+  description: string;
+  usage?: string;
+  takes_arguments?: boolean;
+}
+
 export interface ReadyPayload {
   protocol_version: number;
+  slash_commands?: SlashCommandDescriptorPayload[];
 }
 
 export interface ErrorPayload {
