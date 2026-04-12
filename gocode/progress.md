@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Phase 1 complete. Preparing Phase 2.
+Implementation complete.
 
 ## Completed
 
@@ -11,14 +11,11 @@ Phase 1 complete. Preparing Phase 2.
 - [x] Selected recommended pattern opportunities and explicitly rejected several low-value applications.
 - [x] Wrote `plan.md` with implementation guidance and guardrails.
 - [x] Implemented Phase 1: slash command dispatch now uses a handler registry plus a structured slash-command state object instead of the 8-value return tuple.
+- [x] Implemented Phase 2: provider client construction now uses an API-side client factory keyed by `ClientType`, with GitHub Copilot special-case routing left explicit in `newLLMClient`.
 
 ## Pending
 
-- [ ] Phase 2: Consolidate provider client creation behind a factory-style layer.
-  - [ ] Extend `Presets` / `ClientType` in `internal/api/provider_config.go` with a constructor-map or factory function per client type.
-  - [ ] Move provider branching out of `newLLMClient` in `engine.go` into the factory layer.
-  - [ ] Keep GitHub Copilot special-case handling explicit without hiding it in a generic abstraction.
-  - [ ] Verify all providers resolve identically to current behavior.
+None.
 
 ## Detailed Step Log
 
@@ -54,6 +51,22 @@ Outcome:
 
 - Slash command behavior remains centralized but no longer depends on a single 500+ line switch.
 - Session/model state updates are now passed through a single explicit state object, which makes later maintenance safer.
+
+### Task 3: Phase 2 Implementation
+
+Status: Completed
+
+Steps completed:
+
+1. Added an API-side client factory keyed by `ClientType`.
+2. Moved generic provider selection out of `newLLMClient` in `engine.go` into that factory layer.
+3. Kept GitHub Copilot routing explicit for the Anthropic Messages vs OpenAI Responses split.
+4. Verified the CLI still builds with `go build ./cmd/gocode`.
+
+Outcome:
+
+- Generic provider construction now lives beside provider metadata in `internal/api`, which narrows `newLLMClient` to config resolution plus the GitHub Copilot special case.
+- Provider lookup now fails explicitly on unknown providers instead of depending on zero-value `ClientType` behavior.
 
 ## Working Rules
 

@@ -626,18 +626,7 @@ func newLLMClient(provider, model string, cfg config.Config) (api.LLMClient, err
 		}
 	}
 
-	switch api.Presets[provider].ClientType {
-	case api.AnthropicAPI:
-		client, err = api.NewAnthropicClient(model, apiKey, baseURL)
-	case api.GeminiAPI:
-		client, err = api.NewGeminiClient(model, apiKey, baseURL)
-	case api.OpenAICompatAPI:
-		client, err = api.NewOpenAICompatClient(provider, model, apiKey, baseURL)
-	case api.OllamaAPI:
-		client, err = api.NewOllamaClient(model, apiKey, baseURL)
-	default:
-		return nil, fmt.Errorf("unsupported provider %q", provider)
-	}
+	client, err = api.NewClientForProvider(provider, model, apiKey, baseURL)
 	if err != nil {
 		return nil, err
 	}
