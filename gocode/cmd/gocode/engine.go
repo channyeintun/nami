@@ -333,9 +333,8 @@ func runStdioEngine(ctx context.Context, cfg config.Config) error {
 				stopControl := agent.NewStopController()
 				deps.StopController = stopControl
 				router.SetCancelFunc(func() {
-					if stopControl.Request("cancelled") {
-						queryCancel()
-					}
+					stopControl.Request("cancelled")
+					queryCancel()
 				})
 
 				stream := agent.QueryStream(queryCtx, agent.QueryRequest{
