@@ -161,6 +161,13 @@ func QueryStream(ctx context.Context, req QueryRequest, deps QueryDeps) iter.Seq
 			decision := state.Continuation.Decision()
 			deps.ObserveContinuation(state.Continuation, decision.Reason)
 		}
+
+		// If the loop exited without the agent explicitly stopping (e.g. hit the
+		// max-turn limit or continuation budget), emit turn_complete so the TUI
+		// transitions out of the "Working" state instead of spinning forever.
+		if !state.StopRequested {
+			yield(newEvent(ipc.EventTurnComplete, ipc.TurnCompletePayload{StopReason: "stop"}), nil)
+		}
 	}
 }
 

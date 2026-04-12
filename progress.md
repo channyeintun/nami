@@ -143,3 +143,23 @@ available for complex multi-step tasks where the user genuinely wants to review
 before execution.
 
 ---
+
+## Task 36 — Emit turn_complete when QueryStream exits due to continuation/turn limits
+
+**File**: `gocode/internal/agent/query_stream.go`
+
+**Root cause**: `ContinuationTracker`'s "diminishing returns" check fires after 3+
+model turns where each turn's `CandidatesTokenCount` is < 500 tokens. With Gemini
+models, each individual tool-call turn (ReadFile, EditFile, Bash, etc.) produces
+very few output tokens (just the function call declaration), so 3 sequential tool
+calls are enough to trigger `ShouldStop = true`. The `QueryStream` loop then exits
+without `state.StopRequested = true`, meaning no `turn_complete` event is ever
+emitted. The TUI receives no `turn_complete` so `isStreaming` stays `true` and the
+"⠙ Working" spinner never stops.
+
+**Fix**: After the `for state.ShouldContinue()` loop exits, check `state.StopRequested`.
+If it's `false` (loop ended due to continuation budget / max-turn limit rather than
+a clean `turn_complete` from `runIteration`), emit a `turn_complete` event with
+`stop_reason: "stop"` so the TUI transitions from "Working" to idle.
+
+---
