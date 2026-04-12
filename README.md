@@ -177,7 +177,7 @@ chan --help                        # Show help
 When the agent wants to run a command or write a file, you'll see a permission prompt:
 
 ```
-╭─ Permission Required ──────────────────────╮
+╭─ Permission Required ───────────────────────╮
 │ bash: git status                            │
 │ Risk: execute                               │
 │                                             │
@@ -251,11 +251,11 @@ If you use GitHub Copilot, the config file will also persist Copilot credentials
 
 ```
 ┌──────────────────────────────┐
-│  chan (Bun launcher)       │  ← Terminal UI (React Ink)
+│  chan (Bun launcher)         │  ← Terminal UI (React Ink)
 │    Renders TUI, handles I/O  │
 │         │ stdin/stdout NDJSON│
 │  ┌──────▼─────────────────┐  │
-│  │ chan-engine (Go)     │  │  ← LLM client, tools, agent loop
+│  │ chan-engine (Go)       │  │  ← LLM client, tools, agent loop
 │  │  Streams events out    │  │
 │  │  Reads commands in     │  │
 │  └────────────────────────┘  │
