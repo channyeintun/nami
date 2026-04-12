@@ -300,7 +300,23 @@ function formatLatencyMs(value: number): string {
   if (value < 1000) {
     return `${Math.round(value)}ms`;
   }
-  return `${(value / 1000).toFixed(value >= 10_000 ? 0 : 1)}s`;
+
+  const totalSeconds = Math.round(value / 1000);
+  if (totalSeconds < 60) {
+    return `${totalSeconds}s`;
+  }
+
+  const totalMinutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (totalMinutes < 60) {
+    return seconds === 0
+      ? `${totalMinutes}m`
+      : `${totalMinutes}m ${seconds}s`;
+  }
+
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return minutes === 0 ? `${hours}h` : `${hours}h ${minutes}m`;
 }
 
 function getCostWarningThresholdUsd(): number {

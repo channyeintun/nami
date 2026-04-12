@@ -530,3 +530,32 @@ Two fixes based on code review feedback from the model:
    `/model` paths before assigning to `*client`.
 
 Verification: `go build ./...` passes, TUI rebuilt, both binaries installed.
+
+---
+
+## Task 18 — Format footer timings in human units
+
+**Files**: `gocode/tui/src/components/PromptFooter.tsx`, `progress.md`
+
+Updated the prompt footer timing labels so long durations are shown in familiar
+human-readable units instead of raw seconds.
+
+Examples:
+
+- `243s` now shows as `4m 3s`
+- `197s` now shows as `3m 17s`
+- sub-second timings still show as `ms`
+- short timings under one minute still show as whole `s`
+
+Implementation completed:
+
+- updated `formatLatencyMs()` in `PromptFooter.tsx`
+- durations now render as `ms`, `s`, `m s`, or `h m` depending on length
+- removed decimal-second formatting for long waits because it is harder to scan
+
+Verification completed:
+
+- ran `go build ./...`
+- ran `bun run build` in `gocode/tui`
+- ran `make release-local` in `gocode/tui`
+- reinstalled `gocode` and `gocode-engine` to `~/.local/bin`
