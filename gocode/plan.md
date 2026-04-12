@@ -14,7 +14,7 @@ Design patterns are optional here, not target architecture rules. A pattern shou
 | -------- | ------------------------------------- | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1        | Slash command handling                | Command                 | `handleSlashCommand` is a large branch with command-specific state transitions, persistence, and UI emission. Extracting per-command handlers behind a small registry should improve readability without changing behavior.                                | `cmd/gocode/slash_commands.go`                                                                                                                                                                                  |
 | 2        | LLM client construction               | Factory Method          | `newLLMClient` mixes provider selection, GitHub Copilot special cases, capability override logic, and concrete client construction. A provider factory layer should centralize that branching and reduce constructor duplication.                          | `cmd/gocode/engine.go`, `internal/api/provider_config.go`, `internal/api/anthropic.go`, `internal/api/openai_compat.go`, `internal/api/openai_responses.go`, `internal/api/gemini.go`, `internal/api/ollama.go` |
-| 3        | Permission decision flow              | Chain of Responsibility | Permission evaluation already runs as an ordered series of rules. Making that order explicit through a small chain should make policy changes safer and easier to review.                                                                                  | `internal/permissions/gating.go`                                                                                                                                                                                |
+| 3        | Permission decision flow              | Chain of Responsibility | Permission evaluation already runs as an ordered series of rules. The current `Check()` is short and clear (~40 lines), so this is optional. Only proceed if new rule types make the sequential if/for blocks materially harder to follow.                 | `internal/permissions/gating.go`                                                                                                                                                                                |
 | 4        | Compaction selection                  | Strategy                | The compaction pipeline already has named strategies, but selection and execution are still mostly embedded in one method. If compaction variants continue growing, promoting them to explicit strategy objects should help. This is optional, not urgent. | `internal/compact/pipeline.go`                                                                                                                                                                                  |
 | 5        | Tool execution cross-cutting behavior | Decorator               | If more execution concerns accumulate around tools, such as telemetry, truncation, artifact side effects, and permission-adjacent wrapping, decorators can keep core tool logic smaller. Only apply if wrappers reduce existing duplication.               | `internal/tools/interface.go`, `internal/tools/orchestration.go`, `internal/tools/streaming_executor.go`                                                                                                        |
 
@@ -35,7 +35,8 @@ Design patterns are optional here, not target architecture rules. A pattern shou
 Scope:
 
 - Introduce a small command handler interface and registry.
-- Move each slash command branch into focused handler functions or types.
+- Move each slash command branch (~13 commands: connect, plan, fast, model, reasoning, cost/usage, compact, resume, clear, help, status, sessions, diff) into focused handler functions or types.
+- Replace the 8-value return tuple `(bool, string, time.Time, ExecutionMode, string, string, []Message, error)` with a structured state object that handlers receive and return.
 - Keep shared helpers for persistence and event emission where that reduces duplication.
 
 Guardrails:
@@ -49,6 +50,7 @@ Guardrails:
 Scope:
 
 - Move provider selection logic out of `newLLMClient` into a factory layer.
+- Build on the existing `Presets` map and `ClientType` enum in `internal/api/provider_config.go` — extend, don't replace.
 - Normalize provider preset lookup, default base URL usage, API key sourcing, and capability wrapping.
 - Keep GitHub Copilot special handling explicit if needed rather than hiding it in a generic abstraction.
 
@@ -58,17 +60,19 @@ Guardrails:
 - Preserve current GitHub Copilot auth refresh behavior.
 - Prefer a table-driven factory or constructor map over a heavy abstract-factory hierarchy.
 
-### Phase 3: Permission Check Chain
+### Phase 3: Optional Permission Check Chain
 
 Scope:
 
-- Represent deny, session allow-all, always allow, always ask, and default fallback as ordered evaluators.
+- Only proceed if new rule types or dynamic rule insertion make the current sequential if/for blocks in `Check()` materially harder to follow.
+- If done, represent deny, session allow-all, always allow, always ask, and default fallback as ordered evaluators.
 - Keep ordering explicit and stable.
 
 Guardrails:
 
 - Behavior must remain byte-for-byte compatible for current rules where practical.
 - Do not split logic across too many tiny files.
+- Skip entirely if the current ~40-line method remains the clearest option.
 
 ### Phase 4: Optional Compaction Strategy Extraction
 

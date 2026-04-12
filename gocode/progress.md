@@ -14,10 +14,22 @@ Planning only. No implementation has been started.
 ## Pending
 
 - [ ] Phase 1: Refactor slash command dispatch with a small command-style handler registry.
+  - [ ] Define a `SlashCommandHandler` interface and a structured state object replacing the 8-value return tuple.
+  - [ ] Create a command registry mapping command names to handlers.
+  - [ ] Extract each slash command branch into its own handler function or type.
+  - [ ] Wire the registry into `handleSlashCommand` as a lookup + dispatch.
+  - [ ] Verify all command names, outputs, and error semantics are preserved.
 - [ ] Phase 2: Consolidate provider client creation behind a factory-style layer.
-- [ ] Phase 3: Refactor permission evaluation into an explicit ordered chain.
-- [ ] Phase 4: Reassess whether compaction strategy extraction is justified.
-- [ ] Phase 5: Reassess whether tool execution decorators are justified.
+  - [ ] Extend `Presets` / `ClientType` in `internal/api/provider_config.go` with a constructor-map or factory function per client type.
+  - [ ] Move provider branching out of `newLLMClient` in `engine.go` into the factory layer.
+  - [ ] Keep GitHub Copilot special-case handling explicit without hiding it in a generic abstraction.
+  - [ ] Verify all providers resolve identically to current behavior.
+- [ ] Phase 3 (optional): Refactor permission evaluation into an explicit ordered chain.
+  - [ ] Re-evaluate whether the current ~40-line `Check()` has grown enough to justify the refactor.
+  - [ ] If yes, define a chain-link interface and wire deny → session allow-all → allow → ask → default.
+  - [ ] If no, skip and document the decision.
+- [ ] Phase 4 (optional): Reassess whether compaction strategy extraction is justified.
+- [ ] Phase 5 (optional): Reassess whether tool execution decorators are justified.
 
 ## Detailed Step Log
 
