@@ -3,7 +3,7 @@ package permissions
 import (
 	"regexp"
 
-	"github.com/channyeintun/gocode/internal/bashsecurity"
+	"github.com/channyeintun/chan/internal/bashsecurity"
 )
 
 // Re-export canonical vars so existing code in this package can reference them.

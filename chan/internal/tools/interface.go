@@ -3,7 +3,7 @@ package tools
 import (
 	"context"
 
-	artifactspkg "github.com/channyeintun/gocode/internal/artifacts"
+	artifactspkg "github.com/channyeintun/chan/internal/artifacts"
 )
 
 // PermissionLevel classifies the default permission posture for a tool.

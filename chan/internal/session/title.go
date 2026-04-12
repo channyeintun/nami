@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/channyeintun/gocode/internal/api"
-	"github.com/channyeintun/gocode/internal/localmodel"
+	"github.com/channyeintun/chan/internal/api"
+	"github.com/channyeintun/chan/internal/localmodel"
 )
 
 const (

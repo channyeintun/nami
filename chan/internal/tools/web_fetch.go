@@ -26,7 +26,7 @@ const (
 	maxWebFetchCacheBytes    int64 = 50 * 1024 * 1024
 	webFetchCacheTTL               = 15 * time.Minute
 	maxWebFetchRedirects           = 10
-	webFetchUserAgent              = "gocode/0.1 (+https://github.com/channyeintun/gocode)"
+	webFetchUserAgent              = "chan/0.1 (+https://github.com/channyeintun/chan)"
 )
 
 // WebFetchTool fetches a URL, converts HTML to markdown, and returns prompt-focused content.

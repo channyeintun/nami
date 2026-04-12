@@ -1,6 +1,6 @@
 package utils
 
-import "github.com/channyeintun/gocode/internal/api"
+import "github.com/channyeintun/chan/internal/api"
 
 // EstimateTokens estimates token count for a string (~4 chars per token).
 func EstimateTokens(text string) int {

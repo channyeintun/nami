@@ -5,7 +5,7 @@ import (
 	"hash/fnv"
 	"strings"
 
-	"github.com/channyeintun/gocode/internal/api"
+	"github.com/channyeintun/chan/internal/api"
 )
 
 type promptCacheEntry struct {

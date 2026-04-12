@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/channyeintun/gocode/internal/bashsecurity"
+	"github.com/channyeintun/chan/internal/bashsecurity"
 )
 
 const defaultBashTimeout = 30 * time.Second

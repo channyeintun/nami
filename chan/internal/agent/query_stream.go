@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/channyeintun/gocode/internal/api"
-	"github.com/channyeintun/gocode/internal/ipc"
-	skillspkg "github.com/channyeintun/gocode/internal/skills"
+	"github.com/channyeintun/chan/internal/api"
+	"github.com/channyeintun/chan/internal/ipc"
+	skillspkg "github.com/channyeintun/chan/internal/skills"
 )
 
 // QueryRequest holds everything needed to start a query.

@@ -1,16 +1,16 @@
 {
-  "name": "gocode-tui",
+  "name": "chan-tui",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "bin": {
-    "gocode": "bin/gocode.js"
+    "chan": "bin/chan.js"
   },
   "scripts": {
     "build": "bunx tsc",
-    "start": "bun bin/gocode.js",
+    "start": "bun bin/chan.js",
     "dev": "bunx tsc --watch",
-    "install-engine": "cd .. && go build -o tui/engine/gocode-engine ./cmd/gocode/",
+    "install-engine": "cd .. && go build -o tui/engine/chan-engine ./cmd/chan/",
     "setup": "bun run build && bun run install-engine"
   },
   "dependencies": {

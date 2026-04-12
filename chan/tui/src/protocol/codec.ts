@@ -11,7 +11,7 @@ export function parseEvent(line: string): StreamEvent | null {
   } catch (error) {
     const preview =
       trimmed.length > 400 ? `${trimmed.slice(0, 400)}...` : trimmed;
-    console.error("[gocode:tui] Failed to parse engine event JSON", {
+    console.error("[chan:tui] Failed to parse engine event JSON", {
       error,
       preview,
     });

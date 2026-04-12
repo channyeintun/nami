@@ -1,8 +1,8 @@
-BINARY_NAME := gocode
-ENGINE_NAME := gocode-engine
+BINARY_NAME := chan
+ENGINE_NAME := chan-engine
 VERSION     := 0.1.0
 BUILD_DIR   := release
-GO_SRC      := ../cmd/gocode
+GO_SRC      := ../cmd/chan
 PREFIX      ?= /usr/local/bin
 
 PLATFORMS := darwin-arm64 darwin-amd64 linux-amd64 linux-arm64
@@ -26,7 +26,7 @@ build-tui-launcher:
 	@mkdir -p $(BUILD_DIR)
 	bun run build
 	bun build --target=bun --outfile=$(BUILD_DIR)/$(BINARY_NAME) \
-		bin/gocode.js
+		bin/chan.js
 	chmod +x $(BUILD_DIR)/$(BINARY_NAME)
 
 # Build release assets for all platforms.

@@ -3,7 +3,7 @@ package api
 import (
 	"io"
 
-	"github.com/channyeintun/gocode/internal/debuglog"
+	"github.com/channyeintun/chan/internal/debuglog"
 )
 
 // sseBodyWithDebug wraps an io.Reader with debug logging when enabled.

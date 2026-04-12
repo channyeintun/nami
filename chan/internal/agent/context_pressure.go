@@ -1,8 +1,8 @@
 package agent
 
 import (
-	"github.com/channyeintun/gocode/internal/api"
-	"github.com/channyeintun/gocode/internal/compact"
+	"github.com/channyeintun/chan/internal/api"
+	"github.com/channyeintun/chan/internal/compact"
 )
 
 const (

@@ -4,7 +4,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/channyeintun/gocode/internal/api"
+	"github.com/channyeintun/chan/internal/api"
 )
 
 // TaskType classifies internal tasks for model routing.

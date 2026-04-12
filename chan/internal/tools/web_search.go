@@ -128,7 +128,7 @@ func (t *WebSearchTool) fetchSearchResults(ctx context.Context, query string) (s
 	values := req.URL.Query()
 	values.Set("q", query)
 	req.URL.RawQuery = values.Encode()
-	req.Header.Set("User-Agent", "gocode/0.1 (+https://github.com/channyeintun/gocode)")
+	req.Header.Set("User-Agent", "chan/0.1 (+https://github.com/channyeintun/chan)")
 
 	resp, err := t.client.Do(req)
 	if err != nil {

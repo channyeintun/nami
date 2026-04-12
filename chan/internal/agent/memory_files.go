@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/channyeintun/gocode/internal/config"
+	"github.com/channyeintun/chan/internal/config"
 )
 
 // MemoryFile represents a loaded instruction or memory index file.
@@ -76,8 +76,8 @@ var recallTokenPattern = regexp.MustCompile(`[a-z0-9][a-z0-9_\-/]{1,}`)
 // LoadMemoryFiles discovers and loads shared instruction files and durable memory indexes.
 //
 // Priority order:
-//  1. User memory index: ~/.config/gocode/memory/MEMORY.md
-//  2. Project memory index: ~/.config/gocode/projects/{slug}/memory/MEMORY.md
+//  1. User memory index: ~/.config/chan/memory/MEMORY.md
+//  2. Project memory index: ~/.config/chan/projects/{slug}/memory/MEMORY.md
 //  3. Project instructions: AGENTS.md (walking up from cwd to root)
 //  4. Local instructions: AGENTS.local.md (walking up from cwd to root)
 //

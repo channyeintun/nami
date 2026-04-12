@@ -34,9 +34,9 @@ var ignoredPromptTokens = map[string]struct{}{
 func LoadAll(projectRoot string) ([]Skill, error) {
 	var skills []Skill
 
-	// User-global: ~/.config/gocode/agents/*.md
+	// User-global: ~/.config/chan/agents/*.md
 	home, _ := os.UserHomeDir()
-	globalDir := filepath.Join(home, ".config", "gocode", "agents")
+	globalDir := filepath.Join(home, ".config", "chan", "agents")
 	globalSkills, _ := loadFromDir(globalDir)
 	skills = append(skills, globalSkills...)
 

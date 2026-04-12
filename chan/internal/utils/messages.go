@@ -3,7 +3,7 @@ package utils
 import (
 	"strings"
 
-	"github.com/channyeintun/gocode/internal/api"
+	"github.com/channyeintun/chan/internal/api"
 )
 
 // NormalizeMessages prepares messages for API submission:

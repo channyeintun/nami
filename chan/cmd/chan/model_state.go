@@ -3,7 +3,7 @@ package main
 import (
 	"sync"
 
-	"github.com/channyeintun/gocode/internal/api"
+	"github.com/channyeintun/chan/internal/api"
 )
 
 type activeModelState struct {

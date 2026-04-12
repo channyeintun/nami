@@ -3,7 +3,7 @@ package session
 import (
 	"fmt"
 
-	"github.com/channyeintun/gocode/internal/api"
+	"github.com/channyeintun/chan/internal/api"
 )
 
 // RestoredState is the persisted session state needed to resume a conversation.

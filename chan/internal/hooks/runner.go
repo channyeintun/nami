@@ -20,10 +20,10 @@ func NewRunner(hooksDir string) *Runner {
 	return &Runner{hooksDir: hooksDir}
 }
 
-// DefaultHooksDir returns ~/.config/gocode/hooks/.
+// DefaultHooksDir returns ~/.config/chan/hooks/.
 func DefaultHooksDir() string {
 	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".config", "gocode", "hooks")
+	return filepath.Join(home, ".config", "chan", "hooks")
 }
 
 // Run executes all scripts matching the hook type.

@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/channyeintun/gocode/internal/tools"
+	"github.com/channyeintun/chan/internal/tools"
 )
 
 // Request describes a tool approval decision that may need user interaction.

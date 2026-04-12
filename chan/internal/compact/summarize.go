@@ -3,7 +3,7 @@ package compact
 import (
 	"strings"
 
-	"github.com/channyeintun/gocode/internal/api"
+	"github.com/channyeintun/chan/internal/api"
 )
 
 // CompactionPromptTemplate is the 9-section summary format adapted from

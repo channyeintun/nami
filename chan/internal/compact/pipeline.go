@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/channyeintun/gocode/internal/api"
+	"github.com/channyeintun/chan/internal/api"
 )
 
 // Strategy identifies a compaction strategy.

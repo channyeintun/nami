@@ -5,7 +5,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/channyeintun/gocode/internal/tools"
+	"github.com/channyeintun/chan/internal/tools"
 )
 
 // Mode controls the overall permission posture.

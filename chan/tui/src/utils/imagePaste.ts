@@ -96,7 +96,7 @@ async function readClipboardImageOnMac(): Promise<PastedImageData | null> {
 
   const outputPath = join(
     tmpdir(),
-    `gocode-clipboard-${process.pid}-${Date.now()}.png`,
+    `chan-clipboard-${process.pid}-${Date.now()}.png`,
   );
   const script = [
     "set png_data to the clipboard as «class PNGf»",

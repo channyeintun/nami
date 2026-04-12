@@ -6,7 +6,7 @@ import (
 	"strings"
 	"sync"
 
-	artifactspkg "github.com/channyeintun/gocode/internal/artifacts"
+	artifactspkg "github.com/channyeintun/chan/internal/artifacts"
 )
 
 const (

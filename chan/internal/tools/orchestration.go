@@ -13,7 +13,7 @@ const DefaultMaxConcurrency = 10
 
 // MaxConcurrency returns the configured max concurrency from env or default.
 func MaxConcurrency() int {
-	if v := os.Getenv("GOCODE_MAX_TOOL_CONCURRENCY"); v != "" {
+	if v := os.Getenv("CHAN_MAX_TOOL_CONCURRENCY"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
 			return n
 		}

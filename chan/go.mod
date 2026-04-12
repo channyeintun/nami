@@ -1,4 +1,4 @@
-module github.com/channyeintun/gocode
+module github.com/channyeintun/chan
 
 go 1.26.1
 

@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/channyeintun/gocode/internal/ipc"
+	"github.com/channyeintun/chan/internal/ipc"
 )
 
 // streamingHTTPTimeout is the per-request timeout for streaming API calls.
@@ -229,17 +229,17 @@ func StreamEventAdapter(event ModelEvent) *ipc.StreamEvent {
 
 // warnCustomBaseURL prints a security warning when the caller provides a
 // non-default base URL for a provider, since the API key will be forwarded to
-// that endpoint.  Callers should opt-in explicitly via GOCODE_ALLOW_CUSTOM_BASE_URL=1.
+// that endpoint.  Callers should opt-in explicitly via CHAN_ALLOW_CUSTOM_BASE_URL=1.
 func warnCustomBaseURL(provider, defaultURL, actualURL string) {
 	if strings.TrimRight(actualURL, "/") == strings.TrimRight(defaultURL, "/") {
 		return
 	}
-	if os.Getenv("GOCODE_ALLOW_CUSTOM_BASE_URL") == "1" {
+	if os.Getenv("CHAN_ALLOW_CUSTOM_BASE_URL") == "1" {
 		return
 	}
 	fmt.Fprintf(os.Stderr,
 		"warning: %s base_url is overridden to %q — your API key will be sent to this endpoint; "+
-			"set GOCODE_ALLOW_CUSTOM_BASE_URL=1 to suppress this warning\n",
+			"set CHAN_ALLOW_CUSTOM_BASE_URL=1 to suppress this warning\n",
 		provider, actualURL)
 }
 

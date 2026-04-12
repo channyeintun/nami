@@ -331,7 +331,7 @@ const Input: FC<InputProps> = ({
                 {promptMarker}
               </Text>
               <Text color="gray">
-                Ask gocode to inspect, plan, or edit code
+                Ask chan to inspect, plan, or edit code
               </Text>
               <Text color="gray">{"█"}</Text>
             </Box>

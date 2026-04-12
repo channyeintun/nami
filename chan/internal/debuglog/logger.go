@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-// Enabled is set once at startup from GOCODE_DEBUG env or --debug flag.
+// Enabled is set once at startup from CHAN_DEBUG env or --debug flag.
 var Enabled bool
 
 const maxLogSize = 50 * 1024 * 1024 // 50 MB

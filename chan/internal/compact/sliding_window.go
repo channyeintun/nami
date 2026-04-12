@@ -1,6 +1,6 @@
 package compact
 
-import "github.com/channyeintun/gocode/internal/api"
+import "github.com/channyeintun/chan/internal/api"
 
 // SlidingWindow identifies the portion of the conversation that can be
 // compacted without re-summarizing already compacted history.

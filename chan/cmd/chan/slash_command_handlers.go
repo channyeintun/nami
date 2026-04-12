@@ -7,16 +7,16 @@ import (
 	"strings"
 	"time"
 
-	"github.com/channyeintun/gocode/internal/agent"
-	"github.com/channyeintun/gocode/internal/api"
-	artifactspkg "github.com/channyeintun/gocode/internal/artifacts"
-	"github.com/channyeintun/gocode/internal/compact"
-	"github.com/channyeintun/gocode/internal/config"
-	costpkg "github.com/channyeintun/gocode/internal/cost"
-	"github.com/channyeintun/gocode/internal/debuglog"
-	"github.com/channyeintun/gocode/internal/ipc"
-	"github.com/channyeintun/gocode/internal/session"
-	"github.com/channyeintun/gocode/internal/timing"
+	"github.com/channyeintun/chan/internal/agent"
+	"github.com/channyeintun/chan/internal/api"
+	artifactspkg "github.com/channyeintun/chan/internal/artifacts"
+	"github.com/channyeintun/chan/internal/compact"
+	"github.com/channyeintun/chan/internal/config"
+	costpkg "github.com/channyeintun/chan/internal/cost"
+	"github.com/channyeintun/chan/internal/debuglog"
+	"github.com/channyeintun/chan/internal/ipc"
+	"github.com/channyeintun/chan/internal/session"
+	"github.com/channyeintun/chan/internal/timing"
 )
 
 type slashCommandState struct {

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/channyeintun/gocode/internal/api"
+	"github.com/channyeintun/chan/internal/api"
 )
 
 // Registry holds all registered tools.

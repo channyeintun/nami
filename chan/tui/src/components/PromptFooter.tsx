@@ -320,11 +320,11 @@ function formatLatencyMs(value: number): string {
 }
 
 function getCostWarningThresholdUsd(): number {
-  if (isEnvTruthy(process.env.GOCODE_DISABLE_COST_WARNINGS)) {
+  if (isEnvTruthy(process.env.CHAN_DISABLE_COST_WARNINGS)) {
     return 0;
   }
 
-  const raw = process.env.GOCODE_COST_WARNING_THRESHOLD_USD?.trim();
+  const raw = process.env.CHAN_COST_WARNING_THRESHOLD_USD?.trim();
   if (!raw) {
     return 5;
   }

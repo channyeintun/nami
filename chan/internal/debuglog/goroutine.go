@@ -15,16 +15,16 @@ func LogGoroutineCount() {
 	})
 }
 
-// SnapshotGoroutines returns a formatted goroutine dump filtered to gocode frames.
+// SnapshotGoroutines returns a formatted goroutine dump filtered to chan frames.
 func SnapshotGoroutines() string {
 	buf := make([]byte, 1<<20) // 1 MB
 	n := runtime.Stack(buf, true)
 	full := string(buf[:n])
 
-	// Filter to goroutines that contain gocode frames.
+	// Filter to goroutines that contain chan frames.
 	var filtered []string
 	for _, block := range strings.Split(full, "\n\n") {
-		if strings.Contains(block, "gocode") {
+		if strings.Contains(block, "chan") {
 			filtered = append(filtered, block)
 		}
 	}

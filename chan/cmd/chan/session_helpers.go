@@ -8,16 +8,16 @@ import (
 	"strings"
 	"time"
 
-	"github.com/channyeintun/gocode/internal/agent"
-	"github.com/channyeintun/gocode/internal/api"
-	artifactspkg "github.com/channyeintun/gocode/internal/artifacts"
-	"github.com/channyeintun/gocode/internal/compact"
-	costpkg "github.com/channyeintun/gocode/internal/cost"
-	"github.com/channyeintun/gocode/internal/ipc"
-	"github.com/channyeintun/gocode/internal/localmodel"
-	"github.com/channyeintun/gocode/internal/session"
-	"github.com/channyeintun/gocode/internal/timing"
-	toolpkg "github.com/channyeintun/gocode/internal/tools"
+	"github.com/channyeintun/chan/internal/agent"
+	"github.com/channyeintun/chan/internal/api"
+	artifactspkg "github.com/channyeintun/chan/internal/artifacts"
+	"github.com/channyeintun/chan/internal/compact"
+	costpkg "github.com/channyeintun/chan/internal/cost"
+	"github.com/channyeintun/chan/internal/ipc"
+	"github.com/channyeintun/chan/internal/localmodel"
+	"github.com/channyeintun/chan/internal/session"
+	"github.com/channyeintun/chan/internal/timing"
+	toolpkg "github.com/channyeintun/chan/internal/tools"
 )
 
 func emitArtifactCreated(bridge *ipc.Bridge, artifact artifactspkg.Artifact) error {

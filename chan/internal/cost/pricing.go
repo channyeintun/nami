@@ -3,7 +3,7 @@ package cost
 import (
 	"strings"
 
-	"github.com/channyeintun/gocode/internal/api"
+	"github.com/channyeintun/chan/internal/api"
 )
 
 type priceTier struct {

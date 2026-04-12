@@ -14,7 +14,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/channyeintun/gocode/internal/config"
+	"github.com/channyeintun/chan/internal/config"
 )
 
 var (
@@ -24,7 +24,7 @@ var (
 
 func main() {
 	rootCmd := &cobra.Command{
-		Use:     "gocode",
+		Use:     "chan",
 		Short:   "An agentic coding CLI powered by Go",
 		Version: fmt.Sprintf("%s (%s)", version, commit),
 	}
@@ -112,10 +112,10 @@ func launchTUI(ctx context.Context, cfg config.Config) error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Env = append(os.Environ(),
-		"GOCODE_ENGINE_PATH="+enginePath,
-		"GOCODE_MODEL="+cfg.Model,
-		"GOCODE_MODE="+cfg.DefaultMode,
-		"GOCODE_COST_WARNING_THRESHOLD_USD="+strconv.FormatFloat(cfg.CostWarningThresholdUSD, 'f', -1, 64),
+		"CHAN_ENGINE_PATH="+enginePath,
+		"CHAN_MODEL="+cfg.Model,
+		"CHAN_MODE="+cfg.DefaultMode,
+		"CHAN_COST_WARNING_THRESHOLD_USD="+strconv.FormatFloat(cfg.CostWarningThresholdUSD, 'f', -1, 64),
 	)
 
 	if err := cmd.Run(); err != nil {
@@ -125,9 +125,9 @@ func launchTUI(ctx context.Context, cfg config.Config) error {
 }
 
 func resolveTUIEntry() (string, error) {
-	if override := strings.TrimSpace(os.Getenv("GOCODE_TUI_ENTRY")); override != "" {
+	if override := strings.TrimSpace(os.Getenv("CHAN_TUI_ENTRY")); override != "" {
 		if _, err := os.Stat(override); err != nil {
-			return "", fmt.Errorf("stat GOCODE_TUI_ENTRY: %w", err)
+			return "", fmt.Errorf("stat CHAN_TUI_ENTRY: %w", err)
 		}
 		return override, nil
 	}

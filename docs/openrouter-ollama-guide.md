@@ -1,6 +1,6 @@
 # OpenRouter and Ollama Guide
 
-This guide shows how to use `gocode` with:
+This guide shows how to use `chan` with:
 
 - OpenRouter free models
 - Your local Ollama model: `gemma4-e4b`
@@ -12,7 +12,7 @@ This guide shows how to use `gocode` with:
 That means you should **not** use model names like:
 
 ```bash
-gocode --model openrouter/google/gemma-3-27b-it:free
+chan --model openrouter/google/gemma-3-27b-it:free
 ```
 
 That will not resolve correctly.
@@ -21,26 +21,26 @@ Instead, use the **OpenAI-compatible provider** with OpenRouter's base URL:
 
 - provider prefix: `openai/`
 - base URL: `https://openrouter.ai/api/v1`
-- API key: `GOCODE_API_KEY` or `OPENAI_API_KEY`
+- API key: `CHAN_API_KEY` or `OPENAI_API_KEY`
 
 ## Option 1: OpenRouter free models
 
 ### One-off shell session
 
 ```bash
-export GOCODE_API_KEY="your-openrouter-api-key"
-export GOCODE_BASE_URL="https://openrouter.ai/api/v1"
+export CHAN_API_KEY="your-openrouter-api-key"
+export CHAN_BASE_URL="https://openrouter.ai/api/v1"
 
-gocode --model openai/google/gemma-3-27b-it:free
+chan --model openai/google/gemma-3-27b-it:free
 ```
 
-You can also use `OPENAI_API_KEY` instead of `GOCODE_API_KEY`:
+You can also use `OPENAI_API_KEY` instead of `CHAN_API_KEY`:
 
 ```bash
 export OPENAI_API_KEY="your-openrouter-api-key"
-export GOCODE_BASE_URL="https://openrouter.ai/api/v1"
+export CHAN_BASE_URL="https://openrouter.ai/api/v1"
 
-gocode --model openai/google/gemma-3-27b-it:free
+chan --model openai/google/gemma-3-27b-it:free
 ```
 
 ### Why the `openai/` prefix is required
@@ -58,7 +58,7 @@ If you pass that directly, the CLI would treat `google` as the provider, which i
 This works correctly:
 
 ```bash
-gocode --model openai/google/gemma-3-27b-it:free
+chan --model openai/google/gemma-3-27b-it:free
 ```
 
 Because the CLI then uses:
@@ -73,9 +73,9 @@ That matches the current implementation.
 Examples you can try:
 
 ```bash
-gocode --model openai/google/gemma-3-27b-it:free
-gocode --model openai/meta-llama/llama-3.3-70b-instruct:free
-gocode --model openai/mistralai/mistral-small-3.1-24b-instruct:free
+chan --model openai/google/gemma-3-27b-it:free
+chan --model openai/meta-llama/llama-3.3-70b-instruct:free
+chan --model openai/mistralai/mistral-small-3.1-24b-instruct:free
 ```
 
 Model availability changes on OpenRouter, so check their current free model list.
@@ -128,11 +128,11 @@ ollama pull gemma4-e4b
 ### Setup A: Keep OpenRouter as the main model, use Ollama only for compaction
 
 ```bash
-export GOCODE_API_KEY="your-openrouter-api-key"
-export GOCODE_BASE_URL="https://openrouter.ai/api/v1"
+export CHAN_API_KEY="your-openrouter-api-key"
+export CHAN_BASE_URL="https://openrouter.ai/api/v1"
 export USE_LOCAL_MODEL=true
 
-gocode --model openai/google/gemma-3-27b-it:free
+chan --model openai/google/gemma-3-27b-it:free
 ```
 
 With that setup:
@@ -141,10 +141,10 @@ With that setup:
 - helper task routing: Ollama is allowed
 - current helper task using Ollama: compaction
 
-### Setup B: Run `gocode` with Ollama as the main model
+### Setup B: Run `chan` with Ollama as the main model
 
 ```bash
-gocode --model ollama/gemma4-e4b
+chan --model ollama/gemma4-e4b
 ```
 
 The built-in Ollama base URL is already:
@@ -160,21 +160,21 @@ This changes the main interactive model to Ollama.
 ### If Ollama is on a different host or port
 
 ```bash
-export GOCODE_BASE_URL="http://127.0.0.1:11434"
-gocode --model ollama/gemma4-e4b
+export CHAN_BASE_URL="http://127.0.0.1:11434"
+chan --model ollama/gemma4-e4b
 ```
 
 ## Switching between OpenRouter and Ollama
 
-The main thing to avoid is leaving `GOCODE_BASE_URL` set to OpenRouter when you want to use Ollama.
+The main thing to avoid is leaving `CHAN_BASE_URL` set to OpenRouter when you want to use Ollama.
 
 ### OpenRouter session
 
 ```bash
-export GOCODE_API_KEY="your-openrouter-api-key"
-export GOCODE_BASE_URL="https://openrouter.ai/api/v1"
+export CHAN_API_KEY="your-openrouter-api-key"
+export CHAN_BASE_URL="https://openrouter.ai/api/v1"
 export USE_LOCAL_MODEL=true
-gocode --model openai/google/gemma-3-27b-it:free
+chan --model openai/google/gemma-3-27b-it:free
 ```
 
 This is the setup to use if you want OpenRouter as the main model and Ollama only for compaction.
@@ -182,11 +182,11 @@ This is the setup to use if you want OpenRouter as the main model and Ollama onl
 ### Ollama session
 
 ```bash
-unset GOCODE_API_KEY
+unset CHAN_API_KEY
 unset OPENAI_API_KEY
-unset GOCODE_BASE_URL
+unset CHAN_BASE_URL
 unset USE_LOCAL_MODEL
-gocode --model ollama/gemma4-e4b
+chan --model ollama/gemma4-e4b
 ```
 
 This is the setup to use if you want Ollama as the main model.
@@ -198,14 +198,14 @@ Add these to your shell config if you switch often.
 ### zsh / bash
 
 ```bash
-alias gocode-openrouter='GOCODE_BASE_URL="https://openrouter.ai/api/v1" gocode --model openai/google/gemma-3-27b-it:free'
-alias gocode-ollama='env -u GOCODE_BASE_URL -u GOCODE_API_KEY -u OPENAI_API_KEY gocode --model ollama/gemma4-e4b'
+alias chan-openrouter='CHAN_BASE_URL="https://openrouter.ai/api/v1" chan --model openai/google/gemma-3-27b-it:free'
+alias chan-ollama='env -u CHAN_BASE_URL -u CHAN_API_KEY -u OPENAI_API_KEY chan --model ollama/gemma4-e4b'
 ```
 
 If you want the OpenRouter alias to also opt into local compaction, use this version instead:
 
 ```bash
-alias gocode-openrouter='USE_LOCAL_MODEL=true GOCODE_BASE_URL="https://openrouter.ai/api/v1" gocode --model openai/google/gemma-3-27b-it:free'
+alias chan-openrouter='USE_LOCAL_MODEL=true CHAN_BASE_URL="https://openrouter.ai/api/v1" chan --model openai/google/gemma-3-27b-it:free'
 ```
 
 If you use the OpenRouter alias, make sure your API key is already exported in your shell profile.
@@ -213,7 +213,7 @@ If you use the OpenRouter alias, make sure your API key is already exported in y
 Example:
 
 ```bash
-export GOCODE_API_KEY="your-openrouter-api-key"
+export CHAN_API_KEY="your-openrouter-api-key"
 ```
 
 ## Recommended config file setups
@@ -221,7 +221,7 @@ export GOCODE_API_KEY="your-openrouter-api-key"
 Config file path:
 
 ```text
-~/.config/gocode/config.json
+~/.config/chan/config.json
 ```
 
 ### OpenRouter-focused config
@@ -237,9 +237,9 @@ Config file path:
 Then just export your API key:
 
 ```bash
-export GOCODE_API_KEY="your-openrouter-api-key"
+export CHAN_API_KEY="your-openrouter-api-key"
 export USE_LOCAL_MODEL=true
-gocode
+chan
 ```
 
 That keeps OpenRouter as the main model and allows Ollama for compaction.
@@ -256,7 +256,7 @@ That keeps OpenRouter as the main model and allows Ollama for compaction.
 Then just run:
 
 ```bash
-gocode
+chan
 ```
 
 That uses Ollama as the main model.
@@ -268,13 +268,13 @@ That uses Ollama as the main model.
 Cause:
 
 ```bash
-gocode --model google/gemma-3-27b-it:free
+chan --model google/gemma-3-27b-it:free
 ```
 
 Fix:
 
 ```bash
-gocode --model openai/google/gemma-3-27b-it:free
+chan --model openai/google/gemma-3-27b-it:free
 ```
 
 ### Error: missing API key for provider "openai"
@@ -286,7 +286,7 @@ You are using OpenRouter through the OpenAI-compatible client, but no API key is
 Fix:
 
 ```bash
-export GOCODE_API_KEY="your-openrouter-api-key"
+export CHAN_API_KEY="your-openrouter-api-key"
 ```
 
 or:
@@ -299,19 +299,19 @@ export OPENAI_API_KEY="your-openrouter-api-key"
 
 Cause:
 
-Ollama is not running, or `GOCODE_BASE_URL` is still pointing at OpenRouter.
+Ollama is not running, or `CHAN_BASE_URL` is still pointing at OpenRouter.
 
 Fix:
 
 ```bash
-unset GOCODE_BASE_URL
+unset CHAN_BASE_URL
 ollama serve
 ```
 
 Then run:
 
 ```bash
-gocode --model ollama/gemma4-e4b
+chan --model ollama/gemma4-e4b
 ```
 
 If you are only trying to use Ollama for compaction while keeping OpenRouter as the main model, do not switch to `ollama/...`; keep your OpenRouter model and set only:
@@ -336,4 +336,4 @@ A good workflow is:
 Short version:
 
 - `USE_LOCAL_MODEL=true` = opt in local compaction
-- `--model ollama/gemma4-e4b` = make Ollama the main model in `gocode`
+- `--model ollama/gemma4-e4b` = make Ollama the main model in `chan`

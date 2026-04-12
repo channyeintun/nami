@@ -10,7 +10,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/channyeintun/gocode/internal/api"
+	"github.com/channyeintun/chan/internal/api"
 )
 
 // Metadata holds session state for persistence and resume.
@@ -36,10 +36,10 @@ func NewStore(baseDir string) *Store {
 	return &Store{baseDir: baseDir}
 }
 
-// DefaultBaseDir returns ~/.config/gocode/sessions/.
+// DefaultBaseDir returns ~/.config/chan/sessions/.
 func DefaultBaseDir() string {
 	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".config", "gocode", "sessions")
+	return filepath.Join(home, ".config", "chan", "sessions")
 }
 
 // SessionDir returns the directory for a specific session.

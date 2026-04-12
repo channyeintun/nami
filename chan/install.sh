@@ -1,12 +1,12 @@
 #!/bin/sh
 set -e
 
-# gocode installer
-# Usage: curl -fsSL https://raw.githubusercontent.com/channyeintun/gocode/main/gocode/install.sh | sh
+# chan installer
+# Usage: curl -fsSL https://raw.githubusercontent.com/channyeintun/chan/main/chan/install.sh | sh
 
-REPO="channyeintun/gocode"
-BINARY_NAME="gocode"
-ENGINE_NAME="gocode-engine"
+REPO="channyeintun/chan"
+BINARY_NAME="chan"
+ENGINE_NAME="chan-engine"
 
 DEFAULT_SYSTEM_DIR="/usr/local/bin"
 DEFAULT_USER_DIR="${HOME}/.local/bin"
@@ -74,7 +74,7 @@ ensure_bun_available() {
   fi
 
   echo ""
-  echo "Install failed: this gocode release uses a Bun launcher, but 'bun' was not found on PATH."
+  echo "Install failed: this chan release uses a Bun launcher, but 'bun' was not found on PATH."
   echo ""
   echo "Install Bun first, then rerun this installer:"
   echo "  https://bun.sh"
@@ -121,8 +121,8 @@ else
     echo ""
     echo "If you already have a local build, install manually instead:"
     echo "  mkdir -p \"\$HOME/.local/bin\""
-    echo "  install -m 755 gocode \"\$HOME/.local/bin/gocode\""
-    echo "  install -m 755 gocode-engine \"\$HOME/.local/bin/gocode-engine\""
+    echo "  install -m 755 chan \"\$HOME/.local/bin/chan\""
+    echo "  install -m 755 chan-engine \"\$HOME/.local/bin/chan-engine\""
     echo "  export PATH=\"\$HOME/.local/bin:\$PATH\""
     exit 1
   fi
@@ -138,11 +138,11 @@ install_binary "$BINARY_SOURCE" "$INSTALL_DIR/$BINARY_NAME"
 install_binary "$ENGINE_SOURCE" "$INSTALL_DIR/$ENGINE_NAME"
 
 echo ""
-echo "gocode installed successfully!"
+echo "chan installed successfully!"
 echo "Installed to: ${INSTALL_DIR}"
 echo ""
 echo "Verify installation:"
-echo "  command -v gocode"
+echo "  command -v chan"
 
 case ":$PATH:" in
   *":${INSTALL_DIR}:"*)
@@ -163,8 +163,8 @@ echo "  export ANTHROPIC_API_KEY=\"sk-ant-...\""
 if requires_bun_runtime "$BINARY_SOURCE"; then
   echo "  bun --version"
 fi
-echo "  gocode"
+echo "  chan"
 echo ""
 echo "Or use a different provider:"
-echo "  gocode --model openai/gpt-4o"
-echo "  gocode --model ollama/gemma3"
+echo "  chan --model openai/gpt-4o"
+echo "  chan --model ollama/gemma3"

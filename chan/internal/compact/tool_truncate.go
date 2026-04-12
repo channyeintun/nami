@@ -3,7 +3,7 @@ package compact
 import (
 	"strings"
 
-	"github.com/channyeintun/gocode/internal/api"
+	"github.com/channyeintun/chan/internal/api"
 )
 
 // CompactableTools lists tools whose old results can be safely truncated.

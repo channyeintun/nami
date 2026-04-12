@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"iter"
 
-	"github.com/channyeintun/gocode/internal/api"
-	"github.com/channyeintun/gocode/internal/debuglog"
+	"github.com/channyeintun/chan/internal/api"
+	"github.com/channyeintun/chan/internal/debuglog"
 )
 
 // debugClientProxy wraps an api.LLMClient and logs every method call.

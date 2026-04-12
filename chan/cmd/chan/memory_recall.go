@@ -8,10 +8,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/channyeintun/gocode/internal/agent"
-	"github.com/channyeintun/gocode/internal/api"
-	costpkg "github.com/channyeintun/gocode/internal/cost"
-	"github.com/channyeintun/gocode/internal/ipc"
+	"github.com/channyeintun/chan/internal/agent"
+	"github.com/channyeintun/chan/internal/api"
+	costpkg "github.com/channyeintun/chan/internal/cost"
+	"github.com/channyeintun/chan/internal/ipc"
 )
 
 const (

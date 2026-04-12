@@ -1,6 +1,6 @@
 package compact
 
-import "github.com/channyeintun/gocode/internal/api"
+import "github.com/channyeintun/chan/internal/api"
 
 // Token counting and compaction thresholds.
 

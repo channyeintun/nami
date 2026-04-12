@@ -3,7 +3,7 @@
   "configVersion": 0,
   "workspaces": {
     "": {
-      "name": "gocode-tui",
+      "name": "chan-tui",
       "dependencies": {
         "cli-highlight": "^2.1.11",
         "ink": "^7.0.0",

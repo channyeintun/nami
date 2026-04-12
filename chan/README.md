@@ -1,35 +1,35 @@
-# gocode
+# chan
 
 An agentic coding CLI powered by LLMs. Think, plan, and execute code changes from your terminal.
 
 ## Prerequisites
 
 - macOS or Linux
-- Bun 1.0+ to run the `gocode` launcher
+- Bun 1.0+ to run the `chan` launcher
 - One configured model provider: set the matching API key for Anthropic, OpenAI, Google, DeepSeek, Groq, or Mistral; or install Ollama for local models
-- Go 1.26+ only if you are building from source or rebuilding `gocode-engine` locally
+- Go 1.26+ only if you are building from source or rebuilding `chan-engine` locally
 
 ## Install
 
 ### macOS / Linux (one command)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/channyeintun/gocode/main/gocode/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/channyeintun/chan/main/chan/install.sh | sh
 ```
 
-This script downloads prebuilt `gocode` and `gocode-engine` release assets from GitHub Releases; it does not build from source. Current releases install a Bun launcher plus the Go engine, so Bun 1.0+ must already be installed on the machine where you run `gocode`. If prebuilt assets are unavailable for your platform, this command will fail, so use the manual install flow below instead.
+This script downloads prebuilt `chan` and `chan-engine` release assets from GitHub Releases; it does not build from source. Current releases install a Bun launcher plus the Go engine, so Bun 1.0+ must already be installed on the machine where you run `chan`. If prebuilt assets are unavailable for your platform, this command will fail, so use the manual install flow below instead.
 
 The installer chooses a writable install directory automatically:
 
 - `/usr/local/bin` if it is writable
 - `~/.local/bin` otherwise
 
-It installs two executables: `gocode` and `gocode-engine`.
+It installs two executables: `chan` and `chan-engine`.
 
 After install, verify:
 
 ```bash
-command -v gocode
+command -v chan
 ```
 
 If your shell still cannot find it, add the install directory to your PATH. For example:
@@ -40,11 +40,11 @@ export PATH="$HOME/.local/bin:$PATH"
 
 ### Manual install
 
-If you already have local `gocode` and `gocode-engine` executables, copy both files to a directory in your `PATH`:
+If you already have local `chan` and `chan-engine` executables, copy both files to a directory in your `PATH`:
 
 ```bash
-sudo install -m 755 gocode /usr/local/bin/gocode
-sudo install -m 755 gocode-engine /usr/local/bin/gocode-engine
+sudo install -m 755 chan /usr/local/bin/chan
+sudo install -m 755 chan-engine /usr/local/bin/chan-engine
 ```
 
 `install -m 755` is used instead of `cp` so the binary is copied and marked executable in one step.
@@ -53,8 +53,8 @@ If you do not want to use `sudo`, install to a user-owned directory instead:
 
 ```bash
 mkdir -p "$HOME/.local/bin"
-install -m 755 gocode "$HOME/.local/bin/gocode"
-install -m 755 gocode-engine "$HOME/.local/bin/gocode-engine"
+install -m 755 chan "$HOME/.local/bin/chan"
+install -m 755 chan-engine "$HOME/.local/bin/chan-engine"
 ```
 
 Then make sure `~/.local/bin` is on your PATH:
@@ -66,15 +66,15 @@ export PATH="$HOME/.local/bin:$PATH"
 If you are working from a local clone and want to install the current build directly, use the built release directory:
 
 ```bash
-cd gocode/tui
+cd chan/tui
 make release-local
 mkdir -p "$HOME/.local/bin"
-install -m 755 release/gocode "$HOME/.local/bin/gocode"
-install -m 755 release/gocode-engine "$HOME/.local/bin/gocode-engine"
+install -m 755 release/chan "$HOME/.local/bin/chan"
+install -m 755 release/chan-engine "$HOME/.local/bin/chan-engine"
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
-That local-clone build installs a Bun launcher plus the Go engine, so Bun must remain installed on the machine where you run `gocode`.
+That local-clone build installs a Bun launcher plus the Go engine, so Bun must remain installed on the machine where you run `chan`.
 
 ## Setup
 
@@ -101,18 +101,18 @@ Supported providers and their environment variables:
 
 GitHub Copilot uses an interactive device-login flow instead of a static API key.
 
-Start `gocode`, then run:
+Start `chan`, then run:
 
 ```text
 /connect
 ```
 
-`gocode` will:
+`chan` will:
 
 - print the GitHub verification URL and device code in the transcript
 - try to open the verification URL in your browser automatically
 - wait for you to finish the GitHub authorization flow
-- save the resulting credentials in `~/.config/gocode/config.json`
+- save the resulting credentials in `~/.config/chan/config.json`
 - switch the main model to `github-copilot/gpt-5.4`
 - set the subagent model to `github-copilot/claude-haiku-4.5`
 
@@ -122,19 +122,19 @@ For GitHub Enterprise, pass the domain explicitly:
 /connect github-copilot your-company.example
 ```
 
-After the first successful `/connect`, future `gocode` launches can use GitHub Copilot directly without reconnecting unless your saved GitHub authorization is revoked.
+After the first successful `/connect`, future `chan` launches can use GitHub Copilot directly without reconnecting unless your saved GitHub authorization is revoked.
 
 ## Usage
 
 ```bash
-gocode
+chan
 ```
 
 That's it. You'll see a terminal UI with a prompt. Type your request and press Enter.
 
 ### First-Class Outputs
 
-Artifacts are first-class outputs in `gocode`, not just long-text spill buckets. When the agent produces durable structured work, it should persist that work as an artifact so it remains reviewable in the artifact panel.
+Artifacts are first-class outputs in `chan`, not just long-text spill buckets. When the agent produces durable structured work, it should persist that work as an artifact so it remains reviewable in the artifact panel.
 
 - Implementation plans are saved as explicit review artifacts before execution begins.
 - Task lists and walkthroughs capture ongoing progress and completed-work summaries across turns.
@@ -145,10 +145,10 @@ Artifacts are first-class outputs in `gocode`, not just long-text spill buckets.
 ### Options
 
 ```
-gocode --model openai/gpt-4o        # Use a different model
-gocode --model ollama/gemma3         # Use a local model via Ollama
-gocode --mode fast                   # Skip planning, execute directly
-gocode --help                        # Show help
+chan --model openai/gpt-4o        # Use a different model
+chan --model ollama/gemma3         # Use a local model via Ollama
+chan --mode fast                   # Skip planning, execute directly
+chan --help                        # Show help
 ```
 
 ### Slash Commands
@@ -259,7 +259,7 @@ Background child agents continue to surface through `agent_status` and `agent_st
 
 ## Configuration
 
-Config file: `~/.config/gocode/config.json`
+Config file: `~/.config/chan/config.json`
 
 ```json
 {
@@ -272,47 +272,47 @@ Environment variables override the config file:
 
 | Variable                 | Description                                      |
 | ------------------------ | ------------------------------------------------ |
-| `GOCODE_MODEL`           | Model to use                                     |
-| `GOCODE_API_KEY`         | API key (overrides provider-specific keys)       |
-| `GOCODE_BASE_URL`        | Custom API base URL                              |
-| `GOCODE_DEBUG`           | Enable runtime debug logging to the session log  |
-| `GOCODE_PERMISSION_MODE` | `default`, `autoApprove`, or `bypassPermissions` |
+| `CHAN_MODEL`           | Model to use                                     |
+| `CHAN_API_KEY`         | API key (overrides provider-specific keys)       |
+| `CHAN_BASE_URL`        | Custom API base URL                              |
+| `CHAN_DEBUG`           | Enable runtime debug logging to the session log  |
+| `CHAN_PERMISSION_MODE` | `default`, `autoApprove`, or `bypassPermissions` |
 
 If you use GitHub Copilot, the config file will also persist Copilot credentials and may include a `subagent_model` field after `/connect` completes.
 
 ### Debug Logging
 
-To capture low-level runtime diagnostics for provider streams, tool traffic, IPC, and model-event sequencing, launch `gocode` with:
+To capture low-level runtime diagnostics for provider streams, tool traffic, IPC, and model-event sequencing, launch `chan` with:
 
 ```bash
-GOCODE_DEBUG=1 gocode
+CHAN_DEBUG=1 chan
 ```
 
-This writes a structured `debug.log` into the current session directory under `~/.config/gocode/sessions/<session-id>/debug.log`.
+This writes a structured `debug.log` into the current session directory under `~/.config/chan/sessions/<session-id>/debug.log`.
 
 ## Architecture
 
 ```
 ┌──────────────────────────────┐
-│  gocode (Bun launcher)       │  ← Terminal UI (React Ink)
+│  chan (Bun launcher)       │  ← Terminal UI (React Ink)
 │    Renders TUI, handles I/O  │
 │         │ stdin/stdout NDJSON│
 │  ┌──────▼────────────────┐   │
-│  │ gocode-engine (Go)     │  │  ← LLM client, tools,agent loop
+│  │ chan-engine (Go)     │  │  ← LLM client, tools,agent loop
 │  │  Streams events out    │  │
 │  │  Reads commands in     │  │
 │  └────────────────────────┘  │
 └──────────────────────────────┘
 ```
 
-Both executables must be in the same directory (or `gocode-engine` must be in `PATH`). When using released or locally built launcher assets, Bun must also be installed on the target machine.
+Both executables must be in the same directory (or `chan-engine` must be in `PATH`). When using released or locally built launcher assets, Bun must also be installed on the target machine.
 
 ## Building from Source
 
 Requires: Go 1.26+, Bun 1.0+
 
 ```bash
-cd gocode/tui
+cd chan/tui
 bun install --frozen-lockfile   # Install JS deps from bun.lock
 bun run setup                   # Build TS and compile Go engine
 bun run start                   # Run the TUI in development
@@ -322,7 +322,7 @@ make release           # Package Bun-launcher release assets + per-platform engi
 make install           # Install to /usr/local/bin
 ```
 
-`make release` writes GitHub-release-ready artifacts under `gocode/tui/release/`, including per-platform tarballs plus direct-upload launcher and engine binaries in `gocode/tui/release/assets/`.
+`make release` writes GitHub-release-ready artifacts under `chan/tui/release/`, including per-platform tarballs plus direct-upload launcher and engine binaries in `chan/tui/release/assets/`.
 
 ## License
 

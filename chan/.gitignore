@@ -1,8 +1,7 @@
 # Go
-/gocode
 /bin/
 !/tui/bin/
-!/tui/bin/gocode.js
+!/tui/bin/chan.js
 *.exe
 *.test
 *.out
@@ -24,4 +23,4 @@ tui/.tsbuildinfo
 Thumbs.db
 
 # Sessions and artifacts (local data)
-.gocode/
+.chan/

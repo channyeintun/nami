@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/channyeintun/gocode/internal/api"
-	artifactspkg "github.com/channyeintun/gocode/internal/artifacts"
-	toolpkg "github.com/channyeintun/gocode/internal/tools"
+	"github.com/channyeintun/chan/internal/api"
+	artifactspkg "github.com/channyeintun/chan/internal/artifacts"
+	toolpkg "github.com/channyeintun/chan/internal/tools"
 )
 
 const (

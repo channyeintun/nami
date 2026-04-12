@@ -11,10 +11,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/channyeintun/gocode/internal/agent"
-	"github.com/channyeintun/gocode/internal/ipc"
-	"github.com/channyeintun/gocode/internal/session"
-	toolpkg "github.com/channyeintun/gocode/internal/tools"
+	"github.com/channyeintun/chan/internal/agent"
+	"github.com/channyeintun/chan/internal/ipc"
+	"github.com/channyeintun/chan/internal/session"
+	toolpkg "github.com/channyeintun/chan/internal/tools"
 )
 
 const backgroundAgentRetention = 5 * time.Minute

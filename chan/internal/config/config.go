@@ -51,10 +51,10 @@ func DefaultConfig() Config {
 	}
 }
 
-// ConfigDir returns ~/.config/gocode/.
+// ConfigDir returns ~/.config/chan/.
 func ConfigDir() string {
 	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".config", "gocode")
+	return filepath.Join(home, ".config", "chan")
 }
 
 // ConfigPath returns the path to the config file.
@@ -75,19 +75,19 @@ func Load() Config {
 	}
 
 	// Environment overrides
-	if v := os.Getenv("GOCODE_MODEL"); v != "" {
+	if v := os.Getenv("CHAN_MODEL"); v != "" {
 		cfg.Model = v
 	}
-	if v := os.Getenv("GOCODE_BASE_URL"); v != "" {
+	if v := os.Getenv("CHAN_BASE_URL"); v != "" {
 		cfg.BaseURL = v
 	}
-	if v := os.Getenv("GOCODE_API_KEY"); v != "" {
+	if v := os.Getenv("CHAN_API_KEY"); v != "" {
 		cfg.APIKey = v
 	}
-	if v := os.Getenv("GOCODE_REASONING_EFFORT"); v != "" {
+	if v := os.Getenv("CHAN_REASONING_EFFORT"); v != "" {
 		cfg.ReasoningEffort = v
 	}
-	if v := os.Getenv("GOCODE_PERMISSION_MODE"); v != "" {
+	if v := os.Getenv("CHAN_PERMISSION_MODE"); v != "" {
 		cfg.PermissionMode = v
 	}
 	if cfg.PermissionMode != "" {
@@ -96,16 +96,16 @@ func Load() Config {
 			// valid
 		default:
 			fmt.Fprintf(os.Stderr,
-				"warning: unknown GOCODE_PERMISSION_MODE %q — falling back to \"default\"; valid values are: default, bypassPermissions, autoApprove\n",
+				"warning: unknown CHAN_PERMISSION_MODE %q — falling back to \"default\"; valid values are: default, bypassPermissions, autoApprove\n",
 				cfg.PermissionMode)
 			cfg.PermissionMode = "default"
 		}
 	}
-	if v := os.Getenv("GOCODE_COST_WARNING_THRESHOLD_USD"); v != "" {
+	if v := os.Getenv("CHAN_COST_WARNING_THRESHOLD_USD"); v != "" {
 		if parsed, err := strconv.ParseFloat(v, 64); err == nil {
 			cfg.CostWarningThresholdUSD = parsed
 		} else {
-			fmt.Fprintf(os.Stderr, "warning: invalid GOCODE_COST_WARNING_THRESHOLD_USD %q: %v\n", v, err)
+			fmt.Fprintf(os.Stderr, "warning: invalid CHAN_COST_WARNING_THRESHOLD_USD %q: %v\n", v, err)
 		}
 	}
 
