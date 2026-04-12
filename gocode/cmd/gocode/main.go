@@ -414,6 +414,9 @@ func runStdioEngine(ctx context.Context, cfg config.Config) error {
 						selector := memoryRecallSelector{bridge: bridge, tracker: tracker, client: client}
 						return selector.Select(callCtx, files, userPrompt)
 					},
+					BeforeStop: func(callCtx context.Context, stopReq agent.StopRequest) (agent.StopDecision, error) {
+						return evaluateSessionStopHooks(callCtx, hookRunner, sessionID, stopReq)
+					},
 					ApplyResultBudget: func(current []api.Message) []api.Message {
 						return current
 					},
@@ -433,7 +436,13 @@ func runStdioEngine(ctx context.Context, cfg config.Config) error {
 				}
 
 				queryCtx, queryCancel := context.WithCancel(ctx)
-				router.SetCancelFunc(queryCancel)
+				stopControl := agent.NewStopController()
+				deps.StopController = stopControl
+				router.SetCancelFunc(func() {
+					if stopControl.Request("cancelled") {
+						queryCancel()
+					}
+				})
 
 				stream := agent.QueryStream(queryCtx, agent.QueryRequest{
 					Messages:      messages,
@@ -451,6 +460,7 @@ func runStdioEngine(ctx context.Context, cfg config.Config) error {
 				queryCancelled := false
 				for event, streamErr := range stream {
 					if streamErr != nil {
+						runSessionStopFailureHooks(queryCtx, hookRunner, sessionID, turnStopReason, messages, streamErr)
 						if queryCtx.Err() != nil {
 							queryCancelled = true
 							break
@@ -487,15 +497,17 @@ func runStdioEngine(ctx context.Context, cfg config.Config) error {
 				queryCancel()
 				router.SetCancelFunc(nil)
 
-				if queryCancelled {
+				if queryCancelled || turnStopReason == "cancelled" {
 					if turnMetrics.Mark("cancelled") {
 						if err := emitTurnTimingCheckpoint(bridge, turnMetrics, "cancelled"); err != nil {
 							return err
 						}
 					}
-					turnStopReason = "cancelled"
-					if err := bridge.Emit(ipc.EventTurnComplete, ipc.TurnCompletePayload{StopReason: "cancelled"}); err != nil {
-						return err
+					if turnStopReason == "" {
+						turnStopReason = "cancelled"
+						if err := bridge.Emit(ipc.EventTurnComplete, ipc.TurnCompletePayload{StopReason: "cancelled"}); err != nil {
+							return err
+						}
 					}
 					flushTurnMetrics("cancelled")
 					break
@@ -1092,6 +1104,89 @@ func emitToolError(bridge *ipc.Bridge, call api.ToolCall, message string, output
 		}
 	}
 	return bridge.Emit(ipc.EventToolError, payload)
+}
+
+func evaluateSessionStopHooks(
+	ctx context.Context,
+	hookRunner *hooks.Runner,
+	sessionID string,
+	stopReq agent.StopRequest,
+) (agent.StopDecision, error) {
+	if hookRunner == nil {
+		return agent.StopDecision{}, nil
+	}
+	responses, err := hookRunner.Run(ctx, hooks.Payload{
+		Type:      hooks.HookStop,
+		SessionID: sessionID,
+		Output:    strings.TrimSpace(stopReq.AssistantMessage.Content),
+		Extra: map[string]any{
+			"stop_reason": stopReq.StopReason,
+			"turn_count":  stopReq.TurnCount,
+		},
+	})
+	if err != nil {
+		return agent.StopDecision{}, err
+	}
+	for _, resp := range responses {
+		action := strings.ToLower(strings.TrimSpace(resp.Action))
+		if action != "deny" && action != "stop" {
+			continue
+		}
+		reason := strings.TrimSpace(resp.Message)
+		if reason == "" {
+			reason = "blocked by stop hook"
+		}
+		return agent.StopDecision{
+			Continue:        true,
+			Reason:          reason,
+			FollowUpMessage: sessionStopBlockedFollowUp(reason),
+		}, nil
+	}
+	return agent.StopDecision{}, nil
+}
+
+func runSessionStopFailureHooks(
+	ctx context.Context,
+	hookRunner *hooks.Runner,
+	sessionID string,
+	stopReason string,
+	messages []api.Message,
+	err error,
+) {
+	if hookRunner == nil || err == nil {
+		return
+	}
+	_, _ = hookRunner.Run(ctx, hooks.Payload{
+		Type:      hooks.HookStopFailure,
+		SessionID: sessionID,
+		Output:    latestSessionAssistantContent(messages),
+		Error:     err.Error(),
+		Extra: map[string]any{
+			"stop_reason": strings.TrimSpace(stopReason),
+		},
+	})
+}
+
+func sessionStopBlockedFollowUp(reason string) string {
+	reason = strings.TrimSpace(reason)
+	if reason == "" {
+		return "A local stop hook blocked completion. Continue working until the stop condition is satisfied."
+	}
+	return fmt.Sprintf("A local stop hook blocked completion: %s\n\nContinue working until the stop condition is satisfied.", reason)
+}
+
+func latestSessionAssistantContent(messages []api.Message) string {
+	for index := len(messages) - 1; index >= 0; index-- {
+		msg := messages[index]
+		if msg.Role != api.RoleAssistant {
+			continue
+		}
+		if strings.TrimSpace(msg.Content) == "" {
+			continue
+		}
+		return strings.TrimSpace(msg.Content)
+	}
+	return ""
 }
 
 type authorizationResult struct {

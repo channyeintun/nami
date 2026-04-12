@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/channyeintun/gocode/internal/agent"
 	"github.com/channyeintun/gocode/internal/ipc"
 	"github.com/channyeintun/gocode/internal/session"
 	toolpkg "github.com/channyeintun/gocode/internal/tools"
@@ -27,6 +29,7 @@ type backgroundAgent struct {
 	running      bool
 	done         chan struct{}
 	cancel       context.CancelFunc
+	stopControl  *agent.StopController
 }
 
 var (
@@ -144,10 +147,11 @@ func launchBackgroundAgent(
 	subagentType string,
 	invocationID string,
 	sessionStore *session.Store,
-	execute func(context.Context, func(toolpkg.AgentRunResult)) (toolpkg.AgentRunResult, error),
+	execute func(context.Context, *agent.StopController, func(toolpkg.AgentRunResult)) (toolpkg.AgentRunResult, error),
 ) toolpkg.AgentRunResult {
 	agentID := newBackgroundAgentID()
 	ctx, cancel := context.WithCancel(context.Background())
+	stopControl := agent.NewStopController()
 	transcriptPath := filepath.Join(sessionStore.SessionDir(invocationID), "transcript.ndjson")
 	resultFile := filepath.Join(sessionStore.SessionDir(invocationID), "agent-result.json")
 	bg := &backgroundAgent{
@@ -157,6 +161,7 @@ func launchBackgroundAgent(
 		subagentType: subagentType,
 		done:         make(chan struct{}),
 		cancel:       cancel,
+		stopControl:  stopControl,
 		running:      true,
 		result: toolpkg.AgentRunResult{
 			Status:         "running",
@@ -174,7 +179,7 @@ func launchBackgroundAgent(
 
 	go func() {
 		defer close(bg.done)
-		result, err := execute(ctx, func(update toolpkg.AgentRunResult) {
+		result, err := execute(ctx, stopControl, func(update toolpkg.AgentRunResult) {
 			updateBackgroundAgentRunningState(bridge, bg, update)
 		})
 		bg.mu.Lock()
@@ -197,7 +202,9 @@ func launchBackgroundAgent(
 			emitBackgroundAgentUpdated(bridge, bg, bg.result)
 			return
 		}
-		result.Status = "completed"
+		if strings.TrimSpace(result.Status) == "" {
+			result.Status = "completed"
+		}
 		result.AgentID = agentID
 		bg.result = withChildMetadata(result, bg.description)
 		writeBackgroundAgentResultFile(bg.result)
@@ -277,7 +284,7 @@ func lookupBackgroundAgentStatus(ctx context.Context, req toolpkg.AgentStatusReq
 	bg.mu.Lock()
 	defer bg.mu.Unlock()
 	result := bg.result
-	if bg.running {
+	if bg.running && strings.TrimSpace(result.Status) == "" {
 		result.Status = "running"
 	}
 	return result, nil
@@ -290,9 +297,14 @@ func stopBackgroundAgent(ctx context.Context, bridge *ipc.Bridge, req toolpkg.Ag
 	}
 
 	shouldEmit := false
+	forceCancel := false
 	bg.mu.Lock()
-	if bg.running && bg.cancel != nil {
-		bg.cancel()
+	if bg.running {
+		if bg.stopControl != nil {
+			forceCancel = bg.stopControl.Request("cancelled")
+		} else if bg.cancel != nil {
+			forceCancel = true
+		}
 	}
 	if bg.running {
 		bg.result.Status = "cancelling"
@@ -301,6 +313,9 @@ func stopBackgroundAgent(ctx context.Context, bridge *ipc.Bridge, req toolpkg.Ag
 	}
 	current := bg.result
 	bg.mu.Unlock()
+	if forceCancel && bg.cancel != nil {
+		bg.cancel()
+	}
 	if shouldEmit {
 		emitBackgroundAgentUpdated(bridge, bg, current)
 	}
@@ -319,7 +334,7 @@ func stopBackgroundAgent(ctx context.Context, bridge *ipc.Bridge, req toolpkg.Ag
 	bg.mu.Lock()
 	defer bg.mu.Unlock()
 	result := bg.result
-	if bg.running {
+	if bg.running && strings.TrimSpace(result.Status) == "" {
 		result.Status = "cancelling"
 	}
 	return result, nil

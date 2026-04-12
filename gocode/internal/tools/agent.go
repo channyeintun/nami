@@ -244,7 +244,7 @@ func (t *AgentStopTool) Name() string {
 }
 
 func (t *AgentStopTool) Description() string {
-	return "Cancel a background child agent and return its latest status or final cancellation result."
+	return "Request a background child agent to stop and return its latest status or final cancellation result."
 }
 
 func (t *AgentStopTool) InputSchema() any {
@@ -257,7 +257,7 @@ func (t *AgentStopTool) InputSchema() any {
 			},
 			"wait_ms": map[string]any{
 				"type":        "integer",
-				"description": "Optional number of milliseconds to wait for cancellation to settle before returning status.",
+				"description": "Optional number of milliseconds to wait for the stop request to settle before returning status.",
 				"minimum":     0,
 			},
 		},

@@ -4,6 +4,8 @@ Date: 2026-04-12
 
 Scope: post-ship code review of the enhancement work summarized in `release-note-v2.md`, focused on critical issues, real bugs, and materially missing follow-up work.
 
+Status update: the findings below were addressed in a follow-up implementation pass on 2026-04-12. This file remains the historical audit record for what was found.
+
 ## Findings
 
 ### 1. High: `agent_stop` bypasses child stop-hook policy

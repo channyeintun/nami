@@ -7,6 +7,7 @@ Current milestone: the enhancement roadmap summarized in `release-note-v2.md` ha
 ## Current State
 
 - File-tool robustness and subagent orchestration work from the 2026-04-12 enhancement baseline is complete.
+- Follow-up fixes from `review.md` have been applied for cooperative stop handling and local TypeScript post-edit diagnostics.
 - There is no active execution baseline at the moment.
 - The post-ship review findings are tracked in `review.md`.
 

@@ -39,6 +39,7 @@ type QueryDeps struct {
 	CompactMessages     func(context.Context, []api.Message, CompactReason) ([]api.Message, error)
 	RecallMemory        func(context.Context, []MemoryFile, string) ([]MemoryRecallResult, error)
 	BeforeStop          func(context.Context, StopRequest) (StopDecision, error)
+	StopController      *StopController
 	ApplyResultBudget   func([]api.Message) []api.Message
 	ObserveContinuation func(ContinuationTracker, string)
 	EmitTelemetry       func(ipc.StreamEvent) error
@@ -133,6 +134,17 @@ func QueryStream(ctx context.Context, req QueryRequest, deps QueryDeps) iter.Seq
 				yield(ipc.StreamEvent{}, ctx.Err())
 				return
 			default:
+			}
+
+			handled, err := handlePendingStopRequest(ctx, state, deps, yield)
+			if err != nil {
+				persistMessages(state.Messages, deps.PersistMessages)
+				yield(ipc.StreamEvent{}, err)
+				return
+			}
+			if handled {
+				persistMessages(state.Messages, deps.PersistMessages)
+				continue
 			}
 
 			if err := runIteration(ctx, state, deps, yield); err != nil {

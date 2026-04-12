@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"iter"
@@ -97,11 +98,11 @@ func makeSubagentRunner(
 		}
 
 		execute := func(runCtx context.Context) (toolpkg.AgentRunResult, error) {
-			return executeSubagent(runCtx, req, subagentType, invocationID, bridge, registry, permissionCtx, parentTracker, sessionStore, artifactManager, hookRunner, client, activeModelID, cwd, nil)
+			return executeSubagent(runCtx, req, subagentType, invocationID, bridge, registry, permissionCtx, parentTracker, sessionStore, artifactManager, hookRunner, client, activeModelID, cwd, nil, nil)
 		}
 		if req.Background {
-			launch := launchBackgroundAgent(ctx, bridge, strings.TrimSpace(req.Description), subagentType, invocationID, sessionStore, func(runCtx context.Context, reportStatus func(toolpkg.AgentRunResult)) (toolpkg.AgentRunResult, error) {
-				return executeSubagent(runCtx, req, subagentType, invocationID, bridge, registry, permissionCtx, parentTracker, sessionStore, artifactManager, hookRunner, client, activeModelID, cwd, reportStatus)
+			launch := launchBackgroundAgent(ctx, bridge, strings.TrimSpace(req.Description), subagentType, invocationID, sessionStore, func(runCtx context.Context, stopControl *agent.StopController, reportStatus func(toolpkg.AgentRunResult)) (toolpkg.AgentRunResult, error) {
+				return executeSubagent(runCtx, req, subagentType, invocationID, bridge, registry, permissionCtx, parentTracker, sessionStore, artifactManager, hookRunner, client, activeModelID, cwd, stopControl, reportStatus)
 			})
 			launch.SubagentType = subagentType
 			launch.Tools = subagentToolNames(subagentType)
@@ -130,6 +131,7 @@ func executeSubagent(
 	client api.LLMClient,
 	activeModelID string,
 	cwd string,
+	stopControl *agent.StopController,
 	reportStatus func(toolpkg.AgentRunResult),
 ) (toolpkg.AgentRunResult, error) {
 	childSessionID := invocationID
@@ -193,6 +195,7 @@ func executeSubagent(
 		BeforeStop: func(callCtx context.Context, stopReq agent.StopRequest) (agent.StopDecision, error) {
 			return evaluateChildStopHooks(callCtx, hookRunner, childSessionID, invocationID, req, subagentType, stopReq, lifecycle, transcriptPath, resultFile, reportStatus)
 		},
+		StopController: stopControl,
 		ApplyResultBudget: func(current []api.Message) []api.Message {
 			return current
 		},
@@ -225,10 +228,17 @@ func executeSubagent(
 		MaxTokens:     client.Capabilities().MaxOutputTokens,
 	}, childDeps)
 
-	for _, streamErr := range stream {
+	turnStopReason := ""
+	for event, streamErr := range stream {
 		if streamErr != nil {
 			runChildStopFailureHooks(ctx, hookRunner, childSessionID, invocationID, req, subagentType, childMessages, streamErr)
 			return toolpkg.AgentRunResult{}, streamErr
+		}
+		if event.Type == ipc.EventTurnComplete {
+			var payload ipc.TurnCompletePayload
+			if err := json.Unmarshal(event.Payload, &payload); err == nil {
+				turnStopReason = payload.StopReason
+			}
 		}
 	}
 
@@ -245,18 +255,26 @@ func executeSubagent(
 		return toolpkg.AgentRunResult{}, err
 	}
 
+	status := "completed"
+	errorMessage := ""
+	if turnStopReason == "cancelled" {
+		status = "cancelled"
+		errorMessage = "background child agent cancelled"
+	}
+
 	childSnapshot := childTracker.Snapshot()
 	parentTracker.RecordChildAgentSnapshot(childSnapshot)
 	_ = emitCostUpdate(bridge, parentTracker)
 
 	return toolpkg.AgentRunResult{
-		Status:         "completed",
+		Status:         status,
 		InvocationID:   invocationID,
 		SubagentType:   subagentType,
 		SessionID:      childSessionID,
 		TranscriptPath: transcriptPath,
 		OutputFile:     resultFile,
 		Summary:        latestAssistantContent(childMessages),
+		Error:          errorMessage,
 		TotalCostUSD:   childSnapshot.TotalCostUSD,
 		InputTokens:    childSnapshot.TotalInputTokens,
 		OutputTokens:   childSnapshot.TotalOutputTokens,

@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"time"
@@ -117,15 +118,8 @@ func runGoDiagnostics(ctx context.Context, scope diagnosticsScope) string {
 }
 
 func runTypeScriptDiagnostics(ctx context.Context, scope diagnosticsScope) string {
-	var command string
-	var args []string
-	if _, err := exec.LookPath("bunx"); err == nil {
-		command = "bunx"
-		args = []string{"tsc", "--noEmit", "-p", filepath.Base(scope.file)}
-	} else if _, err := exec.LookPath("npx"); err == nil {
-		command = "npx"
-		args = []string{"tsc", "--noEmit", "-p", filepath.Base(scope.file)}
-	} else {
+	command, args, ok := resolveLocalTypeScriptDiagnosticsCommand(scope)
+	if !ok {
 		return ""
 	}
 	cmd := exec.CommandContext(ctx, command, args...)
@@ -143,6 +137,19 @@ func runTypeScriptDiagnostics(ctx context.Context, scope diagnosticsScope) strin
 		trimmed = err.Error()
 	}
 	return label + ":\n" + trimmed
+}
+
+func resolveLocalTypeScriptDiagnosticsCommand(scope diagnosticsScope) (string, []string, bool) {
+	candidates := []string{filepath.Join("node_modules", ".bin", "tsc")}
+	if runtime.GOOS == "windows" {
+		candidates = append([]string{filepath.Join("node_modules", ".bin", "tsc.cmd")}, candidates...)
+	}
+	for _, candidate := range candidates {
+		if resolved, ok := findNearestFile(scope.root, candidate); ok {
+			return resolved, []string{"--noEmit", "-p", filepath.Base(scope.file)}, true
+		}
+	}
+	return "", nil, false
 }
 
 func summarizeDiagnosticsOutput(output []byte) string {

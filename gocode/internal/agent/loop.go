@@ -125,13 +125,7 @@ func runIteration(
 				return err
 			}
 			if decision.Continue {
-				followUp := strings.TrimSpace(decision.FollowUpMessage)
-				if followUp == "" {
-					followUp = "A local stop hook blocked completion. Continue working until the stop condition is satisfied."
-					if strings.TrimSpace(decision.Reason) != "" {
-						followUp = fmt.Sprintf("A local stop hook blocked completion: %s\n\nContinue working until the stop condition is satisfied.", strings.TrimSpace(decision.Reason))
-					}
-				}
+				followUp := stopBlockedFollowUp(decision)
 				state.Messages = append(state.Messages, api.Message{
 					Role:    api.RoleUser,
 					Content: followUp,
@@ -146,6 +140,59 @@ func runIteration(
 	}
 
 	return nil
+}
+
+func handlePendingStopRequest(
+	ctx context.Context,
+	state *QueryState,
+	deps QueryDeps,
+	yield func(ipc.StreamEvent, error) bool,
+) (bool, error) {
+	if deps.StopController == nil {
+		return false, nil
+	}
+	reason, ok := deps.StopController.Consume()
+	if !ok {
+		return false, nil
+	}
+
+	assistantMessage := latestAssistantMessage(state.Messages)
+	stopReason := normalizeStopReason(reason)
+	if deps.BeforeStop != nil {
+		decision, err := deps.BeforeStop(ctx, StopRequest{
+			Messages:         append([]api.Message(nil), state.Messages...),
+			AssistantMessage: assistantMessage,
+			StopReason:       stopReason,
+			TurnCount:        state.TurnCount,
+		})
+		if err != nil {
+			return true, err
+		}
+		if decision.Continue {
+			state.Messages = append(state.Messages, api.Message{
+				Role:    api.RoleUser,
+				Content: stopBlockedFollowUp(decision),
+			})
+			return true, nil
+		}
+	}
+
+	state.StopRequested = true
+	if !yield(newEvent(ipc.EventTurnComplete, ipc.TurnCompletePayload{StopReason: stopReason}), nil) {
+		return true, context.Canceled
+	}
+	return true, nil
+}
+
+func stopBlockedFollowUp(decision StopDecision) string {
+	followUp := strings.TrimSpace(decision.FollowUpMessage)
+	if followUp != "" {
+		return followUp
+	}
+	if strings.TrimSpace(decision.Reason) == "" {
+		return "A local stop hook blocked completion. Continue working until the stop condition is satisfied."
+	}
+	return fmt.Sprintf("A local stop hook blocked completion: %s\n\nContinue working until the stop condition is satisfied.", strings.TrimSpace(decision.Reason))
 }
 
 func recallMemoryIndexes(
@@ -475,6 +522,15 @@ func latestUserPrompt(messages []api.Message) string {
 		}
 	}
 	return ""
+}
+
+func latestAssistantMessage(messages []api.Message) api.Message {
+	for i := len(messages) - 1; i >= 0; i-- {
+		if messages[i].Role == api.RoleAssistant {
+			return messages[i]
+		}
+	}
+	return api.Message{Role: api.RoleAssistant}
 }
 
 func newEvent(eventType ipc.EventType, payload any) ipc.StreamEvent {
