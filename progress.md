@@ -144,3 +144,11 @@ Tracking fixes per plan.md.
 - Rebuilt the local release with `cd gocode/tui && make release-local`.
 - Installed updated `gocode` and `gocode-engine` into `~/.local/bin` using `install -m 755`.
 - Verified the installed launcher resolves from `~/.local/bin/gocode` and `gocode --help` runs successfully.
+
+### Task 18 — Sanitize Gemini Tool Schemas ✅
+
+- **File:** `gocode/internal/api/gemini.go`
+- Added a Gemini-specific schema sanitizer in `buildGeminiTools(...)` so function declarations no longer forward raw tool JSON Schema directly.
+- The sanitizer strips unsupported metadata keys, filters `required` to declared properties, removes object-only keywords from non-object nodes, and flattens the alias-style `anyOf` / `allOf` required groups used by `gocode` tools into Gemini-safe top-level `required` fields.
+- Preferred canonical required fields are selected with a stable heuristic (`path`/`input`/snake_case before camel/PascalCase), so Gemini sees a smaller compatible parameter surface while runtime compatibility aliases remain accepted by the tool executor.
+- Verified with `gofmt -w internal/api/gemini.go && go build ./...`.
