@@ -22,3 +22,4 @@ Reduce TUI distraction by aligning the default interaction flow more closely wit
 
 1. Replace low-contrast footer mode colors with high-contrast badges for `FAST` and `PLAN`.
 2. Remove inherited dim styling from the footer mode badge and switch to darker backgrounds.
+3. Replace colored footer mode badges with a neutral no-background tag treatment.

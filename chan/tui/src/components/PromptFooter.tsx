@@ -166,29 +166,7 @@ function formatModeLabel(mode: string): string {
 }
 
 function renderModeBadge(mode: string) {
-  const label = ` ${formatModeLabel(mode)} `;
-
-  if (mode === "plan") {
-    return (
-      <Text color="white" backgroundColor="blue" bold>
-        {label}
-      </Text>
-    );
-  }
-
-  if (mode === "fast") {
-    return (
-      <Text color="white" backgroundColor="green" bold>
-        {label}
-      </Text>
-    );
-  }
-
-  return (
-    <Text color="black" backgroundColor="white" bold>
-      {label}
-    </Text>
-  );
+  return <Text bold>{`[${formatModeLabel(mode)}]`}</Text>;
 }
 
 function getPromptTextColumns(terminalColumns: number): number {
