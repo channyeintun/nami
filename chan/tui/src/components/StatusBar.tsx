@@ -66,7 +66,6 @@ const StatusBar: FC<StatusBarProps> = ({
   rateLimits,
   queuedPromptCount = 0,
 }) => {
-  const modeColor = mode === "plan" ? "blue" : "green";
   const readinessLabel = ready ? "READY" : "BOOTING";
   const readinessColor = ready ? "green" : "yellow";
   const workspaceLabel = path.basename(process.cwd());
@@ -119,7 +118,7 @@ const StatusBar: FC<StatusBarProps> = ({
           </>
         ) : null}
         <Text color="gray"> · </Text>
-        <Text color={modeColor}>{mode.toUpperCase()}</Text>
+        <Text bold>{formatModeLabel(mode)}</Text>
         <Text color="gray"> · </Text>
         <Text color="yellow">{modelLabel}</Text>
         <Text color="gray"> · </Text>
@@ -214,6 +213,10 @@ const StatusBar: FC<StatusBarProps> = ({
 };
 
 export default StatusBar;
+
+function formatModeLabel(mode: string): string {
+  return `[${mode.toUpperCase()}]`;
+}
 
 function formatModelLabel(model: string): string {
   const compact = model.trim();
