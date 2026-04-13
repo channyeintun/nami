@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Documentation | Chan CLI</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="stylesheet" href="styles.css">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: '#ff4000',
+                        pure: '#000000',
+                        subtle: '#0a0a0a',
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-pure text-white selection:bg-brand/30">
+    <!-- Navbar -->
+    <nav class="fixed top-0 w-full z-50 border-b border-[#1a1a1a] bg-pure/80 backdrop-blur-md px-8 py-4">
+        <div class="container-max flex justify-between items-center">
+            <a href="index.html" class="flex items-center gap-3">
+                <div class="bg-brand text-white md:w-8 md:h-8 w-6 h-6 flex items-center justify-center font-bold text-sm rounded-sm">C</div>
+                <span class="text-xl font-bold tracking-tight font-['Outfit'] uppercase">Chan</span>
+            </a>
+            <div class="flex gap-8 text-sm font-medium">
+                <a href="index.html" class="text-gray-400 hover:text-white transition">Home</a>
+                <a href="https://github.com/channyeintun/chan" class="text-gray-400 hover:text-white transition">Source</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-max py-32">
+        <div class="docs-grid">
+            <!-- Sidebar -->
+            <aside class="sidebar hidden lg:block">
+                <div class="mb-12">
+                    <h5 class="sidebar-title text-[10px] uppercase font-bold text-gray-500 tracking-widest mb-4">Getting Started</h5>
+                    <a href="#prerequisites" class="sidebar-link scroll-link">Prerequisites</a>
+                    <a href="#install" class="sidebar-link scroll-link">Installation</a>
+                    <a href="#manual-install" class="sidebar-link scroll-link">Manual Install</a>
+                    <a href="#setup" class="sidebar-link scroll-link">Setup</a>
+                    <a href="#copilot" class="sidebar-link scroll-link">GitHub Copilot</a>
+                </div>
+                <div class="mb-12">
+                    <h5 class="sidebar-title text-[10px] uppercase font-bold text-gray-500 tracking-widest mb-4">Workflow</h5>
+                    <a href="#usage" class="sidebar-link scroll-link">First-Class Outputs</a>
+                    <a href="#options" class="sidebar-link scroll-link">CLI Options</a>
+                    <a href="#slash-commands" class="sidebar-link scroll-link">Slash Commands</a>
+                    <a href="#permissions" class="sidebar-link scroll-link">Permissions</a>
+                </div>
+                <div class="mb-12">
+                    <h5 class="sidebar-title text-[10px] uppercase font-bold text-gray-500 tracking-widest mb-4">The Toolset</h5>
+                    <a href="#tools" class="sidebar-link scroll-link">Tools Reference</a>
+                </div>
+                <div class="mb-12">
+                    <h5 class="sidebar-title text-[10px] uppercase font-bold text-gray-500 tracking-widest mb-4">Advanced</h5>
+                    <a href="#modes" class="sidebar-link scroll-link">Child Agent Modes</a>
+                    <a href="#edit-logic" class="sidebar-link scroll-link">Edit Tool Selection</a>
+                    <a href="#config" class="sidebar-link scroll-link">Configuration Reference</a>
+                    <a href="#debug" class="sidebar-link scroll-link">Diagnostics</a>
+                    <a href="#arch" class="sidebar-link scroll-link">Architecture</a>
+                    <a href="#build" class="sidebar-link scroll-link">Building from Source</a>
+                </div>
+            </aside>
+
+            <!-- Main Content -->
+            <main>
+                <!-- Prerequisites -->
+                <section id="prerequisites" class="mb-24">
+                    <h1 class="section-title text-5xl font-black mb-8">Prerequisites</h1>
+                    <ul class="space-y-4 text-sm text-gray-300">
+                        <li class="flex items-center gap-3"><i data-lucide="check-circle" class="w-4 h-4 text-brand"></i> macOS or Linux</li>
+                        <li class="flex items-center gap-3"><i data-lucide="check-circle" class="w-4 h-4 text-brand"></i> Bun 1.0+ to run the <code>chan</code> launcher</li>
+                        <li class="flex items-center gap-3"><i data-lucide="check-circle" class="w-4 h-4 text-brand"></i> One configured model provider (API Key or local Ollama)</li>
+                        <li class="flex items-center gap-3"><i data-lucide="check-circle" class="w-4 h-4 text-brand"></i> Go 1.26+ (Required only for Source Build)</li>
+                    </ul>
+                </section>
+
+                <!-- Install -->
+                <section id="install" class="mb-24">
+                    <h2 class="subsection-title text-3xl font-bold mb-6">Installation</h2>
+                    <p class="text-gray-400 mb-8 leading-relaxed">
+                        Downloads prebuilt binaries automatically. Bun 1.0+ must already be installed.
+                    </p>
+                    <div class="bg-subtle p-6 border border-[#1a1a1a] rounded-md font-mono text-sm relative group overflow-x-auto mb-6">
+                        <span class="text-brand mr-3">$</span><code>curl -fsSL https://raw.githubusercontent.com/channyeintun/chan/main/chan/install.sh | sh</code>
+                        <button class="absolute top-6 right-6 text-gray-700 hover:text-white transition"><i data-lucide="copy" class="w-4 h-4"></i></button>
+                    </div>
+                    <p class="text-xs text-gray-600">Installs <code>chan</code> and <code>chan-engine</code> to <code>/usr/local/bin</code> or <code>~/.local/bin</code>.</p>
+                </section>
+
+                <!-- Manual Install -->
+                <section id="manual-install" class="mb-24">
+                    <h2 class="subsection-title text-3xl font-bold mb-6">Manual Installation</h2>
+                    <div class="space-y-8">
+                        <div>
+                            <h4 class="text-xs font-bold text-gray-500 mb-4 uppercase tracking-widest">A: Global Install</h4>
+                            <pre class="bg-subtle p-6 border border-[#1a1a1a] rounded-md text-sm text-gray-300 overflow-x-auto"><code>sudo install -m 755 chan /usr/local/bin/chan
+sudo install -m 755 chan-engine /usr/local/bin/chan-engine</code></pre>
+                        </div>
+                        <div>
+                            <h4 class="text-xs font-bold text-gray-500 mb-4 uppercase tracking-widest">B: Local User (No Sudo)</h4>
+                            <pre class="bg-subtle p-6 border border-[#1a1a1a] rounded-md text-sm text-gray-300 overflow-x-auto"><code>mkdir -p "$HOME/.local/bin"
+install -m 755 chan "$HOME/.local/bin/chan"
+install -m 755 chan-engine "$HOME/.local/bin/chan-engine"</code></pre>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Setup -->
+                <section id="setup" class="mb-24">
+                    <h2 class="subsection-title text-3xl font-bold mb-6">Setup</h2>
+                    <div class="table-wrapper mb-8">
+                        <table class="w-full text-left text-sm">
+                            <thead><tr><th class="p-4">Provider</th><th class="p-4">Env Variable</th></tr></thead>
+                            <tbody class="text-gray-300">
+                                <tr><td class="p-4 border-t border-[#1a1a1a]">Anthropic</td><td class="p-4 border-t border-[#1a1a1a]"><code>ANTHROPIC_API_KEY</code></td></tr>
+                                <tr><td class="p-4 border-t border-[#1a1a1a]">GitHub Copilot</td><td class="p-4 border-t border-[#1a1a1a]">(use <code>/connect</code>)</td></tr>
+                                <tr><td class="p-4 border-t border-[#1a1a1a]">OpenAI</td><td class="p-4 border-t border-[#1a1a1a]"><code>OPENAI_API_KEY</code></td></tr>
+                                <tr><td class="p-4 border-t border-[#1a1a1a]">Google</td><td class="p-4 border-t border-[#1a1a1a]"><code>GEMINI_API_KEY</code></td></tr>
+                                <tr><td class="p-4 border-t border-[#1a1a1a]">DeepSeek</td><td class="p-4 border-t border-[#1a1a1a]"><code>DEEPSEEK_API_KEY</code></td></tr>
+                                <tr><td class="p-4 border-t border-[#1a1a1a]">Groq</td><td class="p-4 border-t border-[#1a1a1a]"><code>GROQ_API_KEY</code></td></tr>
+                                <tr><td class="p-4 border-t border-[#1a1a1a]">Mistral</td><td class="p-4 border-t border-[#1a1a1a]"><code>MISTRAL_API_KEY</code></td></tr>
+                                <tr><td class="p-4 border-t border-[#1a1a1a]">Ollama</td><td class="p-4 border-t border-[#1a1a1a]">(none — runs locally)</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <!-- Copilot -->
+                <section id="copilot" class="mb-24">
+                    <h2 class="subsection-title text-3xl font-bold mb-6">GitHub Copilot</h2>
+                    <div class="p-8 border border-[#1a1a1a] bg-subtle rounded-lg">
+                        <p class="text-gray-300 mb-6 leading-relaxed">
+                            Run <code class="text-brand">/connect</code> within the TUI. For Enterprise domains:
+                        </p>
+                        <code class="bg-black p-4 rounded block mb-6 text-brand">/connect github-copilot your-company.example</code>
+                        <ul class="space-y-3 text-xs text-gray-500">
+                            <li>&bull; Prints device code in transcript</li>
+                            <li>&bull; Opens verification URL automatically</li>
+                            <li>&bull; Authorizes v5.4 models</li>
+                        </ul>
+                    </div>
+                </section>
+
+                <!-- Usage / Artifacts -->
+                <section id="usage" class="mb-24">
+                    <h2 class="subsection-title text-3xl font-bold mb-6">First-Class Outputs</h2>
+                    <p class="text-gray-400 mb-8 leading-relaxed">
+                        Artifacts in Chan are durable, structured outputs stored in the sidebar panel.
+                    </p>
+                    <ul class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs text-gray-300">
+                        <li class="p-4 border border-[#1a1a1a] rounded-md"><strong class="text-brand">Implementation Plans:</strong> Proposals before execution.</li>
+                        <li class="p-4 border border-[#1a1a1a] rounded-md"><strong class="text-brand">Task Lists:</strong> Real-time progress trackers.</li>
+                        <li class="p-4 border border-[#1a1a1a] rounded-md"><strong class="text-brand">Walkthroughs:</strong> Post-completion summaries.</li>
+                        <li class="p-4 border border-[#1a1a1a] rounded-md"><strong class="text-brand">Durable Returns:</strong> Large fetch/diff results.</li>
+                    </ul>
+                </section>
+
+                <!-- Options -->
+                <section id="options" class="mb-24">
+                    <h2 class="subsection-title text-3xl font-bold mb-6">CLI Options</h2>
+                    <div class="bg-subtle p-6 border border-[#1a1a1a] rounded-md space-y-4 font-mono text-sm overflow-x-auto">
+                        <div><span class="text-gray-500"># Use a specific model</span><br><span class="text-brand">$</span> chan --model openai/gpt-4o</div>
+                        <div><span class="text-gray-500"># Direct execution (skip planning)</span><br><span class="text-brand">$</span> chan --mode fast</div>
+                    </div>
+                </section>
+
+                <!-- Slash Commands -->
+                <section id="slash-commands" class="mb-24">
+                    <h2 class="subsection-title text-3xl font-bold mb-6">Slash Commands</h2>
+                    <div class="table-wrapper">
+                        <table class="w-full text-left text-sm">
+                            <thead><tr><th class="p-4">Command</th><th class="p-4">Description</th></tr></thead>
+                            <tbody class="text-gray-300">
+                                <tr><td class="p-4 border-t border-[#1a1a1a]"><code>/connect</code></td><td class="p-4 border-t border-[#1a1a1a]">Connect GitHub Copilot login</td></tr>
+                                <tr><td class="p-4 border-t border-[#1a1a1a]"><code>/plan</code></td><td class="p-4 border-t border-[#1a1a1a]">Switch to read-only planning mode</td></tr>
+                                <tr><td class="p-4 border-t border-[#1a1a1a]"><code>/fast</code></td><td class="p-4 border-t border-[#1a1a1a]">Switch to direct execution mode</td></tr>
+                                <tr><td class="p-4 border-t border-[#1a1a1a]"><code>/model [name]</code></td><td class="p-4 border-t border-[#1a1a1a]">Show or switch active model</td></tr>
+                                <tr><td class="p-4 border-t border-[#1a1a1a]"><code>/reasoning [level]</code></td><td class="p-4 border-t border-[#1a1a1a]">Set o1 reasoning effort</td></tr>
+                                <tr><td class="p-4 border-t border-[#1a1a1a]"><code>/cost</code></td><td class="p-4 border-t border-[#1a1a1a]">Show token usage and cost</td></tr>
+                                <tr><td class="p-4 border-t border-[#1a1a1a]"><code>/compact</code></td><td class="p-4 border-t border-[#1a1a1a]">Compact the context window</td></tr>
+                                <tr><td class="p-4 border-t border-[#1a1a1a]"><code>/resume [id]</code></td><td class="p-4 border-t border-[#1a1a1a]">Resume previous session</td></tr>
+                                <tr><td class="p-4 border-t border-[#1a1a1a]"><code>/clear</code></td><td class="p-4 border-t border-[#1a1a1a]">Start a fresh session</td></tr>
+                                <tr><td class="p-4 border-t border-[#1a1a1a]"><code>/status</code></td><td class="p-4 border-t border-[#1a1a1a]">Show current session status</td></tr>
+                                <tr><td class="p-4 border-t border-[#1a1a1a]"><code>/sessions</code></td><td class="p-4 border-t border-[#1a1a1a]">List recent sessions</td></tr>
+                                <tr><td class="p-4 border-t border-[#1a1a1a]"><code>/diff [args]</code></td><td class="p-4 border-t border-[#1a1a1a]">Show git diff (e.g. <code>--staged</code>)</td></tr>
+                                <tr><td class="p-4 border-t border-[#1a1a1a]"><code>/help</code></td><td class="p-4 border-t border-[#1a1a1a]">Show command help</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <!-- Permissions -->
+                <section id="permissions" class="mb-24">
+                    <h2 class="subsection-title text-3xl font-bold mb-6">Permissions</h2>
+                    <div class="table-wrapper mb-8">
+                        <table class="w-full text-left text-sm">
+                            <thead><tr><th class="p-4">Key</th><th class="p-4">Action</th></tr></thead>
+                            <tbody class="text-gray-300">
+                                <tr><td class="p-4 border-t border-[#1a1a1a]"><kbd>y</kbd></td><td class="p-4 border-t border-[#1a1a1a]">Allow this one command</td></tr>
+                                <tr><td class="p-4 border-t border-[#1a1a1a]"><kbd>n</kbd></td><td class="p-4 border-t border-[#1a1a1a]">Deny this command</td></tr>
+                                <tr><td class="p-4 border-t border-[#1a1a1a]"><kbd>a</kbd></td><td class="p-4 border-t border-[#1a1a1a]">Always allow this exact command</td></tr>
+                                <tr><td class="p-4 border-t border-[#1a1a1a]"><kbd>s</kbd></td><td class="p-4 border-t border-[#1a1a1a]">Allow read-only/safe commands for session</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <p class="text-xs text-brand/80 font-bold uppercase tracking-widest">Destructive commands (rm -rf, push --force) always require 'y' approval.</p>
+                </section>
+
+                <!-- Tools -->
+                <section id="tools" class="mb-24">
+                    <h2 class="subsection-title text-3xl font-bold mb-10">Tools Reference</h2>
+                    <div class="table-wrapper">
+                        <table class="w-full text-left text-[13px]">
+                            <thead><tr><th class="p-4">Tool</th><th class="p-4">Capability</th></tr></thead>
+                            <tbody class="text-gray-300">
+                                <tr><td class="p-4 border-t border-[#1a1a1a] font-bold text-brand">agent</td><td class="p-4 border-t border-[#1a1a1a]">Spawn child agents with stable lineage tracking</td></tr>
+                                <tr><td class="p-4 border-t border-[#1a1a1a] font-bold text-brand">agent_status</td><td class="p-4 border-t border-[#1a1a1a]">Check background child agent lifecycle</td></tr>
+                                <tr><td class="p-4 border-t border-[#1a1a1a] font-bold text-brand">bash</td><td class="p-4 border-t border-[#1a1a1a]">Execute terminal commands</td></tr>
+                                <tr><td class="p-4 border-t border-[#1a1a1a] font-bold text-brand">think</td><td class="p-4 border-t border-[#1a1a1a]">Scratchpad reasoning without side effects</td></tr>
+                                <tr><td class="p-4 border-t border-[#1a1a1a] font-bold text-brand">list_dir</td><td class="p-4 border-t border-[#1a1a1a]">List contents as structured JSON</td></tr>
+                                <tr><td class="p-4 border-t border-[#1a1a1a] font-bold text-brand">create_file</td><td class="p-4 border-t border-[#1a1a1a]">Create brand-new files</td></tr>
+                                <tr><td class="p-4 border-t border-[#1a1a1a] font-bold text-brand">file_read</td><td class="p-4 border-t border-[#1a1a1a]">Read files with range/partial support</td></tr>
+                                <tr><td class="p-4 border-t border-[#1a1a1a] font-bold text-brand">file_write</td><td class="p-4 border-t border-[#1a1a1a]">Overwrite entire file content</td></tr>
+                                <tr><td class="p-4 border-t border-[#1a1a1a] font-bold text-brand">file_edit</td><td class="p-4 border-t border-[#1a1a1a]">Exact find-and-replace snippet edits</td></tr>
+                                <tr><td class="p-4 border-t border-[#1a1a1a] font-bold text-brand">apply_patch</td><td class="p-4 border-t border-[#1a1a1a]">Apply multi-hunk/multi-file patches</td></tr>
+                                <tr><td class="p-4 border-t border-[#1a1a1a] font-bold text-brand">multi_replace</td><td class="p-4 border-t border-[#1a1a1a]">Validated atomic block replacements</td></tr>
+                                <tr><td class="p-4 border-t border-[#1a1a1a] font-bold text-brand">glob</td><td class="p-4 border-t border-[#1a1a1a]">Find files by pattern</td></tr>
+                                <tr><td class="p-4 border-t border-[#1a1a1a] font-bold text-brand">grep</td><td class="p-4 border-t border-[#1a1a1a]">Content search using ripgrep</td></tr>
+                                <tr><td class="p-4 border-t border-[#1a1a1a] font-bold text-brand">go_definition</td><td class="p-4 border-t border-[#1a1a1a]">Resolve Go symbols using parser</td></tr>
+                                <tr><td class="p-4 border-t border-[#1a1a1a] font-bold text-brand">web_search</td><td class="p-4 border-t border-[#1a1a1a]">Perform web-scale research</td></tr>
+                                <tr><td class="p-4 border-t border-[#1a1a1a] font-bold text-brand">web_fetch</td><td class="p-4 border-t border-[#1a1a1a]">Retrieve URL content for parsing</td></tr>
+                                <tr><td class="p-4 border-t border-[#1a1a1a] font-bold text-brand">command_status</td><td class="p-4 border-t border-[#1a1a1a]">Check background command timing/output</td></tr>
+                                <tr><td class="p-4 border-t border-[#1a1a1a] font-bold text-brand">file_history</td><td class="p-4 border-t border-[#1a1a1a]">Track snapshots and diff file changes</td></tr>
+                                <tr><td class="p-4 border-t border-[#1a1a1a] font-bold text-brand">git</td><td class="p-4 border-t border-[#1a1a1a]">Read-only git ops (log, blame, status)</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <!-- Modes / Logic / Config -->
+                <section id="modes" class="mb-24">
+                    <h2 class="subsection-title text-3xl font-bold mb-6">Child Agent Modes</h2>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                        <div class="p-6 border border-[#1a1a1a] rounded"><strong>Explore:</strong> Read-only architect research.</div>
+                        <div class="p-6 border border-[#1a1a1a] rounded"><strong>Search:</strong> Discovery with local references.</div>
+                        <div class="p-6 border border-[#1a1a1a] rounded"><strong>Execution:</strong> Terminal-heavy, non-writing work.</div>
+                        <div class="p-6 border border-[#1a1a1a] rounded"><strong>General:</strong> Broader unspecialized tasking.</div>
+                    </div>
+                </section>
+
+                <section id="edit-logic" class="mb-24">
+                    <h2 class="subsection-title text-3xl font-bold mb-6">Edit Tool Selection</h2>
+                    <ul class="space-y-4 text-sm text-gray-400">
+                        <li>&bull; <code class="text-white">file_edit</code>: One snippet, exact match.</li>
+                        <li>&bull; <code class="text-white">multi_replace</code>: Several non-overlapping blocks.</li>
+                        <li>&bull; <code class="text-white">apply_patch</code>: Structural or multi-file edits.</li>
+                    </ul>
+                </section>
+
+                <section id="config" class="mb-24">
+                    <h2 class="subsection-title text-3xl font-bold mb-6">Configuration Reference</h2>
+                    <p class="text-xs text-gray-500 mb-6">File: <code>~/.config/chan/config.json</code></p>
+                    <div class="table-wrapper mb-8">
+                        <table class="w-full text-left text-sm">
+                            <thead><tr><th class="p-4">Env Variable</th><th class="p-4">Description</th></tr></thead>
+                            <tbody class="text-gray-300">
+                                <tr><td class="p-4 border-t border-[#1a1a1a]"><code>CHAN_MODEL</code></td><td class="p-4 border-t border-[#1a1a1a]">Override default model</td></tr>
+                                <tr><td class="p-4 border-t border-[#1a1a1a]"><code>CHAN_API_KEY</code></td><td class="p-4 border-t border-[#1a1a1a]">Override provider-specific key</td></tr>
+                                <tr><td class="p-4 border-t border-[#1a1a1a]"><code>CHAN_DEBUG</code></td><td class="p-4 border-t border-[#1a1a1a]">Enable runtime diagnostic log</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <section id="debug" class="mb-24">
+                    <h2 class="subsection-title text-3xl font-bold mb-6">Diagnostics</h2>
+                    <p class="text-gray-400 mb-6 leading-relaxed">
+                        To capture low-level runtime diagnostics for provider streams, tool traffic, and IPC, launch with the debug flag:
+                    </p>
+                    <pre class="bg-subtle p-6 border border-[#1a1a1a] rounded-md text-sm text-gray-300 mb-6"><code>CHAN_DEBUG=1 chan</code></pre>
+                    <p class="text-xs text-gray-600">
+                        This writes a structured <code>debug.log</code> to <code>~/.config/chan/sessions/&lt;id&gt;/debug.log</code>.
+                    </p>
+                </section>
+
+                <!-- Arch / Build -->
+                <section id="arch" class="mb-24">
+                    <h2 class="subsection-title text-3xl font-bold mb-6">Architecture</h2>
+                    <p class="text-sm text-gray-400 leading-relaxed mb-8">
+                        Chan uses a split-process architecture designed for high performance and safety.
+                    </p>
+                    <div class="bg-subtle p-8 border border-[#1a1a1a] rounded-lg font-mono text-[10px] text-gray-500 overflow-x-auto whitespace-pre">
+      chan (Bun launcher)       ← Terminal UI (React Ink)
+        │
+        │ NDJSON Stream
+        │
+      chan-engine (Go)          ← LLM client, tools, agent loop
+                    </div>
+                </section>
+
+                <section id="build" class="mb-24">
+                    <h2 class="subsection-title text-3xl font-bold mb-6">Building from Source</h2>
+                    <pre class="bg-subtle p-6 border border-[#1a1a1a] rounded-md text-sm text-gray-300"><code>bun run setup       # Build TS & compile Go
+bun run start       # Run dev TUI
+make release-local  # Package per-platform bin
+make install        # Install to /usr/local/bin</code></pre>
+                </section>
+
+                <footer class="pt-24 border-t border-[#1a1a1a] text-[10px] uppercase font-bold text-gray-800 tracking-[0.5em] text-center">
+                    &copy; 2026 Chan Environment &bull; Verified Build
+                </footer>
+            </main>
+        </div>
+    </div>
+
+    <script>
+        lucide.createIcons();
+        const links = document.querySelectorAll('.scroll-link');
+        const sections = document.querySelectorAll('section');
+        window.addEventListener('scroll', () => {
+            let current = '';
+            sections.forEach(s => { if (pageYOffset >= s.offsetTop - 200) current = s.getAttribute('id'); });
+            links.forEach(l => {
+                l.classList.remove('active');
+                if (l.getAttribute('href') === `#${current}`) l.classList.add('active');
+            });
+        });
+    </script>
+</body>
+</html>

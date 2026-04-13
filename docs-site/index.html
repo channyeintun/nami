@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chan | Agentic Coding CLI</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="stylesheet" href="styles.css">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: '#ff4000',
+                        pure: '#000000',
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-pure text-white selection:bg-brand/30">
+    <nav class="fixed top-0 w-full z-50 border-b border-[#1a1a1a] bg-pure/80 backdrop-blur-md px-8 py-5">
+        <div class="container-max flex justify-between items-center">
+            <div class="flex items-center gap-3">
+                <div class="bg-brand text-white w-9 h-9 flex items-center justify-center font-bold text-lg rounded-sm">C</div>
+                <span class="text-xl font-bold tracking-tight font-['Outfit'] uppercase">Chan</span>
+            </div>
+            <div class="hidden md:flex gap-10 text-xs font-bold uppercase tracking-widest text-gray-500">
+                <a href="#features" class="hover:text-white transition">Features</a>
+                <a href="docs.html" class="hover:text-white transition">Docs</a>
+                <a href="https://github.com/channyeintun/chan" class="hover:text-white transition">GitHub</a>
+            </div>
+            <a href="docs.html" class="btn btn-primary">Get Started</a>
+        </div>
+    </nav>
+
+    <header class="min-h-screen flex flex-col justify-center items-center text-center container-max pt-40 pb-20">
+        <div class="animate-in w-full max-w-4xl">
+            <div class="inline-block px-3 py-1 border border-brand/30 bg-brand/5 text-brand text-[10px] font-bold uppercase tracking-widest mb-10 rounded-sm">
+                Next-Gen Agentic CLI
+            </div>
+            <h1 class="text-7xl md:text-[8rem] leading-[0.85] font-black tracking-tighter mb-12 font-['Outfit']">
+                PLAN & <br>
+                <span class="text-brand">EXECUTE.</span>
+            </h1>
+            <p class="text-2xl text-gray-400 max-w-2xl mx-auto mb-16 font-light leading-relaxed">
+                Chan is an LLM-powered CLI that thinks, plans, and executes. <br class="hidden md:block">
+                Pure terminal control with true agency.
+            </p>
+            
+            <div class="flex flex-col sm:flex-row justify-center items-center gap-6 mb-20">
+                <a href="docs.html" class="btn btn-primary px-10 py-4 text-lg min-w-[200px]">Read Documentation</a>
+                <a href="https://github.com/channyeintun/chan" class="btn btn-ghost px-10 py-4 text-lg min-w-[200px]">View on GitHub</a>
+            </div>
+            
+            <!-- Centerpiece Terminal Visual -->
+            <div class="code-block hero-block text-left relative group">
+                <div class="term-header">
+                    <div class="term-dots">
+                        <div class="dot dot-red"></div>
+                        <div class="dot dot-yellow"></div>
+                        <div class="dot dot-green"></div>
+                    </div>
+                    <span class="term-title">chan &mdash; v1.2.0</span>
+                    <div class="w-10"></div>
+                </div>
+                <div class="relative">
+                    <span class="code-prompt">$</span><code>curl -fsSL https://raw.githubusercontent.com/channyeintun/chan/main/chan/install.sh \ <br> &nbsp;&nbsp;| sh</code>
+                    <button class="absolute top-0 right-0 text-gray-700 hover:text-white transition"><i data-lucide="copy" class="w-4 h-4"></i></button>
+                    
+                    <div class="mt-6 space-y-1">
+                        <span class="term-output">>&nbsp;<span class="term-success">Installation complete.</span> Global binary available at /usr/local/bin/chan</span>
+                        <span class="term-output">>&nbsp;Run <span class="text-white">'chan'</span> to start your first agentic session.</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <section id="features" class="py-32 border-t border-[#1a1a1a]">
+        <div class="container-max grid grid-cols-1 md:grid-cols-3 gap-8">
+            <div class="feature-card text-center flex flex-col items-center">
+                <i data-lucide="terminal" class="feature-icon"></i>
+                <h3 class="text-xl font-bold mb-4">First-Class Artifacts</h3>
+                <p class="text-sm text-gray-500 font-light leading-relaxed">
+                    Implementation plans and task lists are persisted for review. Resume and refine your sessions easily.
+                </p>
+            </div>
+            <div class="feature-card text-center flex flex-col items-center">
+                <i data-lucide="shield-alert" class="feature-icon"></i>
+                <h3 class="text-xl font-bold mb-4">Industrial Safety</h3>
+                <p class="text-sm text-gray-500 font-light leading-relaxed">
+                    Total control over tool execution. Every write or command requires your explicit confirmation.
+                </p>
+            </div>
+            <div class="feature-card text-center flex flex-col items-center">
+                <i data-lucide="milestone" class="feature-icon"></i>
+                <h3 class="text-xl font-bold mb-4">Model Agnostic</h3>
+                <p class="text-sm text-gray-500 font-light leading-relaxed">
+                    Switch between Anthropic, OpenAI, or local Ollama models on the fly. Use the right model for the job.
+                </p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Architecture Section -->
+    <section class="py-32 bg-subtle border-y border-[#1a1a1a]">
+        <div class="container-max flex flex-col md:flex-row items-center gap-20">
+            <div class="md:w-1/2 text-left">
+                <h2 class="text-5xl font-bold mb-8">Raw Efficiency.</h2>
+                <p class="text-gray-400 text-lg font-light mb-10 leading-relaxed">
+                    A split architecture: Bun for high-performance TUI and Go for low-latency tool execution.
+                </p>
+                <div class="space-y-6">
+                    <div class="flex items-center gap-4">
+                        <div class="w-1 h-1 bg-brand"></div>
+                        <p class="text-sm uppercase tracking-widest font-bold">Fast TUI (React Ink)</p>
+                    </div>
+                    <div class="flex items-center gap-4">
+                        <div class="w-1 h-1 bg-brand"></div>
+                        <p class="text-sm uppercase tracking-widest font-bold">Go Core (Parser-backed)</p>
+                    </div>
+                </div>
+            </div>
+            <div class="md:w-1/2 w-full">
+                <!-- Premium Architecture Visualizer -->
+                <div class="arch-visual">
+                    <div class="arch-node">
+                        <div class="node-header mb-4">
+                            <span class="text-[10px] uppercase font-bold text-gray-500">Chan Launcher</span>
+                            <span class="tech-badge">Bun &bull; React Ink</span>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <i data-lucide="terminal" class="w-5 h-5 text-gray-500"></i>
+                            <span class="text-xs text-gray-300">Terminal UI & User Input Session</span>
+                        </div>
+                    </div>
+                    <div class="stream-connector">
+                        <div class="stream-pulse"></div>
+                        <span class="stream-label">Bidirectional NDJSON Stream</span>
+                    </div>
+                    <div class="arch-node">
+                        <div class="node-header mb-4">
+                            <span class="text-[10px] uppercase font-bold text-gray-500">Chan Engine</span>
+                            <span class="tech-badge">Go &bull; LLM Loop</span>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <i data-lucide="cpu" class="w-5 h-5 text-gray-500"></i>
+                            <span class="text-xs text-gray-300">Tool Execution & Model Orchestration</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <footer class="py-40 text-center">
+        <div class="container-max">
+            <h2 class="text-6xl font-bold mb-12">Actionable Intelligence.</h2>
+            <div class="flex justify-center gap-8">
+                <a href="docs.html" class="btn btn-primary px-10 py-3 uppercase tracking-tighter">Enter Documentation</a>
+                <a href="https://github.com/channyeintun/chan" class="btn btn-ghost px-10 py-3">View Open Source</a>
+            </div>
+            <p class="mt-32 text-[10px] text-gray-700 uppercase tracking-[0.5em]">&copy; 2026 Chan Environment</p>
+        </div>
+    </footer>
+
+    <script>
+        lucide.createIcons();
+    </script>
+</body>
+</html>
