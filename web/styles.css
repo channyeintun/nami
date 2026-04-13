@@ -41,6 +41,71 @@ nav {
     background: rgba(0,0,0,0.8);
 }
 
+.brand-lockup {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.875rem;
+    min-width: 0;
+}
+
+.ascii-lockup {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.125rem;
+    flex-shrink: 0;
+}
+
+.prompt-mark {
+    color: #ff4000;
+    font-family: 'JetBrains Mono', monospace;
+    margin: 0;
+    font-weight: 700;
+    line-height: 1;
+    align-self: center;
+    flex-shrink: 0;
+    white-space: pre;
+}
+
+.terminal-mark {
+    font-size: 0.16rem;
+    line-height: 0.62;
+}
+
+.mascot-logo {
+    margin: 0;
+    color: #ff4000;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.34rem;
+    font-weight: 700;
+    line-height: 0.72;
+    letter-spacing: -0.02em;
+    white-space: pre;
+    flex-shrink: 0;
+}
+
+.brand-wordmark {
+    color: #ff4000;
+    line-height: 1;
+}
+
+@media (max-width: 640px) {
+    .brand-lockup {
+        gap: 0.625rem;
+    }
+
+    .terminal-mark {
+        font-size: 0.14rem;
+    }
+
+    .mascot-logo {
+        font-size: 0.28rem;
+    }
+
+    .brand-wordmark {
+        font-size: 1rem;
+    }
+}
+
 /* Containers */
 .container-max {
     max-width: 1200px;
