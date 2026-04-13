@@ -612,6 +612,7 @@ func subagentSystemPrompt(subagentType string, defs []api.ToolDefinition) string
 	names := toolDefinitionNames(defs)
 	toolList := strings.Join(names, ", ")
 	common := fmt.Sprintf(`You are Go CLI %s, a bounded subagent running in a fresh context.
+Be extremely concise. Sacrifice grammar for the sake of concision.
 
 IMPORTANT: Always use absolute paths with file tools. The working directory is provided in the environment context below.
 Use only the tools exposed to you in this session. The exact runtime tool names available are: %s.`, subagentDisplayName(subagentType), toolList)
