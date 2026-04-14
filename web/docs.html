@@ -347,15 +347,107 @@ tail -F ~/.config/chan/sessions/&lt;session-id&gt;/debug.log | jq .</code></pre>
                 <!-- Arch / Build -->
                 <section id="arch" class="mb-24">
                     <h2 class="subsection-title text-3xl font-bold mb-6">Architecture</h2>
-                    <p class="text-sm text-gray-400 leading-relaxed mb-8">
+                    <p class="text-sm text-gray-400 leading-relaxed mb-6">
                         Chan uses a split-process architecture designed for high performance and safety.
                     </p>
-                    <div class="bg-subtle p-8 border border-[#1a1a1a] rounded-lg font-mono text-[10px] text-gray-500 overflow-x-auto whitespace-pre">
-      chan (Bun launcher)       ← Terminal UI (React Ink)
-        │
-        │ NDJSON Stream
-        │
-      chan-engine (Go)          ← LLM client, tools, agent loop
+                    <div class="arch-overview mb-8">
+                        <div class="arch-shell-card">
+                            <div class="arch-shell-eyebrow">Launcher Layer</div>
+                            <div class="arch-shell-title">chan</div>
+                            <div class="arch-shell-meta">Bun launcher + Terminal UI + React Ink</div>
+                        </div>
+                        <div class="arch-shell-flow">
+                            <span class="arch-shell-line"></span>
+                            <span class="arch-shell-pill">NDJSON stream</span>
+                        </div>
+                        <div class="arch-shell-card arch-shell-card-engine">
+                            <div class="arch-shell-eyebrow">Engine Layer</div>
+                            <div class="arch-shell-title">chan-engine</div>
+                            <div class="arch-shell-meta">Go runtime orchestrating models, tools, sessions, safety, and persistence</div>
+                        </div>
+                    </div>
+
+                    <div class="engine-map">
+                        <div class="engine-map-header">
+                            <div>
+                                <div class="engine-map-eyebrow">Go Engine Component Map</div>
+                                <h3 class="engine-map-title">Full components included inside <code>chan-engine</code></h3>
+                            </div>
+                            <p class="engine-map-copy">Curated visual grouping of the engine surface so readers can see the full runtime, not just the top-level binary split.</p>
+                        </div>
+
+                        <div class="engine-map-grid">
+                            <article class="engine-cluster">
+                                <div class="engine-cluster-label">Entry + Bootstrap</div>
+                                <div class="engine-cluster-items">
+                                    <span class="engine-chip">CLI flags</span>
+                                    <span class="engine-chip">config load</span>
+                                    <span class="engine-chip">stdio engine</span>
+                                    <span class="engine-chip">TUI launch</span>
+                                    <span class="engine-chip">signal handling</span>
+                                </div>
+                            </article>
+
+                            <article class="engine-cluster engine-cluster-core">
+                                <div class="engine-cluster-label">Agent Runtime Core</div>
+                                <div class="engine-cluster-items">
+                                    <span class="engine-chip">turn loop</span>
+                                    <span class="engine-chip">planner</span>
+                                    <span class="engine-chip">live retrieval</span>
+                                    <span class="engine-chip">memory recall</span>
+                                    <span class="engine-chip">attempt log</span>
+                                    <span class="engine-chip">skill selection</span>
+                                    <span class="engine-chip">compaction</span>
+                                </div>
+                            </article>
+
+                            <article class="engine-cluster">
+                                <div class="engine-cluster-label">Tooling Layer</div>
+                                <div class="engine-cluster-items">
+                                    <span class="engine-chip">tool registry</span>
+                                    <span class="engine-chip">tool executor</span>
+                                    <span class="engine-chip">bash</span>
+                                    <span class="engine-chip">file ops</span>
+                                    <span class="engine-chip">git / grep</span>
+                                    <span class="engine-chip">child agents</span>
+                                </div>
+                            </article>
+
+                            <article class="engine-cluster">
+                                <div class="engine-cluster-label">Model + Provider Layer</div>
+                                <div class="engine-cluster-items">
+                                    <span class="engine-chip">LLM client</span>
+                                    <span class="engine-chip">Anthropic</span>
+                                    <span class="engine-chip">OpenAI-compatible</span>
+                                    <span class="engine-chip">Gemini</span>
+                                    <span class="engine-chip">Ollama</span>
+                                    <span class="engine-chip">local model runner</span>
+                                </div>
+                            </article>
+
+                            <article class="engine-cluster">
+                                <div class="engine-cluster-label">Session + Persistence</div>
+                                <div class="engine-cluster-items">
+                                    <span class="engine-chip">session store</span>
+                                    <span class="engine-chip">titles</span>
+                                    <span class="engine-chip">artifacts</span>
+                                    <span class="engine-chip">history snapshots</span>
+                                    <span class="engine-chip">memory files</span>
+                                </div>
+                            </article>
+
+                            <article class="engine-cluster">
+                                <div class="engine-cluster-label">Safety + Observability + Transport</div>
+                                <div class="engine-cluster-items">
+                                    <span class="engine-chip">permissions</span>
+                                    <span class="engine-chip">command gating</span>
+                                    <span class="engine-chip">hooks</span>
+                                    <span class="engine-chip">debug logging</span>
+                                    <span class="engine-chip">IPC bridge</span>
+                                    <span class="engine-chip">timing + cost</span>
+                                </div>
+                            </article>
+                        </div>
                     </div>
                 </section>
 

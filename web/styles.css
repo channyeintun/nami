@@ -488,3 +488,200 @@ td {
 
 .text-brand { color: var(--brand); }
 .text-muted { color: var(--text-secondary); }
+
+/* Full engine visual */
+.arch-overview {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 140px minmax(0, 1.3fr);
+    gap: 1.25rem;
+    align-items: center;
+}
+
+.arch-shell-card {
+    border: 1px solid var(--border);
+    background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+    border-radius: 12px;
+    padding: 1.25rem;
+    box-shadow: 0 24px 50px -30px rgba(0, 0, 0, 0.9);
+}
+
+.arch-shell-card-engine {
+    border-color: rgba(255, 64, 0, 0.28);
+    box-shadow: 0 24px 60px -30px rgba(255, 64, 0, 0.22);
+}
+
+.arch-shell-eyebrow,
+.engine-map-eyebrow {
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: #8a8a8a;
+    font-weight: 800;
+    margin-bottom: 0.5rem;
+}
+
+.arch-shell-title {
+    font-family: 'Outfit', sans-serif;
+    font-size: 1.6rem;
+    font-weight: 900;
+    line-height: 1;
+    margin-bottom: 0.4rem;
+}
+
+.arch-shell-meta {
+    color: #9a9a9a;
+    font-size: 0.9rem;
+    line-height: 1.6;
+}
+
+.arch-shell-flow {
+    position: relative;
+    min-height: 120px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.arch-shell-line {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 50%;
+    height: 2px;
+    transform: translateY(-50%);
+    background: linear-gradient(90deg, rgba(255,64,0,0.08), rgba(255,64,0,0.95), rgba(255,64,0,0.08));
+    box-shadow: 0 0 28px rgba(255,64,0,0.4);
+}
+
+.arch-shell-pill {
+    position: relative;
+    z-index: 1;
+    padding: 0.5rem 0.85rem;
+    border-radius: 999px;
+    background: #090909;
+    border: 1px solid rgba(255,64,0,0.24);
+    color: #ff9b79;
+    font-size: 0.68rem;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+}
+
+.engine-map {
+    border: 1px solid var(--border);
+    background:
+        radial-gradient(circle at top right, rgba(255, 64, 0, 0.12), transparent 28%),
+        linear-gradient(180deg, #070707 0%, #040404 100%);
+    border-radius: 18px;
+    padding: 1.5rem;
+    box-shadow: 0 40px 90px -45px rgba(0, 0, 0, 0.95);
+}
+
+.engine-map-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: end;
+    gap: 1rem;
+    padding-bottom: 1.25rem;
+    margin-bottom: 1.25rem;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+
+.engine-map-title {
+    font-size: 1.4rem;
+    line-height: 1.2;
+}
+
+.engine-map-copy {
+    max-width: 420px;
+    color: #9a9a9a;
+    font-size: 0.92rem;
+    line-height: 1.6;
+}
+
+.engine-map-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+}
+
+.engine-cluster {
+    position: relative;
+    border: 1px solid rgba(255,255,255,0.07);
+    background: rgba(255,255,255,0.02);
+    border-radius: 14px;
+    padding: 1rem;
+    overflow: hidden;
+}
+
+.engine-cluster::before {
+    content: "";
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 100%;
+    height: 3px;
+    background: linear-gradient(90deg, rgba(255,64,0,0.9), rgba(255,64,0,0.12));
+}
+
+.engine-cluster-core {
+    border-color: rgba(255,64,0,0.22);
+    background: linear-gradient(180deg, rgba(255,64,0,0.08), rgba(255,255,255,0.02));
+}
+
+.engine-cluster-label {
+    font-size: 0.78rem;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #f2f2f2;
+    margin-bottom: 0.9rem;
+}
+
+.engine-cluster-items {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.55rem;
+}
+
+.engine-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.45rem 0.65rem;
+    border-radius: 999px;
+    border: 1px solid rgba(255,255,255,0.08);
+    background: rgba(0,0,0,0.34);
+    color: #d0d0d0;
+    font-size: 0.74rem;
+    line-height: 1.2;
+    white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+    .arch-overview {
+        grid-template-columns: 1fr;
+    }
+
+    .arch-shell-flow {
+        min-height: 72px;
+    }
+
+    .arch-shell-line {
+        left: 50%;
+        right: auto;
+        top: 0;
+        bottom: 0;
+        width: 2px;
+        height: auto;
+        transform: translateX(-50%);
+        background: linear-gradient(180deg, rgba(255,64,0,0.08), rgba(255,64,0,0.95), rgba(255,64,0,0.08));
+    }
+
+    .engine-map-header {
+        flex-direction: column;
+        align-items: start;
+    }
+
+    .engine-map-grid {
+        grid-template-columns: 1fr;
+    }
+}
