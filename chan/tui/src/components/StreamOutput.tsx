@@ -47,6 +47,7 @@ type TranscriptBlock =
       message: UIAssistantMessage | UISystemMessage | UIUserMessage;
       continuation: boolean;
     }
+  | { kind: "artifact"; key: string; artifact: UIArtifact }
   | { kind: "tool_call"; key: string; toolCall: UIToolCall }
   | { kind: "tool_group"; key: string; group: ToolCallGroup };
 
@@ -55,11 +56,6 @@ type DisplayBlock =
       kind: "transcript";
       key: string;
       block: TranscriptBlock;
-    }
-  | {
-      kind: "artifact";
-      key: string;
-      artifact: UIArtifact;
     }
   | {
       kind: "streaming";
@@ -91,9 +87,14 @@ const StreamOutput: FC<StreamOutputProps> = ({
     () => new Map(toolCalls.map((toolCall) => [toolCall.id, toolCall])),
     [toolCalls],
   );
+  const artifactById = useMemo(
+    () => new Map(artifacts.map((artifact) => [artifact.id, artifact])),
+    [artifacts],
+  );
   const transcriptBlocks = useMemo(
-    () => buildTranscriptBlocks(transcript, messageById, toolCallById),
-    [messageById, toolCallById, transcript],
+    () =>
+      buildTranscriptBlocks(transcript, messageById, toolCallById, artifactById),
+    [artifactById, messageById, toolCallById, transcript],
   );
   const displayBlocks = useMemo(() => {
     const items: DisplayBlock[] = transcriptBlocks.map((block) => ({
@@ -102,20 +103,12 @@ const StreamOutput: FC<StreamOutputProps> = ({
       block,
     }));
 
-    items.push(
-      ...artifacts.map((artifact) => ({
-        kind: "artifact" as const,
-        key: `artifact-${artifact.id}`,
-        artifact,
-      })),
-    );
-
     if (isStreaming) {
       items.push({ kind: "streaming", key: "live-stream" });
     }
 
     return items;
-  }, [artifacts, isStreaming, transcriptBlocks]);
+  }, [isStreaming, transcriptBlocks]);
   const { height: rectHeight } = useBoxRect();
   const viewportHeight = Math.max(1, rectHeight);
   const searchQuery = transcriptSearchQuery.trim().toLowerCase();
@@ -238,14 +231,6 @@ const StreamOutput: FC<StreamOutputProps> = ({
             );
           }
 
-          if (item.kind === "artifact") {
-            return (
-              <Box key={item.key} flexDirection="column">
-                {renderArtifactBlock(item.artifact)}
-              </Box>
-            );
-          }
-
           return renderTranscriptBlock(
             item.block,
             index,
@@ -270,6 +255,19 @@ function renderTranscriptBlock(
   const isSelectedSearchMatch =
     matchOrdinal >= 0 && matchOrdinal === normalizedSearchSelectedIndex;
   const isSearchMatch = matchOrdinal >= 0;
+
+  if (block.kind === "artifact") {
+    return (
+      <Box key={block.key} flexDirection="column">
+        {isSelectedSearchMatch ? (
+          <Text color="$primary">Search match</Text>
+        ) : isSearchMatch ? (
+          <Text dimColor>match</Text>
+        ) : null}
+        {renderArtifactBlock(block.artifact)}
+      </Box>
+    );
+  }
 
   if (block.kind === "tool_group") {
     return (
@@ -350,11 +348,9 @@ function estimateDisplayBlockHeight(block: DisplayBlock | undefined): number {
     return 8;
   }
 
-  if (block.kind === "artifact") {
-    return estimateArtifactHeight(block.artifact);
-  }
-
   switch (block.block.kind) {
+    case "artifact":
+      return estimateArtifactHeight(block.block.artifact);
     case "tool_group":
       return Math.max(4, block.block.group.toolCalls.length * 2);
     case "tool_call":
@@ -393,6 +389,7 @@ function buildTranscriptBlocks(
   transcript: UITranscriptEntry[],
   messageById: Map<string, UIMessage>,
   toolCallById: Map<string, UIToolCall>,
+  artifactById: Map<string, UIArtifact>,
 ): TranscriptBlock[] {
   const blocks: TranscriptBlock[] = [];
   let previousMessageRole: UIMessage["role"] | null = null;
@@ -400,6 +397,21 @@ function buildTranscriptBlocks(
   for (let index = 0; index < transcript.length; index += 1) {
     const entry = transcript[index];
     if (!entry) {
+      continue;
+    }
+
+    if (entry.kind === "artifact") {
+      const artifact = artifactById.get(entry.id);
+      if (!artifact) {
+        continue;
+      }
+
+      blocks.push({
+        kind: "artifact",
+        key: `artifact-${artifact.id}`,
+        artifact,
+      });
+      previousMessageRole = null;
       continue;
     }
 
@@ -508,6 +520,20 @@ function blockSearchText(block: TranscriptBlock): string {
   switch (block.kind) {
     case "message":
       return messageSearchText(block.message);
+    case "artifact":
+      return [
+        block.artifact.title,
+        block.artifact.kind,
+        block.artifact.content,
+        block.artifact.source,
+        block.artifact.status,
+      ]
+        .filter(
+          (value): value is string =>
+            typeof value === "string" && value.length > 0,
+        )
+        .join("\n")
+        .toLowerCase();
     case "tool_call":
       return toolCallSearchText(block.toolCall);
     case "tool_group":
@@ -520,21 +546,6 @@ function blockSearchText(block: TranscriptBlock): string {
 function displayBlockSearchText(block: DisplayBlock): string {
   if (block.kind === "transcript") {
     return blockSearchText(block.block);
-  }
-
-  if (block.kind === "artifact") {
-    return [
-      block.artifact.title,
-      block.artifact.kind,
-      block.artifact.content,
-      block.artifact.source,
-      block.artifact.status,
-    ]
-      .filter(
-        (value): value is string => typeof value === "string" && value.length > 0,
-      )
-      .join("\n")
-      .toLowerCase();
   }
 
   return "";

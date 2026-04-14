@@ -101,7 +101,7 @@ export type UIMessage = UIUserMessage | UIAssistantMessage | UISystemMessage;
 
 export interface UITranscriptEntry {
   id: string;
-  kind: "message" | "tool_call";
+  kind: "message" | "tool_call" | "artifact";
 }
 
 export type UIToolStatus =
@@ -926,6 +926,10 @@ export function useEvents(initialModel: string, initialMode: string) {
           ...s,
           showPlanPanel:
             p.kind === "implementation-plan" ? false : s.showPlanPanel,
+          transcript: appendTranscriptEntry(s.transcript, {
+            id: p.id,
+            kind: "artifact",
+          }),
           artifacts: upsertArtifact(s.artifacts, {
             id: p.id,
             kind: p.kind,
