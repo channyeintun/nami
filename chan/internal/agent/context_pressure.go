@@ -22,7 +22,9 @@ type ContextPressureDecision struct {
 	ContinuationHot       bool
 	ShouldCompact         bool
 	SkipMemoryRecall      bool
+	SkipLiveRetrieval     bool
 	DelayOutputEscalation bool
+	RetrievalBudgetTokens int
 }
 
 func EvaluateContextPressure(messages []api.Message, contextWindow, maxOutputTokens int, continuation ContinuationTracker) ContextPressureDecision {
@@ -66,6 +68,19 @@ func EvaluateContextPressure(messages []api.Message, contextWindow, maxOutputTok
 	}
 	if decision.ShouldCompact || (continuationHot && warningThreshold > 0 && conversationTokens >= recallThreshold) {
 		decision.DelayOutputEscalation = true
+	}
+
+	// Live retrieval shares the same skip gate as memory recall.
+	decision.SkipLiveRetrieval = decision.SkipMemoryRecall
+
+	// Compute the live retrieval token budget: shrink when context is warm.
+	const baseRetrievalBudget = 3_000
+	if !decision.SkipLiveRetrieval && effectiveWindow > 0 {
+		budget := baseRetrievalBudget
+		if conversationTokens*100/effectiveWindow > 50 {
+			budget = baseRetrievalBudget / 2
+		}
+		decision.RetrievalBudgetTokens = budget
 	}
 
 	return decision

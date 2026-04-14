@@ -2,10 +2,12 @@
 
 ## Active Task
 
-- In progress: design a lean retrieval architecture for agent harness memory using working context, a live retrieval graph, and a small preference store.
-- Pending: review and approve the new design in `plan.md` before any implementation starts.
+- Completed: lean retrieval architecture implementation for the agent harness.
 
 ## Notes
 
-- Drafted a new `plan.md` for live repo retrieval, preference recall, and a session-scoped attempt log.
-- No implementation has started for the retrieval design yet.
+- Added a session-scoped attempt log and wired failed tool-attempt recording into the query loop.
+- Added live retrieval with anchor extraction, candidate scoring, live snippet reads, prompt injection, and retrieval telemetry.
+- Narrowed durable memory framing toward preferences and conventions instead of repo facts.
+- Shared retrieval token budgeting with context-pressure handling and wired attempt-log creation from the engine session directory.
+- Verified the Go module builds successfully with `go build ./...`.

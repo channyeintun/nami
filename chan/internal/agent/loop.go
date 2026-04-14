@@ -44,6 +44,20 @@ func runIteration(
 	if err := emitMemoryRecallTelemetry(deps.EmitTelemetry, state.SystemContext.MemoryFiles, memoryRecalls); err != nil {
 		return err
 	}
+
+	// Run the live retrieval stage.
+	liveRetrievalSection, retrievalMeta := runLiveRetrieval(state, currentUserPrompt, pressure)
+	if err := emitRetrievalTelemetry(deps.EmitTelemetry, retrievalMeta); err != nil {
+		return err
+	}
+
+	// Load session-scoped attempt log entries.
+	var attemptLogSection string
+	if deps.AttemptLog != nil {
+		attemptEntries, _ := deps.AttemptLog.Load()
+		attemptLogSection = FormatAttemptLogSection(attemptEntries)
+	}
+
 	selectedSkills := skillspkg.SelectRelevant(state.Skills, currentUserPrompt)
 	skillPrompt := skillspkg.FormatPromptSection(selectedSkills)
 	basePrompt := state.BasePrompt
@@ -59,6 +73,8 @@ func runIteration(
 			memoryRecalls,
 			state.Capabilities,
 			skillPrompt,
+			liveRetrievalSection,
+			attemptLogSection,
 		)
 	} else {
 		state.SystemPrompt = composeSystemPrompt(
@@ -69,6 +85,8 @@ func runIteration(
 			memoryRecalls,
 			state.Capabilities,
 			skillPrompt,
+			liveRetrievalSection,
+			attemptLogSection,
 		)
 	}
 
@@ -128,6 +146,10 @@ func runIteration(
 				ToolResult: &resultCopy,
 			})
 		}
+		// Collect file paths touched by tools for future retrieval scoring.
+		collectTouchedFiles(state, turn.toolCalls, results)
+		// Record failed commands into the attempt log.
+		recordFailedAttempts(deps.AttemptLog, turn.toolCalls, results)
 		return nil
 	}
 
@@ -619,4 +641,156 @@ func newEvent(eventType ipc.EventType, payload any) ipc.StreamEvent {
 		Type:    eventType,
 		Payload: raw,
 	}
+}
+
+// retrievalMeta holds metadata about a completed live retrieval pass.
+type retrievalMeta struct {
+	SnippetCount int
+	TokensUsed   int
+	AnchorCount  int
+	Skipped      bool
+}
+
+// runLiveRetrieval builds a live retrieval section for the current turn.
+func runLiveRetrieval(state *QueryState, currentUserPrompt string, pressure ContextPressureDecision) (string, retrievalMeta) {
+	if pressure.SkipLiveRetrieval {
+		return "", retrievalMeta{Skipped: true}
+	}
+
+	// Gather tool output from the most recent tool turn for anchor extraction.
+	recentToolOutput := latestToolOutput(state.Messages)
+
+	anchors := ExtractAnchors(currentUserPrompt, state.TurnContext.GitStatus, recentToolOutput)
+	candidates := ScoreCandidates(anchors, state.TurnContext.CurrentDir, state.TurnContext.GitStatus, state.RetrievalTouched)
+	snippets := ReadLiveSnippets(candidates, pressure.RetrievalBudgetTokens)
+
+	section := FormatLiveRetrievalSection(snippets)
+	tokensUsed := 0
+	for _, s := range snippets {
+		tokensUsed += len(s.Content) / 4
+	}
+	return section, retrievalMeta{
+		SnippetCount: len(snippets),
+		TokensUsed:   tokensUsed,
+		AnchorCount:  len(anchors),
+		Skipped:      false,
+	}
+}
+
+// emitRetrievalTelemetry emits the EventRetrievalUsed event when retrieval ran.
+func emitRetrievalTelemetry(emit func(ipc.StreamEvent) error, meta retrievalMeta) error {
+	if emit == nil {
+		return nil
+	}
+	return emit(newEvent(ipc.EventRetrievalUsed, ipc.RetrievalUsedPayload{
+		SnippetCount: meta.SnippetCount,
+		TokensUsed:   meta.TokensUsed,
+		AnchorCount:  meta.AnchorCount,
+		Skipped:      meta.Skipped,
+	}))
+}
+
+// collectTouchedFiles appends file paths referenced by tool calls to the
+// session-scoped retrieval touched list so they score higher in future turns.
+func collectTouchedFiles(state *QueryState, calls []api.ToolCall, results []api.ToolResult) {
+	if state == nil {
+		return
+	}
+	seen := make(map[string]struct{}, len(state.RetrievalTouched))
+	for _, p := range state.RetrievalTouched {
+		seen[p] = struct{}{}
+	}
+
+	for _, call := range calls {
+		paths := extractFilePathsFromToolCall(call)
+		for _, p := range paths {
+			if p == "" {
+				continue
+			}
+			if _, ok := seen[p]; ok {
+				continue
+			}
+			seen[p] = struct{}{}
+			state.RetrievalTouched = append(state.RetrievalTouched, p)
+		}
+	}
+}
+
+// extractFilePathsFromToolCall extracts file path arguments from common tool calls.
+func extractFilePathsFromToolCall(call api.ToolCall) []string {
+	// Tool inputs are JSON; try common field names used across tool implementations.
+	type genericInput struct {
+		Path       string `json:"path"`
+		TargetFile string `json:"target_file"`
+		FilePath   string `json:"file_path"`
+		File       string `json:"file"`
+	}
+	var input genericInput
+	if err := json.Unmarshal([]byte(call.Input), &input); err != nil {
+		return nil
+	}
+	var paths []string
+	for _, p := range []string{input.Path, input.TargetFile, input.FilePath, input.File} {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			paths = append(paths, p)
+		}
+	}
+	return paths
+}
+
+// recordFailedAttempts inspects tool results for errors and records them to the attempt log.
+func recordFailedAttempts(log *AttemptLog, calls []api.ToolCall, results []api.ToolResult) {
+	if log == nil || len(results) == 0 {
+		return
+	}
+
+	callByID := make(map[string]api.ToolCall, len(calls))
+	for _, call := range calls {
+		callByID[call.ID] = call
+	}
+
+	for _, result := range results {
+		if !result.IsError {
+			continue
+		}
+		call := callByID[result.ToolCallID]
+		sig := errorSignatureFromOutput(result.Output)
+		entry := AttemptEntry{
+			Command:        call.Name,
+			ErrorSignature: sig,
+		}
+		_ = log.Record(entry)
+	}
+}
+
+// errorSignatureFromOutput extracts a compact error signature from tool output.
+func errorSignatureFromOutput(output string) string {
+	output = strings.TrimSpace(output)
+	if output == "" {
+		return ""
+	}
+	lines := strings.SplitN(output, "\n", 4)
+	sig := strings.TrimSpace(lines[0])
+	if len(sig) > 120 {
+		sig = sig[:120]
+	}
+	return sig
+}
+
+// latestToolOutput returns the combined output of the most recent tool result messages.
+func latestToolOutput(messages []api.Message) string {
+	var b strings.Builder
+	// Walk backwards; collect tool results until we hit a non-tool message.
+	for i := len(messages) - 1; i >= 0; i-- {
+		msg := messages[i]
+		if msg.Role != api.RoleTool {
+			break
+		}
+		if msg.ToolResult != nil && strings.TrimSpace(msg.ToolResult.Output) != "" {
+			b.WriteString(msg.ToolResult.Output)
+			b.WriteString("\n")
+		}
+	}
+	return b.String()
 }

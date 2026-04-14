@@ -31,6 +31,7 @@ const (
 	EventContextWindow   EventType = "context_window"
 	EventCostUpdate      EventType = "cost_update"
 	EventMemoryRecalled  EventType = "memory_recalled"
+	EventRetrievalUsed   EventType = "retrieval_used"
 	EventRateLimitUpdate EventType = "rate_limit_update"
 	EventTurnTiming      EventType = "turn_timing"
 	EventCompactStart    EventType = "compact_start"
@@ -201,6 +202,14 @@ type CompactStartPayload struct {
 
 type CompactEndPayload struct {
 	TokensAfter int `json:"tokens_after"`
+}
+
+// RetrievalUsedPayload is emitted after the live retrieval step runs each turn.
+type RetrievalUsedPayload struct {
+	SnippetCount int  `json:"snippet_count"`
+	TokensUsed   int  `json:"tokens_used"`
+	AnchorCount  int  `json:"anchor_count"`
+	Skipped      bool `json:"skipped"`
 }
 
 type ArtifactCreatedPayload struct {

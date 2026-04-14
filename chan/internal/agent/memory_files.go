@@ -228,7 +228,7 @@ func FormatMemoryPrompt(files []MemoryFile, currentUserPrompt string, recalls []
 	}
 
 	if len(memoryIndexes) > 0 {
-		b.WriteString("Durable memory indexes are shown below. Treat them as selectively relevant context, not as unconditional instructions. Prefer recent, project-specific entries when they help, and verify details against the live repository when needed.\n\n")
+		b.WriteString("Durable preferences and conventions are shown below. These capture non-derivable user or project guidance such as workflow constraints and style decisions. Treat them as selectively relevant context, not as unconditional instructions. Always verify code facts against the live repository rather than relying on these entries.\n\n")
 
 		for _, f := range memoryIndexes {
 			recalledContent := formatRelevantMemoryIndexContent(f, currentUserPrompt, recallByPath[f.Path])

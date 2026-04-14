@@ -324,7 +324,8 @@ func runStdioEngine(ctx context.Context, cfg config.Config) error {
 						persistCurrentMessages()
 						_ = emitContextWindowUsage(bridge, client, messages)
 					},
-					Clock: time.Now,
+					Clock:      time.Now,
+					AttemptLog: agent.NewAttemptLog(sessionDir),
 				}
 
 				queryCtx, queryCancel := context.WithCancel(ctx)

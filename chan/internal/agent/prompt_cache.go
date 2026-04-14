@@ -27,9 +27,9 @@ func NewPromptAssemblyCache() *PromptAssemblyCache {
 	return &PromptAssemblyCache{}
 }
 
-func (c *PromptAssemblyCache) Compose(basePrompt string, sys SystemContext, turn TurnContext, currentUserPrompt string, recalls []MemoryRecallResult, capabilities api.ModelCapabilities, skillPrompt string) string {
+func (c *PromptAssemblyCache) Compose(basePrompt string, sys SystemContext, turn TurnContext, currentUserPrompt string, recalls []MemoryRecallResult, capabilities api.ModelCapabilities, skillPrompt string, liveRetrievalSection string, attemptLogSection string) string {
 	if c == nil {
-		return composeSystemPrompt(basePrompt, sys, turn, currentUserPrompt, recalls, capabilities, skillPrompt)
+		return composeSystemPrompt(basePrompt, sys, turn, currentUserPrompt, recalls, capabilities, skillPrompt, liveRetrievalSection, attemptLogSection)
 	}
 
 	basePrompt = c.memoize(&c.base, hashStrings("base", basePrompt), func() string {
@@ -45,9 +45,13 @@ func (c *PromptAssemblyCache) Compose(basePrompt string, sys SystemContext, turn
 		return strings.TrimSpace(FormatContextPrompt(sys, turn))
 	})
 
-	finalKey := hashStrings("final", boolString(capabilities.SupportsCaching), basePrompt, skillPrompt, memoryPrompt, contextPrompt)
+	// Live retrieval and attempt log sections change every turn; do not cache them.
+	liveSection := strings.TrimSpace(liveRetrievalSection)
+	attemptSection := strings.TrimSpace(attemptLogSection)
+
+	finalKey := hashStrings("final", boolString(capabilities.SupportsCaching), basePrompt, skillPrompt, memoryPrompt, contextPrompt, liveSection, attemptSection)
 	return c.memoize(&c.final, finalKey, func() string {
-		return joinPromptSections(orderedPromptSections(capabilities.SupportsCaching, basePrompt, skillPrompt, memoryPrompt, contextPrompt))
+		return joinPromptSections(orderedPromptSections(capabilities.SupportsCaching, basePrompt, skillPrompt, memoryPrompt, contextPrompt, liveSection, attemptSection))
 	})
 }
 

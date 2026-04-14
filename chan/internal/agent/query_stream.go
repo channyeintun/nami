@@ -48,6 +48,8 @@ type QueryDeps struct {
 	PersistMessages     func([]api.Message)
 	Cleanup             func()
 	Clock               func() time.Time
+	// AttemptLog records session-scoped failed attempts for retry prevention.
+	AttemptLog *AttemptLog
 }
 
 type StopRequest struct {
@@ -87,6 +89,9 @@ type QueryState struct {
 	NoToolRetryUsed     bool
 	AutoCompactFailures int
 	Continuation        ContinuationTracker
+	// RetrievalTouched accumulates file paths touched via tools this session
+	// to boost their retrieval score on subsequent turns.
+	RetrievalTouched []string
 }
 
 // NewQueryState creates initial state from a request.
@@ -177,19 +182,21 @@ func QueryStream(ctx context.Context, req QueryRequest, deps QueryDeps) iter.Seq
 	}
 }
 
-func composeSystemPrompt(basePrompt string, sys SystemContext, turn TurnContext, currentUserPrompt string, recalls []MemoryRecallResult, capabilities api.ModelCapabilities, skillPrompt string) string {
+func composeSystemPrompt(basePrompt string, sys SystemContext, turn TurnContext, currentUserPrompt string, recalls []MemoryRecallResult, capabilities api.ModelCapabilities, skillPrompt string, liveRetrievalSection string, attemptLogSection string) string {
 	contextPrompt := strings.TrimSpace(FormatContextPrompt(sys, turn))
 	memoryPrompt := strings.TrimSpace(FormatMemoryPrompt(sys.MemoryFiles, currentUserPrompt, recalls))
 	skillPrompt = strings.TrimSpace(skillPrompt)
 	basePrompt = strings.TrimSpace(basePrompt)
-	return joinPromptSections(orderedPromptSections(capabilities.SupportsCaching, basePrompt, skillPrompt, memoryPrompt, contextPrompt))
+	liveRetrievalSection = strings.TrimSpace(liveRetrievalSection)
+	attemptLogSection = strings.TrimSpace(attemptLogSection)
+	return joinPromptSections(orderedPromptSections(capabilities.SupportsCaching, basePrompt, skillPrompt, memoryPrompt, contextPrompt, liveRetrievalSection, attemptLogSection))
 }
 
-func orderedPromptSections(supportsCaching bool, basePrompt, skillPrompt, memoryPrompt, contextPrompt string) []string {
+func orderedPromptSections(supportsCaching bool, basePrompt, skillPrompt, memoryPrompt, contextPrompt, liveRetrievalSection, attemptLogSection string) []string {
 	if supportsCaching {
-		return []string{basePrompt, skillPrompt, memoryPrompt, contextPrompt}
+		return []string{basePrompt, skillPrompt, memoryPrompt, contextPrompt, liveRetrievalSection, attemptLogSection}
 	}
-	return []string{basePrompt, memoryPrompt, skillPrompt, contextPrompt}
+	return []string{basePrompt, memoryPrompt, skillPrompt, contextPrompt, liveRetrievalSection, attemptLogSection}
 }
 
 func joinPromptSections(parts []string) string {
