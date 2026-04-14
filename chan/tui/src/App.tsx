@@ -372,7 +372,6 @@ const App: FC<AppProps> = ({ enginePath, model, mode }) => {
             toolCalls={uiState.toolCalls}
             transcript={uiState.transcript}
             artifacts={visibleArtifacts}
-            focusedArtifactId={uiState.focusedArtifactId}
             liveBlocks={uiState.liveAssistantBlocks}
             isStreaming={uiState.isStreaming}
             activeTurnStatus={uiState.activeTurnStatus}

@@ -21,6 +21,8 @@
 - Completed: removed the fixed 45% height cap from permission and artifact-review prompts so approval choices are not clipped at the bottom on small terminals.
 - Completed: moved permission and artifact-review scrolling into the prompt components themselves so tall prompts can reveal their bottom border and actions instead of clipping a single oversized child.
 - Completed: made the footer controls hint responsive so narrow terminals stack earlier, shorten the hint, and truncate cleanly instead of showing clipped partial labels like "Thin".
+- Completed: constrained markdown text blocks to the available card width and forced explicit wrapping so quoted artifact content does not render past the artifact border.
+- Completed: removed Home/End and PgUp/PgDn footer shortcut hints so the footer only advertises the remaining active controls.
 
 ## Notes
 
@@ -55,3 +57,5 @@
 - Let permission and artifact-review prompts expand into the available lower pane instead of forcing them into a 45% box, which prevented multi-option approval prompts from clipping their lower actions on short terminals.
 - Shifted scroll ownership from the lower-pane wrapper into the permission/review prompt boxes themselves, because parent overflow on a single oversized child could not reveal the prompt's bottom border or last actions.
 - Adjusted the footer layout and hint text by terminal width so control labels degrade predictably on narrow screens rather than clipping mid-word.
+- Updated markdown text rendering to use the container width explicitly, preventing blockquotes and other long markdown paragraphs from shrink-wrapping past artifact card boundaries.
+- Simplified the footer hint copy by dropping Home/End and Page Up/Page Down references, reducing clutter and avoiding stale control guidance.

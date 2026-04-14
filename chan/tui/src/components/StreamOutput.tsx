@@ -25,7 +25,6 @@ interface StreamOutputProps {
   toolCalls: UIToolCall[];
   transcript: UITranscriptEntry[];
   artifacts: UIArtifact[];
-  focusedArtifactId?: string | null;
   liveBlocks: UIAssistantBlock[];
   isStreaming: boolean;
   activeTurnStatus: UIActiveTurnStatus;
@@ -71,7 +70,6 @@ const StreamOutput: FC<StreamOutputProps> = ({
   toolCalls,
   transcript,
   artifacts,
-  focusedArtifactId = null,
   liveBlocks,
   isStreaming,
   activeTurnStatus,
@@ -243,7 +241,7 @@ const StreamOutput: FC<StreamOutputProps> = ({
           if (item.kind === "artifact") {
             return (
               <Box key={item.key} flexDirection="column">
-                {renderArtifactBlock(item.artifact, focusedArtifactId)}
+                {renderArtifactBlock(item.artifact)}
               </Box>
             );
           }
@@ -368,10 +366,7 @@ function estimateDisplayBlockHeight(block: DisplayBlock | undefined): number {
   }
 }
 
-function renderArtifactBlock(
-  artifact: UIArtifact,
-  focusedArtifactId: string | null,
-) {
+function renderArtifactBlock(artifact: UIArtifact) {
   if (artifact.kind === "implementation-plan") {
     return (
       <PlanPanel
@@ -385,10 +380,7 @@ function renderArtifactBlock(
   }
 
   return (
-    <ArtifactView
-      artifacts={[artifact]}
-      focusedArtifactId={focusedArtifactId}
-    />
+    <ArtifactView artifacts={[artifact]} />
   );
 }
 

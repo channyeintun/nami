@@ -5,7 +5,6 @@ import MarkdownText from "./MarkdownText.js";
 
 interface ArtifactViewProps {
   artifacts: UIArtifact[];
-  focusedArtifactId?: string | null;
 }
 
 const kindLabel: Record<string, string> = {
@@ -51,10 +50,7 @@ function statusColor(status: string): string {
   }
 }
 
-const ArtifactView: FC<ArtifactViewProps> = ({
-  artifacts,
-  focusedArtifactId,
-}) => {
+const ArtifactView: FC<ArtifactViewProps> = ({ artifacts }) => {
   if (artifacts.length === 0) return null;
 
   return (
@@ -64,15 +60,12 @@ const ArtifactView: FC<ArtifactViewProps> = ({
           key={artifact.id}
           flexDirection="column"
           borderStyle="round"
-          borderColor={artifact.id === focusedArtifactId ? "cyan" : "gray"}
+          borderColor="gray"
           paddingX={1}
           marginTop={index === 0 ? 0 : 1}
           minWidth={0}
         >
           <Box flexDirection="column" minWidth={0}>
-            {artifact.id === focusedArtifactId ? (
-              <Text color="cyan">FOCUSED</Text>
-            ) : null}
             <Text bold>{artifact.title}</Text>
             <Text color={statusColor(artifact.status)}>
               {artifactMeta(artifact)}

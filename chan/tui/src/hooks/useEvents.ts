@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import type {
   ArtifactCreatedPayload,
   ArtifactFocusedPayload,
@@ -35,6 +35,7 @@ import type {
 } from "../protocol/types.js";
 
 const BEL = "\u0007";
+const STREAM_FLUSH_INTERVAL_MS = 33;
 
 function ringTerminalBell() {
   if (!process.stdout.isTTY) {
@@ -66,6 +67,11 @@ export interface UIArtifact {
 
 export interface UIAssistantBlock {
   kind: "text" | "thinking";
+  text: string;
+}
+
+interface PendingAssistantChunk {
+  kind: UIAssistantBlock["kind"];
   text: string;
 }
 
@@ -359,6 +365,91 @@ export function useEvents(initialModel: string, initialMode: string) {
   const [uiState, setUIState] = useState<EngineUIState>(() =>
     initialState(initialModel, initialMode),
   );
+  const pendingAssistantChunksRef = useRef<PendingAssistantChunk[]>([]);
+  const streamFlushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
+
+  const flushQueuedAssistantBlocks = useCallback(() => {
+    if (streamFlushTimerRef.current) {
+      clearTimeout(streamFlushTimerRef.current);
+      streamFlushTimerRef.current = null;
+    }
+
+    const queued = pendingAssistantChunksRef.current;
+    if (queued.length === 0) {
+      return;
+    }
+
+    pendingAssistantChunksRef.current = [];
+    setUIState((s) => {
+      let liveAssistantBlocks = s.liveAssistantBlocks;
+      let activeTurnStatus = s.activeTurnStatus;
+
+      for (const chunk of queued) {
+        liveAssistantBlocks = appendAssistantBlock(
+          liveAssistantBlocks,
+          chunk.kind,
+          chunk.text,
+        );
+        activeTurnStatus =
+          chunk.kind === "thinking" ? "thinking" : "responding";
+      }
+
+      return {
+        ...s,
+        liveAssistantBlocks,
+        activeTurnStatus,
+        isStreaming: true,
+        statusLine: null,
+        error: null,
+      };
+    });
+  }, []);
+
+  const resetQueuedAssistantBlocks = useCallback(() => {
+    if (streamFlushTimerRef.current) {
+      clearTimeout(streamFlushTimerRef.current);
+      streamFlushTimerRef.current = null;
+    }
+
+    pendingAssistantChunksRef.current = [];
+  }, []);
+
+  const scheduleAssistantBlockFlush = useCallback(() => {
+    if (streamFlushTimerRef.current) {
+      return;
+    }
+
+    streamFlushTimerRef.current = setTimeout(() => {
+      flushQueuedAssistantBlocks();
+    }, STREAM_FLUSH_INTERVAL_MS);
+  }, [flushQueuedAssistantBlocks]);
+
+  const queueAssistantBlock = useCallback(
+    (kind: UIAssistantBlock["kind"], text: string) => {
+      if (text.length === 0) {
+        return;
+      }
+
+      const queued = pendingAssistantChunksRef.current;
+      const lastChunk = queued[queued.length - 1];
+      if (lastChunk?.kind === kind) {
+        lastChunk.text += text;
+      } else {
+        queued.push({ kind, text });
+      }
+
+      scheduleAssistantBlockFlush();
+    },
+    [scheduleAssistantBlockFlush],
+  );
+
+  useEffect(() => {
+    return () => {
+      resetQueuedAssistantBlocks();
+    };
+  }, [resetQueuedAssistantBlocks]);
 
   const handleEvent = useCallback((event: StreamEvent) => {
     switch (event.type) {

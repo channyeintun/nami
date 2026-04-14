@@ -14,13 +14,17 @@ const MarkdownTextBody: FC<Pick<MarkdownTextProps, "text">> = ({ text }) => {
   }, [text]);
 
   return (
-    <Box flexDirection="column">
+    <Box flexDirection="column" width="100%" minWidth={0}>
       {rendered.map((block, index) => {
         if (block.kind === "table") {
           return <MarkdownTable key={`table-${index}`} token={block.token} />;
         }
 
-        return <Text key={`text-${index}`}>{block.content}</Text>;
+        return (
+          <Text key={`text-${index}`} wrap="wrap">
+            {block.content}
+          </Text>
+        );
       })}
     </Box>
   );
@@ -57,7 +61,7 @@ const StreamingMarkdownText: FC<Pick<MarkdownTextProps, "text">> = ({
   const unstableSuffix = normalized.slice(stablePrefix.length);
 
   return (
-    <Box flexDirection="column">
+    <Box flexDirection="column" width="100%" minWidth={0}>
       {stablePrefix ? <MarkdownTextBody text={stablePrefix} /> : null}
       {unstableSuffix ? <MarkdownTextBody text={unstableSuffix} /> : null}
     </Box>

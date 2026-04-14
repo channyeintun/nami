@@ -307,11 +307,11 @@ function buildInputHint(
   }
 
   if (terminalColumns < 96) {
-    const shared = `PgUp/PgDn scroll | ${shortcutLabel} think | Esc cancel`;
+    const shared = `${shortcutLabel} think | Esc cancel`;
     return disabled ? `Busy | ${shared}` : `Enter send | Ctrl+G search | ${shared}`;
   }
 
-  const shared = `PgUp/PgDn transcript | Home/End jump | ${shortcutLabel} thinking | Esc cancel`;
+  const shared = `${shortcutLabel} thinking | Esc cancel`;
   if (disabled) {
     return `Engine busy | ${shared}`;
   }
