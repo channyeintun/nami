@@ -43,6 +43,8 @@ func executeToolCalls(
 	approvalFeedback := make(map[int]string, len(calls))
 	budget := toolpkg.DefaultResultBudgetForModel(filepath.Join(os.TempDir(), "chan-session"), maxOutputTokens)
 	aggregateBudget := toolpkg.NewAggregateResultBudget(budget)
+	pauseForPlanReview := false
+	planSavedThisTurn := false
 	if turnStats != nil {
 		turnStats.AggregateBudgetChars = aggregateBudget.MaxChars()
 	}
@@ -84,29 +86,15 @@ func executeToolCalls(
 		}
 
 		pendingCall := toolpkg.PendingCall{Index: index, Tool: tool, Input: input}
+		if planSavedThisTurn && pendingCall.Tool.Permission() == toolpkg.PermissionWrite {
+			pauseForPlanReview = true
+			break
+		}
 		if err := planner.ValidateTool(ctx, pendingCall.Tool.Name(), pendingCall.Tool.Permission()); err != nil {
 			var reviewRequired *agent.PlanReviewRequiredError
 			if errors.As(err, &reviewRequired) {
-				message := fmt.Sprintf(
-					"Skipped %s because the implementation plan %q is ready for review. Review the implementation-plan artifact to approve or request revisions before any write tools run.",
-					call.Name,
-					strings.TrimSpace(reviewRequired.PlanTitle),
-				)
-				results[index] = api.ToolResult{ToolCallID: call.ID, Output: message}
-				if turnMetrics != nil && turnMetrics.Mark("first_tool_result") {
-					if emitErr := emitTurnTimingCheckpoint(bridge, turnMetrics, "first_tool_result"); emitErr != nil {
-						return nil, emitErr
-					}
-				}
-				if emitErr := bridge.Emit(ipc.EventToolResult, ipc.ToolResultPayload{
-					ToolID: call.ID,
-					Output: message,
-					Name:   call.Name,
-					Input:  call.Input,
-				}); emitErr != nil {
-					return nil, emitErr
-				}
-				return compactToolResults(results), &agent.PauseForPlanReviewError{}
+				pauseForPlanReview = true
+				break
 			}
 
 			results[index] = api.ToolResult{ToolCallID: call.ID, Output: err.Error(), IsError: true}
@@ -166,6 +154,9 @@ func executeToolCalls(
 		}
 
 		approved = append(approved, pendingCall)
+		if pendingCall.Tool.Name() == "save_implementation_plan" {
+			planSavedThisTurn = true
+		}
 	}
 
 	for _, batch := range toolpkg.PartitionBatches(approved) {
@@ -280,6 +271,10 @@ func executeToolCalls(
 				})
 			}
 		}
+	}
+
+	if pauseForPlanReview {
+		return compactToolResults(results), &agent.PauseForPlanReviewError{}
 	}
 
 	return results, nil
