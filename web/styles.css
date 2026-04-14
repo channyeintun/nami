@@ -662,3 +662,59 @@ svg .glow-soft {
 .animate-breathe {
     animation: breathe-glow 6s ease-in-out infinite;
 }
+
+/* ── High-Grade Technical Utilities ─── */
+
+.tech-grid-bg {
+    fill: url(#tech-grid-pattern);
+    opacity: 0.4;
+}
+
+.glass-hologram {
+    fill: rgba(255, 64, 0, 0.02);
+    stroke: rgba(255, 64, 0, 0.15);
+    backdrop-filter: blur(2px);
+}
+
+.data-packet {
+    fill: var(--brand);
+    filter: drop-shadow(0 0 4px var(--brand));
+}
+
+@keyframes status-blink {
+    0%, 100% { opacity: 0.4; filter: brightness(1); }
+    50% { opacity: 1; filter: brightness(1.5); }
+}
+
+.status-glimmer {
+    animation: status-blink 2s ease-in-out infinite;
+}
+
+.tech-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 7px;
+    font-weight: 700;
+    fill: #444;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+}
+
+.terminal-readout {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 8px;
+    fill: #666;
+}
+
+@keyframes scan-move {
+    0% { transform: translateY(-50px); opacity: 0; }
+    10% { opacity: 0.5; }
+    90% { opacity: 0.5; }
+    100% { transform: translateY(50px); opacity: 0; }
+}
+
+.scan-line {
+    stroke: var(--brand);
+    stroke-width: 1;
+    stroke-opacity: 0.2;
+    animation: scan-move 4s linear infinite;
+}
