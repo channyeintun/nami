@@ -585,7 +585,7 @@ func decodeToolInput(call api.ToolCall) (toolpkg.ToolInput, error) {
 func normalizeToolCall(call api.ToolCall) (api.ToolCall, error) {
 	alias := strings.TrimSpace(call.Name)
 	switch alias {
-	case "file_search", "grep_search", "read_file", "google:search", "google_search", "google.search":
+	case "file_search", "grep_search", "read_file", "replace_string_in_file", "glob", "grep", "file_read", "file_edit", "google:search", "google_search", "google.search":
 	default:
 		return call, nil
 	}
@@ -602,20 +602,21 @@ func normalizeToolCall(call api.ToolCall) (api.ToolCall, error) {
 	normalizedParams := cloneToolParams(params)
 
 	switch alias {
-	case "file_search":
-		normalized.Name = "glob"
+	case "file_search", "glob":
+		normalized.Name = "file_search"
 		if pattern, ok := stringParamFromMap(normalizedParams, "pattern"); !ok || strings.TrimSpace(pattern) == "" {
 			if query, ok := stringParamFromMap(normalizedParams, "query"); ok && strings.TrimSpace(query) != "" {
 				normalizedParams["pattern"] = normalizeFileSearchPattern(query)
 			}
 		}
+		renameToolParam(normalizedParams, "pattern", "query")
 		if _, ok := stringParamFromMap(normalizedParams, "path"); !ok {
 			if includePattern, ok := stringParamFromMap(normalizedParams, "includePattern"); ok && strings.TrimSpace(includePattern) != "" && !looksLikeGlob(includePattern) {
 				normalizedParams["path"] = includePattern
 			}
 		}
-	case "grep_search":
-		normalized.Name = "grep"
+	case "grep_search", "grep":
+		normalized.Name = "grep_search"
 		if pattern, ok := stringParamFromMap(normalizedParams, "pattern"); !ok || strings.TrimSpace(pattern) == "" {
 			if query, ok := stringParamFromMap(normalizedParams, "query"); ok && strings.TrimSpace(query) != "" {
 				if isRegexp, ok := normalizedParams["isRegexp"].(bool); ok && !isRegexp {
@@ -625,6 +626,7 @@ func normalizeToolCall(call api.ToolCall) (api.ToolCall, error) {
 				}
 			}
 		}
+		renameToolParam(normalizedParams, "pattern", "query")
 		if _, ok := stringParamFromMap(normalizedParams, "path"); !ok {
 			if includePattern, ok := stringParamFromMap(normalizedParams, "includePattern"); ok && strings.TrimSpace(includePattern) != "" {
 				if looksLikeGlob(includePattern) {
@@ -639,11 +641,17 @@ func normalizeToolCall(call api.ToolCall) (api.ToolCall, error) {
 				normalizedParams["head_limit"] = maxResults
 			}
 		}
-	case "read_file":
-		normalized.Name = "file_read"
+	case "read_file", "file_read":
+		normalized.Name = "read_file"
 		renameToolParam(normalizedParams, "filePath", "file_path")
 		renameToolParam(normalizedParams, "startLine", "start_line")
 		renameToolParam(normalizedParams, "endLine", "end_line")
+	case "replace_string_in_file", "file_edit":
+		normalized.Name = "replace_string_in_file"
+		renameToolParam(normalizedParams, "filePath", "file_path")
+		renameToolParam(normalizedParams, "oldString", "old_string")
+		renameToolParam(normalizedParams, "newString", "new_string")
+		renameToolParam(normalizedParams, "replaceAll", "replace_all")
 	case "google:search", "google_search", "google.search":
 		normalized.Name = "web_search"
 		if query, ok := stringParamFromMap(normalizedParams, "query"); !ok || strings.TrimSpace(query) == "" {

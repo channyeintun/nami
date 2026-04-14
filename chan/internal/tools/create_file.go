@@ -63,7 +63,7 @@ func (t *CreateFileTool) Validate(input ToolInput) error {
 		if info.IsDir() {
 			return fmt.Errorf("%q is a directory", resolvedPath)
 		}
-		return fmt.Errorf("file already exists: %s (use file_write to overwrite it, or file_edit for in-place changes)", resolvedPath)
+		return fmt.Errorf("file already exists: %s (use file_write to overwrite it, or replace_string_in_file for in-place changes)", resolvedPath)
 	}
 	if !os.IsNotExist(err) {
 		return fmt.Errorf("stat file %q: %w", resolvedPath, err)
@@ -96,7 +96,7 @@ func (t *CreateFileTool) Execute(ctx context.Context, input ToolInput) (ToolOutp
 		if info.IsDir() {
 			return ToolOutput{}, fmt.Errorf("%q is a directory", filePath)
 		}
-		return ToolOutput{}, fmt.Errorf("file already exists: %s (use file_write to overwrite it, or file_edit for in-place changes)", filePath)
+		return ToolOutput{}, fmt.Errorf("file already exists: %s (use file_write to overwrite it, or replace_string_in_file for in-place changes)", filePath)
 	} else if !os.IsNotExist(err) {
 		return ToolOutput{}, fmt.Errorf("stat file %q: %w", filePath, err)
 	}

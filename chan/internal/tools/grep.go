@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 )
@@ -23,20 +24,41 @@ func NewGrepTool() *GrepTool {
 }
 
 func (t *GrepTool) Name() string {
-	return "grep"
+	return "grep_search"
 }
 
 func (t *GrepTool) Description() string {
-	return "Search file contents with regex using ripgrep, with grep fallback."
+	return "Do a fast text search in the workspace. Use this when you want exact-string or regex search over file contents and need matching lines or file locations back."
 }
 
 func (t *GrepTool) InputSchema() any {
 	return map[string]any{
 		"type": "object",
 		"properties": map[string]any{
+			"query": map[string]any{
+				"type":        "string",
+				"description": "The exact string or regex pattern to search for in files.",
+			},
+			"isRegexp": map[string]any{
+				"type":        "boolean",
+				"description": "Whether query should be treated as a regex. Defaults to true when pattern is provided directly.",
+			},
+			"includePattern": map[string]any{
+				"type":        "string",
+				"description": "Optional file glob or absolute path scope for the search.",
+			},
+			"maxResults": map[string]any{
+				"type":        "integer",
+				"description": "Optional maximum number of results to return.",
+				"minimum":     1,
+			},
+			"includeIgnoredFiles": map[string]any{
+				"type":        "boolean",
+				"description": "Whether to include ignored files. Currently accepted for compatibility but not used by the local implementation.",
+			},
 			"pattern": map[string]any{
 				"type":        "string",
-				"description": "The regular expression pattern to search for in file contents.",
+				"description": "Compatibility alias for the regular expression pattern to search for in file contents.",
 			},
 			"path": map[string]any{
 				"type":        "string",
@@ -65,7 +87,10 @@ func (t *GrepTool) InputSchema() any {
 			"offset":     map[string]any{"type": "integer", "minimum": 0},
 			"multiline":  map[string]any{"type": "boolean"},
 		},
-		"required": []string{"pattern"},
+		"anyOf": []map[string]any{
+			{"required": []string{"query"}},
+			{"required": []string{"pattern"}},
+		},
 	}
 }
 
@@ -78,23 +103,50 @@ func (t *GrepTool) Concurrency(input ToolInput) ConcurrencyDecision {
 }
 
 func (t *GrepTool) Execute(ctx context.Context, input ToolInput) (ToolOutput, error) {
-	pattern, ok := stringParam(input.Params, "pattern")
+	normalizedParams := map[string]any{}
+	for key, value := range input.Params {
+		normalizedParams[key] = value
+	}
+	if pattern, ok := stringParam(normalizedParams, "pattern"); !ok || strings.TrimSpace(pattern) == "" {
+		if query, ok := stringParam(normalizedParams, "query"); ok && strings.TrimSpace(query) != "" {
+			if isRegexp, ok := normalizedParams["isRegexp"].(bool); ok && !isRegexp {
+				normalizedParams["pattern"] = regexp.QuoteMeta(query)
+			} else {
+				normalizedParams["pattern"] = query
+			}
+		}
+	}
+	if _, ok := stringParam(normalizedParams, "path"); !ok {
+		if includePattern, ok := stringParam(normalizedParams, "includePattern"); ok && strings.TrimSpace(includePattern) != "" {
+			if strings.ContainsAny(includePattern, "*?[") {
+				normalizedParams["glob"] = includePattern
+			} else {
+				normalizedParams["path"] = includePattern
+			}
+		}
+	}
+	if _, ok := normalizedParams["head_limit"]; !ok {
+		if maxResults, ok := intParam(normalizedParams, "maxResults"); ok && maxResults > 0 {
+			normalizedParams["head_limit"] = maxResults
+		}
+	}
+	pattern, ok := stringParam(normalizedParams, "pattern")
 	if !ok || strings.TrimSpace(pattern) == "" {
-		return ToolOutput{}, fmt.Errorf("grep requires pattern")
+		return ToolOutput{}, fmt.Errorf("grep_search requires query")
 	}
 
-	searchPath, err := resolveSearchPath(input.Params)
+	searchPath, err := resolveSearchPath(normalizedParams)
 	if err != nil {
 		return ToolOutput{}, err
 	}
 
-	outputMode := stringOrDefault(input.Params, "output_mode", "files_with_matches")
+	outputMode := stringOrDefault(normalizedParams, "output_mode", "files_with_matches")
 	if outputMode != "content" && outputMode != "files_with_matches" && outputMode != "count" {
 		return ToolOutput{}, fmt.Errorf("invalid output_mode %q", outputMode)
 	}
 
-	headLimit := intOrDefault(input.Params, "head_limit", defaultGrepHeadLimit)
-	offset := intOrDefault(input.Params, "offset", 0)
+	headLimit := intOrDefault(normalizedParams, "head_limit", defaultGrepHeadLimit)
+	offset := intOrDefault(normalizedParams, "offset", 0)
 	if headLimit < 0 || offset < 0 {
 		return ToolOutput{}, fmt.Errorf("head_limit and offset must be >= 0")
 	}
@@ -102,9 +154,9 @@ func (t *GrepTool) Execute(ctx context.Context, input ToolInput) (ToolOutput, er
 	var rawOutput string
 	var toolErr error
 	if _, lookupErr := exec.LookPath("rg"); lookupErr == nil {
-		rawOutput, toolErr = runRipgrep(ctx, searchPath, pattern, outputMode, input.Params)
+		rawOutput, toolErr = runRipgrep(ctx, searchPath, pattern, outputMode, normalizedParams)
 	} else {
-		rawOutput, toolErr = runGrepFallback(ctx, searchPath, pattern, outputMode, input.Params)
+		rawOutput, toolErr = runGrepFallback(ctx, searchPath, pattern, outputMode, normalizedParams)
 	}
 	if toolErr != nil {
 		var exitErr *exec.ExitError

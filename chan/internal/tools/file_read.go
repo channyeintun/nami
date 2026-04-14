@@ -26,33 +26,55 @@ func NewFileReadTool() *FileReadTool {
 }
 
 func (t *FileReadTool) Name() string {
-	return "file_read"
+	return "read_file"
 }
 
 func (t *FileReadTool) Description() string {
-	return "Read a text file from disk, optionally limited to a line range. For large files, continue reading with start_line and end_line."
+	return "Read the contents of a file. Use this when you need the exact text from a specific file, optionally limited to a 1-based line range. Prefer reading larger ranges over many tiny reads."
 }
 
 func (t *FileReadTool) InputSchema() any {
 	return map[string]any{
 		"type": "object",
 		"properties": map[string]any{
-			"file_path": map[string]any{
+			"filePath": map[string]any{
 				"type":        "string",
 				"description": "The absolute path to the file to read.",
 			},
-			"start_line": map[string]any{
+			"file_path": map[string]any{
+				"type":        "string",
+				"description": "Compatibility alias for the absolute path to the file to read.",
+			},
+			"path": map[string]any{
+				"type":        "string",
+				"description": "Compatibility alias for the absolute path to the file to read.",
+			},
+			"startLine": map[string]any{
 				"type":        "integer",
 				"description": "Optional 1-based start line.",
 				"minimum":     1,
 			},
-			"end_line": map[string]any{
+			"endLine": map[string]any{
 				"type":        "integer",
 				"description": "Optional 1-based inclusive end line.",
 				"minimum":     1,
 			},
+			"start_line": map[string]any{
+				"type":        "integer",
+				"description": "Compatibility alias for the 1-based start line.",
+				"minimum":     1,
+			},
+			"end_line": map[string]any{
+				"type":        "integer",
+				"description": "Compatibility alias for the 1-based inclusive end line.",
+				"minimum":     1,
+			},
 		},
-		"required": []string{"file_path"},
+		"anyOf": []map[string]any{
+			{"required": []string{"filePath"}},
+			{"required": []string{"file_path"}},
+			{"required": []string{"path"}},
+		},
 	}
 }
 
@@ -65,9 +87,9 @@ func (t *FileReadTool) Concurrency(input ToolInput) ConcurrencyDecision {
 }
 
 func (t *FileReadTool) Execute(ctx context.Context, input ToolInput) (ToolOutput, error) {
-	filePath, ok := stringParam(input.Params, "file_path")
+	filePath, ok := firstStringParam(input.Params, "filePath", "file_path", "path")
 	if !ok || strings.TrimSpace(filePath) == "" {
-		return ToolOutput{}, fmt.Errorf("file_read requires file_path")
+		return ToolOutput{}, fmt.Errorf("read_file requires filePath")
 	}
 	filePath, err := resolveToolPath(filePath)
 	if err != nil {
@@ -82,7 +104,21 @@ func (t *FileReadTool) Execute(ctx context.Context, input ToolInput) (ToolOutput
 		return ToolOutput{}, fmt.Errorf("%q is a directory", filePath)
 	}
 
-	startLine, endLine, err := fileReadRange(input.Params)
+	normalizedParams := map[string]any{}
+	for key, value := range input.Params {
+		normalizedParams[key] = value
+	}
+	if _, ok := normalizedParams["start_line"]; !ok {
+		if value, ok := normalizedParams["startLine"]; ok {
+			normalizedParams["start_line"] = value
+		}
+	}
+	if _, ok := normalizedParams["end_line"]; !ok {
+		if value, ok := normalizedParams["endLine"]; ok {
+			normalizedParams["end_line"] = value
+		}
+	}
+	startLine, endLine, err := fileReadRange(normalizedParams)
 	if err != nil {
 		return ToolOutput{}, err
 	}
@@ -103,7 +139,7 @@ func (t *FileReadTool) Execute(ctx context.Context, input ToolInput) (ToolOutput
 	}
 	if isLikelyBinaryFile(filePath, sample[:readCount]) {
 		return ToolOutput{
-			Output:  fmt.Sprintf("%s: binary or image-like file detected; file_read only supports text files and skipped this read for safety", filePath),
+			Output:  fmt.Sprintf("%s: binary or image-like file detected; read_file only supports text files and skipped this read for safety", filePath),
 			IsError: true,
 		}, nil
 	}

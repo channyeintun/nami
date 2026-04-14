@@ -16,35 +16,70 @@ func NewFileEditTool() *FileEditTool {
 }
 
 func (t *FileEditTool) Name() string {
-	return "file_edit"
+	return "replace_string_in_file"
 }
 
 func (t *FileEditTool) Description() string {
-	return "Perform one exact snippet replacement in one existing text file. Best for small, precise edits when old_string matches exactly once or replace_all is intentional. Use multi_replace_file_content for several exact replacements in one file, apply_patch for structural or multi-file edits, create_file for new files, and file_write for full overwrites."
+	return "Make one exact in-place replacement in an existing text file. Use this for small, precise edits where oldString matches exactly once. For broader structural edits or multi-file changes, use apply_patch instead."
 }
 
 func (t *FileEditTool) InputSchema() any {
 	return map[string]any{
 		"type": "object",
 		"properties": map[string]any{
-			"file_path": map[string]any{
+			"filePath": map[string]any{
 				"type":        "string",
 				"description": "The absolute path to the file to modify.",
 			},
+			"file_path": map[string]any{
+				"type":        "string",
+				"description": "Compatibility alias for the absolute path to the file to modify.",
+			},
+			"oldString": map[string]any{
+				"type":        "string",
+				"description": "The exact literal text to replace. Include enough surrounding context to uniquely identify the target occurrence.",
+			},
 			"old_string": map[string]any{
 				"type":        "string",
-				"description": "The exact text to replace.",
+				"description": "Compatibility alias for the exact text to replace.",
 			},
-			"new_string": map[string]any{
+			"newString": map[string]any{
 				"type":        "string",
 				"description": "The replacement text.",
 			},
+			"new_string": map[string]any{
+				"type":        "string",
+				"description": "Compatibility alias for the replacement text.",
+			},
+			"replaceAll": map[string]any{
+				"type":        "boolean",
+				"description": "Replace all occurrences of oldString instead of one.",
+			},
 			"replace_all": map[string]any{
 				"type":        "boolean",
-				"description": "Replace all occurrences of old_string. Defaults to false.",
+				"description": "Compatibility alias for replacing all occurrences.",
 			},
 		},
-		"required": []string{"file_path", "old_string", "new_string"},
+		"allOf": []map[string]any{
+			{
+				"anyOf": []map[string]any{
+					{"required": []string{"filePath"}},
+					{"required": []string{"file_path"}},
+				},
+			},
+			{
+				"anyOf": []map[string]any{
+					{"required": []string{"oldString"}},
+					{"required": []string{"old_string"}},
+				},
+			},
+			{
+				"anyOf": []map[string]any{
+					{"required": []string{"newString"}},
+					{"required": []string{"new_string"}},
+				},
+			},
+		},
 	}
 }
 
@@ -57,25 +92,25 @@ func (t *FileEditTool) Concurrency(input ToolInput) ConcurrencyDecision {
 }
 
 func (t *FileEditTool) Validate(input ToolInput) error {
-	filePath, ok := stringParam(input.Params, "file_path")
+	filePath, ok := firstStringParam(input.Params, "filePath", "file_path")
 	if !ok || strings.TrimSpace(filePath) == "" {
-		return fmt.Errorf("file_edit requires file_path")
+		return fmt.Errorf("replace_string_in_file requires filePath")
 	}
 	resolvedPath, err := resolveToolPath(filePath)
 	if err != nil {
 		return err
 	}
-	oldString, ok := stringParam(input.Params, "old_string")
+	oldString, ok := firstStringParam(input.Params, "oldString", "old_string")
 	if !ok {
-		return NewEditFailure(EditFailureInvalidRequest, resolvedPath, "file_edit requires old_string", "Include the exact old_string you want to replace.")
+		return NewEditFailure(EditFailureInvalidRequest, resolvedPath, "replace_string_in_file requires oldString", "Include the exact oldString you want to replace.")
 	}
 	if oldString == "" {
-		return NewEditFailure(EditFailureInvalidRequest, resolvedPath, "file_edit requires a non-empty old_string", "Use create_file for new files, file_write for full overwrites, or provide the exact existing text you want to replace.")
+		return NewEditFailure(EditFailureInvalidRequest, resolvedPath, "replace_string_in_file requires a non-empty oldString", "Use create_file for new files, file_write for full overwrites, or provide the exact existing text you want to replace.")
 	}
 	info, err := os.Stat(resolvedPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return NewEditFailure(EditFailureTargetMissing, resolvedPath, fmt.Sprintf("file does not exist: %s", resolvedPath), "Use create_file to create it first, then retry file_edit with the exact existing text.")
+			return NewEditFailure(EditFailureTargetMissing, resolvedPath, fmt.Sprintf("file does not exist: %s", resolvedPath), "Use create_file to create it first, then retry replace_string_in_file with the exact existing text.")
 		}
 		return fmt.Errorf("stat file %q: %w", resolvedPath, err)
 	}
@@ -92,38 +127,38 @@ func (t *FileEditTool) Execute(ctx context.Context, input ToolInput) (ToolOutput
 	default:
 	}
 
-	filePath, ok := stringParam(input.Params, "file_path")
+	filePath, ok := firstStringParam(input.Params, "filePath", "file_path")
 	if !ok || strings.TrimSpace(filePath) == "" {
-		return ToolOutput{}, fmt.Errorf("file_edit requires file_path")
+		return ToolOutput{}, fmt.Errorf("replace_string_in_file requires filePath")
 	}
 	filePath, err := resolveToolPath(filePath)
 	if err != nil {
 		return ToolOutput{}, err
 	}
 
-	oldString, ok := stringParam(input.Params, "old_string")
+	oldString, ok := firstStringParam(input.Params, "oldString", "old_string")
 	if !ok {
-		return ToolOutput{}, fmt.Errorf("file_edit requires old_string")
+		return ToolOutput{}, fmt.Errorf("replace_string_in_file requires oldString")
 	}
-	newString, ok := stringParam(input.Params, "new_string")
+	newString, ok := firstStringParam(input.Params, "newString", "new_string")
 	if !ok {
-		return ToolOutput{}, NewEditFailure(EditFailureInvalidRequest, filePath, "file_edit requires new_string", "Provide the replacement text in new_string.")
+		return ToolOutput{}, NewEditFailure(EditFailureInvalidRequest, filePath, "replace_string_in_file requires newString", "Provide the replacement text in newString.")
 	}
 	if oldString == "" {
-		return ToolOutput{}, NewEditFailure(EditFailureInvalidRequest, filePath, "file_edit requires a non-empty old_string", "Use create_file for new files, file_write for full overwrites, or provide the exact existing text you want to replace.")
+		return ToolOutput{}, NewEditFailure(EditFailureInvalidRequest, filePath, "replace_string_in_file requires a non-empty oldString", "Use create_file for new files, file_write for full overwrites, or provide the exact existing text you want to replace.")
 	}
 	if oldString == newString {
 		return EditFailureOutput(EditFailureNoOp, filePath, "no changes to make: old_string and new_string are exactly the same", "Change new_string or skip the edit if the file is already in the desired state."), nil
 	}
 
-	replaceAll := boolParam(input.Params, "replace_all")
+	replaceAll := boolParam(input.Params, "replace_all") || boolParam(input.Params, "replaceAll")
 
 	contentBytes, err := os.ReadFile(filePath)
 	if err != nil {
 		if !os.IsNotExist(err) {
 			return ToolOutput{}, fmt.Errorf("read file %q: %w", filePath, err)
 		}
-		return EditFailureOutput(EditFailureTargetMissing, filePath, fmt.Sprintf("file does not exist: %s", filePath), "Use create_file to create it first, then retry file_edit with the exact existing text."), nil
+		return EditFailureOutput(EditFailureTargetMissing, filePath, fmt.Sprintf("file does not exist: %s", filePath), "Use create_file to create it first, then retry replace_string_in_file with the exact existing text."), nil
 	}
 
 	trackFileBeforeWrite(filePath)
@@ -135,10 +170,10 @@ func (t *FileEditTool) Execute(ctx context.Context, input ToolInput) (ToolOutput
 
 	matchCount := strings.Count(content, normalizedOldString)
 	if matchCount == 0 {
-		return EditFailureOutput(EditFailureNoMatch, filePath, "string to replace not found in file", "Reread the file, copy a longer exact snippet into old_string, switch to multi_replace_file_content for line-ranged exact edits, or use apply_patch for broader structural changes."), nil
+		return EditFailureOutput(EditFailureNoMatch, filePath, "string to replace not found in file", "Reread the file, copy a longer exact snippet into oldString, or use apply_patch for broader structural changes."), nil
 	}
 	if matchCount > 1 && !replaceAll {
-		return EditFailureOutput(EditFailureMultipleMatch, filePath, fmt.Sprintf("found %d matches of old_string", matchCount), "Provide a more specific old_string with surrounding context, set replace_all=true only if every match should change, or switch to apply_patch when the edit is structural rather than one exact replacement."), nil
+		return EditFailureOutput(EditFailureMultipleMatch, filePath, fmt.Sprintf("found %d matches of oldString", matchCount), "Provide a more specific oldString with surrounding context, set replaceAll=true only if every match should change, or switch to apply_patch when the edit is structural rather than one exact replacement."), nil
 	}
 
 	updatedContent := strings.Replace(content, normalizedOldString, normalizedNewString, 1)

@@ -26,27 +26,39 @@ func NewGlobTool() *GlobTool {
 }
 
 func (t *GlobTool) Name() string {
-	return "glob"
+	return "file_search"
 }
 
 func (t *GlobTool) Description() string {
-	return "Find files by glob pattern, optionally scoped to a directory."
+	return "Search for files in the workspace by glob pattern. Use this when you know the filename or path pattern to match and only need matching file paths back."
 }
 
 func (t *GlobTool) InputSchema() any {
 	return map[string]any{
 		"type": "object",
 		"properties": map[string]any{
+			"query": map[string]any{
+				"type":        "string",
+				"description": "A glob pattern to search for, or an absolute path scoped pattern such as /path/to/workspace/**/*.go.",
+			},
 			"pattern": map[string]any{
 				"type":        "string",
-				"description": "The glob pattern to match files against.",
+				"description": "Compatibility alias for the glob pattern to match files against.",
 			},
 			"path": map[string]any{
 				"type":        "string",
 				"description": "Optional directory to search in. Defaults to the current working directory.",
 			},
+			"maxResults": map[string]any{
+				"type":        "integer",
+				"description": "Optional maximum number of results to return.",
+				"minimum":     1,
+			},
 		},
-		"required": []string{"pattern"},
+		"anyOf": []map[string]any{
+			{"required": []string{"query"}},
+			{"required": []string{"pattern"}},
+		},
 	}
 }
 
@@ -59,14 +71,18 @@ func (t *GlobTool) Concurrency(input ToolInput) ConcurrencyDecision {
 }
 
 func (t *GlobTool) Execute(ctx context.Context, input ToolInput) (ToolOutput, error) {
-	pattern, ok := stringParam(input.Params, "pattern")
+	pattern, ok := firstStringParam(input.Params, "query", "pattern")
 	if !ok || strings.TrimSpace(pattern) == "" {
-		return ToolOutput{}, fmt.Errorf("glob requires pattern")
+		return ToolOutput{}, fmt.Errorf("file_search requires query")
 	}
 
 	searchDir, err := resolveGlobSearchDir(input.Params)
 	if err != nil {
 		return ToolOutput{}, err
+	}
+	limit := intOrDefault(input.Params, "maxResults", maxGlobResults)
+	if limit <= 0 || limit > maxGlobResults {
+		limit = maxGlobResults
 	}
 
 	searchPattern := filepath.ToSlash(pattern)
@@ -108,9 +124,9 @@ func (t *GlobTool) Execute(ctx context.Context, input ToolInput) (ToolOutput, er
 			return err
 		}
 		matches = append(matches, absPath)
-		if len(matches) > maxGlobResults {
+		if len(matches) > limit {
 			truncated = true
-			matches = matches[:maxGlobResults]
+			matches = matches[:limit]
 			return errGlobLimitReached
 		}
 		return nil

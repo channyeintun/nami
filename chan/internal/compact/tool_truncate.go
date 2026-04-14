@@ -8,16 +8,17 @@ import (
 
 // CompactableTools lists tools whose old results can be safely truncated.
 var CompactableTools = map[string]bool{
-	"apply_patch": true,
-	"create_file": true,
-	"file_read":   true,
-	"bash":        true,
-	"grep":        true,
-	"glob":        true,
-	"web_search":  true,
-	"web_fetch":   true,
-	"file_edit":   true,
-	"file_write":  true,
+	"apply_patch":            true,
+	"create_file":            true,
+	"read_file":              true,
+	"read_project_structure": true,
+	"bash":                   true,
+	"grep_search":            true,
+	"file_search":            true,
+	"web_search":             true,
+	"web_fetch":              true,
+	"replace_string_in_file": true,
+	"file_write":             true,
 }
 
 const truncatedMarker = "[Old tool result content cleared]"
@@ -78,21 +79,23 @@ func canonicalCompactableToolName(name string) string {
 	case "applypatch", "apply_patch":
 		return "apply_patch"
 	case "fileread", "file_read", "read_file":
-		return "file_read"
+		return "read_file"
+	case "readprojectstructure", "read_project_structure":
+		return "read_project_structure"
 	case "createfile", "create_file":
 		return "create_file"
 	case "bash":
 		return "bash"
 	case "grep", "grepsearch", "grep_search":
-		return "grep"
+		return "grep_search"
 	case "glob", "filesearch", "file_search":
-		return "glob"
+		return "file_search"
 	case "websearch", "web_search":
 		return "web_search"
 	case "webfetch", "web_fetch":
 		return "web_fetch"
-	case "fileedit", "file_edit":
-		return "file_edit"
+	case "fileedit", "file_edit", "replacestringinfile", "replace_string_in_file":
+		return "replace_string_in_file"
 	case "filewrite", "file_write":
 		return "file_write"
 	default:

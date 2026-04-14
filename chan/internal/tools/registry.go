@@ -27,12 +27,13 @@ func NewRegistry() *Registry {
 	r.Register(NewFileWriteTool())
 	r.Register(NewFileEditTool())
 	r.Register(NewApplyPatchTool())
-	r.Register(NewMultiReplaceFileContentTool())
+	r.RegisterAlias(NewMultiReplaceFileContentTool())
 	r.Register(NewFileDiffPreviewTool())
 	r.Register(NewGlobTool())
 	r.Register(NewGrepTool())
 	r.Register(NewGoDefinitionTool())
 	r.Register(NewGoReferencesTool())
+	r.Register(NewReadProjectStructureTool())
 	r.Register(NewProjectOverviewTool())
 	r.Register(NewDependencyOverviewTool())
 	r.Register(NewSymbolSearchTool())
@@ -49,8 +50,6 @@ func NewRegistry() *Registry {
 	r.Register(NewSaveImplementationPlanTool())
 	r.Register(NewUpsertTaskListTool())
 	r.Register(NewSaveWalkthroughTool())
-	r.RegisterAlias(NewFileSearchAliasTool())
-	r.RegisterAlias(NewReadFileAliasTool())
 
 	return r
 }

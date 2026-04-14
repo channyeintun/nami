@@ -142,7 +142,7 @@ func AssessRisk(toolName string, input tools.ToolInput, permLevel tools.Permissi
 	}
 
 	if toolName == "apply_patch" {
-		patchText, ok := firstStringParam(input.Params, "patch")
+		patchText, ok := firstStringParam(input.Params, "input", "patch")
 		if !ok || strings.TrimSpace(patchText) == "" {
 			return RiskAssessment{Level: "write"}
 		}

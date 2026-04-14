@@ -63,19 +63,30 @@ func (t *ApplyPatchTool) Name() string {
 }
 
 func (t *ApplyPatchTool) Description() string {
-	return "Apply structured multi-hunk or multi-file text edits. Best for structural edits, coordinated changes across files, or patches that create or delete files. Prefer file_edit for one exact snippet replacement and multi_replace_file_content for several exact replacements in one existing file. Patch format: *** Begin Patch, file sections with *** Add File:, *** Update File:, or *** Delete File:, optional @@ markers inside update hunks, then *** End Patch."
+	return "Edit text files with a structured patch. Use this for multi-line, multi-hunk, or multi-file edits, and for creating or deleting files. Patch format: *** Begin Patch, one or more *** Add File, *** Update File, or *** Delete File sections, then *** End Patch."
 }
 
 func (t *ApplyPatchTool) InputSchema() any {
 	return map[string]any{
 		"type": "object",
 		"properties": map[string]any{
-			"patch": map[string]any{
+			"input": map[string]any{
 				"type":        "string",
 				"description": "The structured patch to apply. Must start with *** Begin Patch and end with *** End Patch.",
 			},
+			"patch": map[string]any{
+				"type":        "string",
+				"description": "Compatibility alias for the structured patch to apply.",
+			},
+			"explanation": map[string]any{
+				"type":        "string",
+				"description": "Optional short description of what the patch is intended to do.",
+			},
 		},
-		"required": []string{"patch"},
+		"anyOf": []map[string]any{
+			{"required": []string{"input"}},
+			{"required": []string{"patch"}},
+		},
 	}
 }
 
@@ -88,9 +99,9 @@ func (t *ApplyPatchTool) Concurrency(input ToolInput) ConcurrencyDecision {
 }
 
 func (t *ApplyPatchTool) Validate(input ToolInput) error {
-	patchText, ok := stringParam(input.Params, "patch")
+	patchText, ok := firstStringParam(input.Params, "input", "patch")
 	if !ok || strings.TrimSpace(patchText) == "" {
-		return NewEditFailure(EditFailureInvalidRequest, "", "apply_patch requires patch", "Provide a structured patch that starts with *** Begin Patch and ends with *** End Patch.")
+		return NewEditFailure(EditFailureInvalidRequest, "", "apply_patch requires input", "Provide a structured patch that starts with *** Begin Patch and ends with *** End Patch.")
 	}
 	document, err := parseApplyPatchDocument(patchText)
 	if err != nil {
@@ -148,9 +159,9 @@ func (t *ApplyPatchTool) Execute(ctx context.Context, input ToolInput) (ToolOutp
 	default:
 	}
 
-	patchText, ok := stringParam(input.Params, "patch")
+	patchText, ok := firstStringParam(input.Params, "input", "patch")
 	if !ok || strings.TrimSpace(patchText) == "" {
-		return EditFailureOutput(EditFailureInvalidRequest, "", "apply_patch requires patch", "Provide a structured patch that starts with *** Begin Patch and ends with *** End Patch."), nil
+		return EditFailureOutput(EditFailureInvalidRequest, "", "apply_patch requires input", "Provide a structured patch that starts with *** Begin Patch and ends with *** End Patch."), nil
 	}
 
 	document, err := parseApplyPatchDocument(patchText)
