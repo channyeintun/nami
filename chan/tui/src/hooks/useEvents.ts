@@ -737,11 +737,14 @@ export function useEvents(initialModel: string, initialMode: string) {
         const p = event.payload as CompactStartPayload;
         setUIState((s) => ({
           ...s,
+          activeTurnStatus: "working",
+          isStreaming: true,
           compact: {
             active: true,
             strategy: p.strategy,
             tokensBefore: p.tokens_before,
           },
+          error: null,
           statusLine: null,
         }));
         break;
@@ -750,6 +753,8 @@ export function useEvents(initialModel: string, initialMode: string) {
         const p = event.payload as CompactEndPayload;
         setUIState((s) => ({
           ...s,
+          activeTurnStatus: "working",
+          isStreaming: true,
           compact: s.compact
             ? {
                 ...s.compact,
@@ -1221,15 +1226,26 @@ export function useEvents(initialModel: string, initialMode: string) {
       }
       case "error": {
         const p = event.payload as ErrorPayload;
-        setUIState((s) => ({
-          ...s,
-          activeTurnStatus: p.recoverable ? "working" : "idle",
-          error: p.recoverable ? null : p.message,
-          submittingArtifactReviewRequestId: null,
-          isStreaming: p.recoverable ? s.isStreaming : false,
-          compact: null,
-          statusLine: p.message,
-        }));
+        setUIState((s) => {
+          const stopCompact = p.recoverable && s.compact?.active;
+          return {
+            ...s,
+            activeTurnStatus: p.recoverable
+              ? stopCompact
+                ? "idle"
+                : "working"
+              : "idle",
+            error: p.recoverable ? null : p.message,
+            submittingArtifactReviewRequestId: null,
+            isStreaming: p.recoverable
+              ? stopCompact
+                ? false
+                : s.isStreaming
+              : false,
+            compact: null,
+            statusLine: p.message,
+          };
+        });
         break;
       }
     }

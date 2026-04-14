@@ -564,7 +564,7 @@ function agentToolTitle(rawInput: string): string {
 function summarizeOutput(raw: string, truncated?: boolean): string {
   const trimmed = raw.trim();
   if (!trimmed) {
-    return truncated ? "Completed. Output truncated." : "Completed.";
+    return truncated ? "Completed. Output hidden in chat." : "Completed.";
   }
 
   const lines = trimmed.split("\n");
@@ -580,7 +580,7 @@ function summarizeOutput(raw: string, truncated?: boolean): string {
     clipped.length < trimmed.length ||
     truncated
   ) {
-    return `${shortened}\n\n_Output truncated._`;
+    return "Output hidden in chat.";
   }
 
   return shortened;
@@ -593,7 +593,7 @@ function summarizeFileMutation(toolCall: UIToolCall): string {
     parts.push(summarizeOutput(toolCall.output, toolCall.truncated));
   } else {
     parts.push(
-      toolCall.truncated ? "Completed. Output truncated." : "Completed.",
+      toolCall.truncated ? "Completed. Output hidden in chat." : "Completed.",
     );
   }
 
@@ -645,7 +645,7 @@ function summarizeDiagnostics(raw?: string): string {
 
 function summarizeFileRead(raw?: string, truncated?: boolean): string {
   if (truncated) {
-    return "Read completed. Content hidden in chat. Output truncated.";
+    return "Read completed. Content hidden in chat.";
   }
   if (!raw) {
     return "Read completed. Content hidden in chat.";
@@ -688,7 +688,7 @@ function summarizeWebSearch(raw?: string): string {
 function summarizeWebFetch(raw?: string, truncated?: boolean): string {
   if (!raw) {
     return truncated
-      ? "Fetch completed. Output truncated."
+      ? "Fetch completed. Output hidden in chat."
       : "Fetch completed.";
   }
   const lines = raw.trim().split("\n");
@@ -699,7 +699,7 @@ function summarizeWebFetch(raw?: string, truncated?: boolean): string {
 function summarizeGitOutput(raw?: string, truncated?: boolean): string {
   if (!raw) {
     return truncated
-      ? "Git command completed. Output truncated."
+      ? "Git command completed. Output hidden in chat."
       : "Git command completed.";
   }
   return summarizeOutput(raw, truncated);
@@ -708,7 +708,7 @@ function summarizeGitOutput(raw?: string, truncated?: boolean): string {
 function summarizeShellOutput(raw?: string, truncated?: boolean): string {
   if (!raw) {
     return truncated
-      ? "Command completed. Output truncated."
+      ? "Command completed. Output hidden in chat."
       : "Command completed with no output.";
   }
   return summarizeOutput(raw, truncated);
