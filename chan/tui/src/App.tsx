@@ -1,12 +1,19 @@
-import React, { type FC, useCallback, useEffect, useRef, useState } from "react";
+import React, {
+  type FC,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import {
   Box,
   Screen,
   Spinner,
   Text,
-  ToastContainer,
   disableBracketedPaste,
   enableBracketedPaste,
+  type ToastData,
+  type ToastVariant,
   useToast,
 } from "silvery";
 import { useEngine } from "./hooks/useEngine.js";
@@ -32,6 +39,22 @@ import type {
 
 const THINKING_TOGGLE_SHORTCUT_LABEL = "Opt+T";
 const ARTIFACTS_TOGGLE_SHORTCUT_LABEL = "Opt+A";
+
+const TOAST_VARIANT_COLORS: Record<ToastVariant, string> = {
+  default: "$fg",
+  success: "$success",
+  error: "$error",
+  warning: "$warning",
+  info: "$info",
+};
+
+const TOAST_VARIANT_ICONS: Record<ToastVariant, string> = {
+  default: "i",
+  success: "+",
+  error: "x",
+  warning: "!",
+  info: "i",
+};
 
 interface AppProps {
   enginePath: string;
@@ -137,7 +160,13 @@ const App: FC<AppProps> = ({ enginePath, model, mode }) => {
       variant: "success",
       duration: 4000,
     });
-  }, [toast, uiState.error, uiState.isStreaming, uiState.messages, uiState.statusLine]);
+  }, [
+    toast,
+    uiState.error,
+    uiState.isStreaming,
+    uiState.messages,
+    uiState.statusLine,
+  ]);
 
   const submitPrompt = useCallback(
     (text: string, images: UserInputImagePayload[]) => {
@@ -316,7 +345,10 @@ const App: FC<AppProps> = ({ enginePath, model, mode }) => {
     isStreaming: uiState.isStreaming,
   });
   const promptActivityLabel = uiState.isStreaming
-    ? activeTurnStatusLabel(uiState.liveAssistantBlocks, uiState.activeTurnStatus)
+    ? activeTurnStatusLabel(
+        uiState.liveAssistantBlocks,
+        uiState.activeTurnStatus,
+      )
     : null;
 
   const openTranscriptSearch = useCallback(() => {
@@ -487,12 +519,7 @@ const App: FC<AppProps> = ({ enginePath, model, mode }) => {
       </Box>
 
       {uiState.pendingPermission ? (
-        <Box
-          flexDirection="column"
-          flexShrink={1}
-          minHeight={0}
-          marginTop={1}
-        >
+        <Box flexDirection="column" flexShrink={1} minHeight={0} marginTop={1}>
           <PermissionPrompt
             tool={uiState.pendingPermission.tool}
             command={uiState.pendingPermission.command}
@@ -507,12 +534,7 @@ const App: FC<AppProps> = ({ enginePath, model, mode }) => {
           />
         </Box>
       ) : uiState.pendingResumeSelection ? (
-        <Box
-          flexDirection="column"
-          flexShrink={1}
-          minHeight={0}
-          marginTop={1}
-        >
+        <Box flexDirection="column" flexShrink={1} minHeight={0} marginTop={1}>
           <ResumeSelectionPrompt
             selection={uiState.pendingResumeSelection}
             onSelect={handleResumeSelection}
@@ -520,12 +542,7 @@ const App: FC<AppProps> = ({ enginePath, model, mode }) => {
           />
         </Box>
       ) : uiState.pendingArtifactReview ? (
-        <Box
-          flexDirection="column"
-          flexShrink={0}
-          minHeight={0}
-          marginTop={1}
-        >
+        <Box flexDirection="column" flexShrink={0} minHeight={0} marginTop={1}>
           <ArtifactReviewPrompt
             review={uiState.pendingArtifactReview}
             onRespond={handleArtifactReviewResponse}
@@ -613,12 +630,75 @@ const App: FC<AppProps> = ({ enginePath, model, mode }) => {
         </Box>
       )}
 
-      <ToastContainer toasts={toasts} marginTop={1} />
+      <SafeToastContainer toasts={toasts} />
     </Screen>
   );
 };
 
 export default App;
+
+function SafeToastContainer({
+  toasts,
+  maxVisible = 5,
+}: {
+  toasts: ToastData[];
+  maxVisible?: number;
+}) {
+  const visibleToasts = toasts.slice(-maxVisible);
+
+  if (visibleToasts.length === 0) {
+    return null;
+  }
+
+  return (
+    <Box flexDirection="column" marginTop={1}>
+      {visibleToasts.map((toast, index) => (
+        <SafeToastItem
+          key={toast.id}
+          toast={toast}
+          marginBottom={index === visibleToasts.length - 1 ? 0 : 1}
+        />
+      ))}
+    </Box>
+  );
+}
+
+function SafeToastItem({
+  toast,
+  marginBottom = 0,
+}: {
+  toast: ToastData;
+  marginBottom?: number;
+}) {
+  const color = TOAST_VARIANT_COLORS[toast.variant];
+  const icon = TOAST_VARIANT_ICONS[toast.variant];
+
+  return (
+    <Box
+      alignSelf="flex-start"
+      backgroundColor="$popover-bg"
+      borderColor="$border"
+      borderStyle="single"
+      flexDirection="column"
+      flexShrink={0}
+      marginBottom={marginBottom}
+      maxWidth="100%"
+      paddingX={1}
+    >
+      <Box flexDirection="row">
+        <Text color={color} bold>
+          [{icon}]
+        </Text>
+        <Text> {toast.title}</Text>
+      </Box>
+      {toast.description ? (
+        <Box paddingLeft={4}>
+          <Text color="$muted">{toast.description}</Text>
+        </Box>
+      ) : null}
+    </Box>
+  );
+}
 
 function selectVisibleArtifacts(
   artifacts: UIArtifact[],
@@ -627,8 +707,7 @@ function selectVisibleArtifacts(
 ) {
   const visibleArtifacts = artifacts.filter(
     (artifact) =>
-      artifact.kind !== "tool-log" &&
-      artifact.kind !== "diff-preview",
+      artifact.kind !== "tool-log" && artifact.kind !== "diff-preview",
   );
 
   const filtered = visibleArtifacts.filter(
