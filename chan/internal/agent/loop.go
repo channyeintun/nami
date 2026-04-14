@@ -53,9 +53,13 @@ func runIteration(
 
 	// Load session-scoped attempt log entries.
 	var attemptLogSection string
+	var attemptEntries []AttemptEntry
 	if deps.AttemptLog != nil {
-		attemptEntries, _ := deps.AttemptLog.Load()
+		attemptEntries, _ = deps.AttemptLog.Load()
 		attemptLogSection = FormatAttemptLogSection(attemptEntries)
+	}
+	if err := emitAttemptLogTelemetry(deps.EmitTelemetry, attemptEntries, attemptLogSection); err != nil {
+		return err
 	}
 
 	selectedSkills := skillspkg.SelectRelevant(state.Skills, currentUserPrompt)
@@ -645,10 +649,11 @@ func newEvent(eventType ipc.EventType, payload any) ipc.StreamEvent {
 
 // retrievalMeta holds metadata about a completed live retrieval pass.
 type retrievalMeta struct {
-	SnippetCount int
-	TokensUsed   int
-	AnchorCount  int
-	Skipped      bool
+	SnippetCount  int
+	TokensUsed    int
+	AnchorCount   int
+	EdgesExpanded int
+	Skipped       bool
 }
 
 const retrievalTouchedLimit = 64
@@ -663,7 +668,7 @@ func runLiveRetrieval(state *QueryState, currentUserPrompt string, pressure Cont
 	recentToolOutput := latestToolOutput(state.Messages)
 
 	anchors := ExtractAnchors(currentUserPrompt, state.TurnContext.GitStatus, recentToolOutput)
-	candidates := ScoreCandidates(anchors, state.TurnContext.CurrentDir, state.TurnContext.GitStatus, state.RetrievalTouched)
+	candidates, edgesExpanded := ScoreCandidates(anchors, state.TurnContext.CurrentDir, state.TurnContext.GitStatus, state.RetrievalTouched)
 	snippets := ReadLiveSnippets(candidates, pressure.RetrievalBudgetTokens)
 
 	section := FormatLiveRetrievalSection(snippets)
@@ -672,10 +677,11 @@ func runLiveRetrieval(state *QueryState, currentUserPrompt string, pressure Cont
 		tokensUsed += len(s.Content) / 4
 	}
 	return section, retrievalMeta{
-		SnippetCount: len(snippets),
-		TokensUsed:   tokensUsed,
-		AnchorCount:  len(anchors),
-		Skipped:      false,
+		SnippetCount:  len(snippets),
+		TokensUsed:    tokensUsed,
+		AnchorCount:   len(anchors),
+		EdgesExpanded: edgesExpanded,
+		Skipped:       false,
 	}
 }
 
@@ -685,10 +691,24 @@ func emitRetrievalTelemetry(emit func(ipc.StreamEvent) error, meta retrievalMeta
 		return nil
 	}
 	return emit(newEvent(ipc.EventRetrievalUsed, ipc.RetrievalUsedPayload{
-		SnippetCount: meta.SnippetCount,
-		TokensUsed:   meta.TokensUsed,
-		AnchorCount:  meta.AnchorCount,
-		Skipped:      meta.Skipped,
+		SnippetCount:  meta.SnippetCount,
+		TokensUsed:    meta.TokensUsed,
+		AnchorCount:   meta.AnchorCount,
+		EdgesExpanded: meta.EdgesExpanded,
+		Skipped:       meta.Skipped,
+	}))
+}
+
+// emitAttemptLogTelemetry emits the EventAttemptLogSurfaced event when attempt
+// log entries exist for the current session.
+func emitAttemptLogTelemetry(emit func(ipc.StreamEvent) error, entries []AttemptEntry, section string) error {
+	if emit == nil {
+		return nil
+	}
+	return emit(newEvent(ipc.EventAttemptLogSurfaced, ipc.AttemptLogSurfacedPayload{
+		EntryCount: len(entries),
+		TokensUsed: len(section) / 4,
+		Injected:   section != "",
 	}))
 }
 

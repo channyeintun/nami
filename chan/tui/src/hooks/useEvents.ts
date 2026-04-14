@@ -8,6 +8,7 @@ import type {
   ChildAgentMetadata,
   ArtifactStatusChangedPayload,
   ArtifactUpdatedPayload,
+  AttemptLogSurfacedPayload,
   CompactEndPayload,
   CompactStartPayload,
   ContextWindowPayload,
@@ -178,6 +179,7 @@ export interface UIRetrievalUsage {
   snippetCount: number;
   tokensUsed: number;
   anchorCount: number;
+  edgesExpanded: number;
   skipped: boolean;
 }
 
@@ -779,9 +781,17 @@ export function useEvents(initialModel: string, initialMode: string) {
               typeof p.anchor_count === "number" && p.anchor_count > 0
                 ? p.anchor_count
                 : 0,
+            edgesExpanded:
+              typeof p.edges_expanded === "number" && p.edges_expanded > 0
+                ? p.edges_expanded
+                : 0,
             skipped: p.skipped === true,
           },
         }));
+        break;
+      }
+      case "attempt_log_surfaced": {
+        // Telemetry-only event; no UI state change needed.
         break;
       }
       case "rate_limit_update": {

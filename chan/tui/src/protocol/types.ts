@@ -14,6 +14,7 @@ export type EventType =
   | "cost_update"
   | "memory_recalled"
   | "retrieval_used"
+  | "attempt_log_surfaced"
   | "turn_timing"
   | "rate_limit_update"
   | "compact_start"
@@ -183,7 +184,14 @@ export interface RetrievalUsedPayload {
   snippet_count: number;
   tokens_used: number;
   anchor_count: number;
+  edges_expanded: number;
   skipped: boolean;
+}
+
+export interface AttemptLogSurfacedPayload {
+  entry_count: number;
+  tokens_used: number;
+  injected: boolean;
 }
 
 export interface RateLimitWindowPayload {

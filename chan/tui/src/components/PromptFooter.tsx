@@ -350,6 +350,11 @@ function buildRetrievalText(
       `${retrieval.anchorCount} ${retrieval.anchorCount === 1 ? "anchor" : "anchors"}`,
     );
   }
+  if (retrieval.edgesExpanded > 0) {
+    parts.push(
+      `${retrieval.edgesExpanded} ${retrieval.edgesExpanded === 1 ? "edge" : "edges"}`,
+    );
+  }
   if (retrieval.tokensUsed > 0) {
     parts.push(`~${formatTokenCount(retrieval.tokensUsed)} tokens`);
   }

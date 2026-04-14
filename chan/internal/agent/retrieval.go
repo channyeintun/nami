@@ -83,10 +83,11 @@ func ExtractAnchors(userPrompt, gitStatus, toolOutputs string) []RetrievalAnchor
 }
 
 // ScoreCandidates scores repository file paths based on anchors, git status,
-// and session-touched files. Returns at most retrievalMaxCandidates candidates.
-func ScoreCandidates(anchors []RetrievalAnchor, cwd string, gitStatusText string, sessionTouched []string) []RetrievalCandidate {
+// session-touched files, and structural edges. The second return value is
+// the number of new candidates added through structural edge expansion.
+func ScoreCandidates(anchors []RetrievalAnchor, cwd string, gitStatusText string, sessionTouched []string) ([]RetrievalCandidate, int) {
 	if len(anchors) == 0 && len(sessionTouched) == 0 && strings.TrimSpace(gitStatusText) == "" {
-		return nil
+		return nil, 0
 	}
 
 	scores := make(map[string]int)
@@ -113,6 +114,15 @@ func ScoreCandidates(anchors []RetrievalAnchor, cwd string, gitStatusText string
 
 	scoreErrorAnchors(anchors, scores, reasons)
 
+	// Expand one hop through structural edges from the initial seed set.
+	seedPaths := make([]string, 0, len(scores))
+	for path := range scores {
+		seedPaths = append(seedPaths, path)
+	}
+	beforeExpand := len(scores)
+	expandStructuralEdges(seedPaths, cwd, scores, reasons)
+	edgesExpanded := len(scores) - beforeExpand
+
 	candidates := make([]RetrievalCandidate, 0, len(scores))
 	for path, score := range scores {
 		candidates = append(candidates, RetrievalCandidate{
@@ -130,7 +140,7 @@ func ScoreCandidates(anchors []RetrievalAnchor, cwd string, gitStatusText string
 	if len(candidates) > retrievalMaxCandidates {
 		candidates = candidates[:retrievalMaxCandidates]
 	}
-	return candidates
+	return candidates, edgesExpanded
 }
 
 // ReadLiveSnippets reads the top-scoring candidates from disk within the token budget.
@@ -383,4 +393,152 @@ func readFileSnippet(path string) string {
 		content = strings.TrimSpace(truncated) + "\n[truncated]"
 	}
 	return content
+}
+
+// ---------------------------------------------------------------------------
+// Structural edge expansion
+// ---------------------------------------------------------------------------
+
+// goImportQuotePattern matches a quoted import path inside an import block.
+var goImportQuotePattern = regexp.MustCompile(`"([^"]+)"`)
+
+// expandStructuralEdges adds candidates reachable via one-hop structural edges
+// from the initial seed file paths. It handles test ↔ source association and
+// Go local-package imports.
+func expandStructuralEdges(seedPaths []string, cwd string, scores map[string]int, reasons map[string]string) {
+	modulePath, moduleRoot := findGoModule(cwd)
+
+	for _, path := range seedPaths {
+		expandTestEdge(path, scores, reasons)
+		if strings.HasSuffix(path, ".go") && modulePath != "" {
+			expandGoImports(path, modulePath, moduleRoot, scores, reasons)
+		}
+	}
+}
+
+// expandTestEdge associates a Go source file with its *_test.go counterpart
+// and vice versa. Extends naturally to other language conventions.
+func expandTestEdge(path string, scores map[string]int, reasons map[string]string) {
+	switch {
+	case strings.HasSuffix(path, "_test.go"):
+		source := strings.TrimSuffix(path, "_test.go") + ".go"
+		if fileExists(source) {
+			addCandidateScore(scores, reasons, source, 2, "test covers")
+		}
+	case strings.HasSuffix(path, ".go"):
+		test := strings.TrimSuffix(path, ".go") + "_test.go"
+		if fileExists(test) {
+			addCandidateScore(scores, reasons, test, 2, "test covers")
+		}
+	case strings.HasSuffix(path, ".ts") && !strings.HasSuffix(path, ".test.ts"):
+		test := strings.TrimSuffix(path, ".ts") + ".test.ts"
+		if fileExists(test) {
+			addCandidateScore(scores, reasons, test, 2, "test covers")
+		}
+	case strings.HasSuffix(path, ".test.ts"):
+		source := strings.TrimSuffix(path, ".test.ts") + ".ts"
+		if fileExists(source) {
+			addCandidateScore(scores, reasons, source, 2, "test covers")
+		}
+	}
+}
+
+const maxImportEdgesPerFile = 8
+
+// expandGoImports parses Go import statements from a source file and resolves
+// local-package imports to files on disk, adding them as candidates.
+func expandGoImports(filePath, modulePath, moduleRoot string, scores map[string]int, reasons map[string]string) {
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return
+	}
+
+	imports := parseGoImports(string(data))
+	added := 0
+	for _, imp := range imports {
+		if added >= maxImportEdgesPerFile {
+			break
+		}
+		if !strings.HasPrefix(imp, modulePath) {
+			continue
+		}
+		relPkg := strings.TrimPrefix(imp, modulePath)
+		relPkg = strings.TrimPrefix(relPkg, "/")
+		pkgDir := filepath.Join(moduleRoot, relPkg)
+		entries, err := os.ReadDir(pkgDir)
+		if err != nil {
+			continue
+		}
+		for _, entry := range entries {
+			if entry.IsDir() {
+				continue
+			}
+			name := entry.Name()
+			if !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+				continue
+			}
+			candidate := filepath.Join(pkgDir, name)
+			if _, alreadyScored := scores[candidate]; alreadyScored {
+				continue
+			}
+			addCandidateScore(scores, reasons, candidate, 1, "imported by anchor")
+			added++
+			if added >= maxImportEdgesPerFile {
+				break
+			}
+		}
+	}
+}
+
+// parseGoImports returns the imported package paths from a Go source file.
+func parseGoImports(content string) []string {
+	var imports []string
+	inBlock := false
+	for _, line := range strings.Split(content, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "import (") {
+			inBlock = true
+			continue
+		}
+		if inBlock && trimmed == ")" {
+			inBlock = false
+			continue
+		}
+		if inBlock {
+			if m := goImportQuotePattern.FindStringSubmatch(trimmed); len(m) >= 2 {
+				imports = append(imports, m[1])
+			}
+			continue
+		}
+		if strings.HasPrefix(trimmed, "import ") {
+			if m := goImportQuotePattern.FindStringSubmatch(trimmed); len(m) >= 2 {
+				imports = append(imports, m[1])
+			}
+		}
+	}
+	return imports
+}
+
+// findGoModule walks up from startDir looking for go.mod and returns
+// (module path, module root directory). Returns ("", "") if not found.
+func findGoModule(startDir string) (string, string) {
+	dir := startDir
+	for {
+		modFile := filepath.Join(dir, "go.mod")
+		data, err := os.ReadFile(modFile)
+		if err == nil {
+			for _, line := range strings.Split(string(data), "\n") {
+				line = strings.TrimSpace(line)
+				if strings.HasPrefix(line, "module ") {
+					return strings.TrimSpace(strings.TrimPrefix(line, "module")), dir
+				}
+			}
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+	return "", ""
 }

@@ -26,16 +26,17 @@ const (
 	EventPermissionRequest EventType = "permission_request"
 
 	// Session state
-	EventModeChanged     EventType = "mode_changed"
-	EventModelChanged    EventType = "model_changed"
-	EventContextWindow   EventType = "context_window"
-	EventCostUpdate      EventType = "cost_update"
-	EventMemoryRecalled  EventType = "memory_recalled"
-	EventRetrievalUsed   EventType = "retrieval_used"
-	EventRateLimitUpdate EventType = "rate_limit_update"
-	EventTurnTiming      EventType = "turn_timing"
-	EventCompactStart    EventType = "compact_start"
-	EventCompactEnd      EventType = "compact_end"
+	EventModeChanged        EventType = "mode_changed"
+	EventModelChanged       EventType = "model_changed"
+	EventContextWindow      EventType = "context_window"
+	EventCostUpdate         EventType = "cost_update"
+	EventMemoryRecalled     EventType = "memory_recalled"
+	EventRetrievalUsed      EventType = "retrieval_used"
+	EventAttemptLogSurfaced EventType = "attempt_log_surfaced"
+	EventRateLimitUpdate    EventType = "rate_limit_update"
+	EventTurnTiming         EventType = "turn_timing"
+	EventCompactStart       EventType = "compact_start"
+	EventCompactEnd         EventType = "compact_end"
 
 	// Artifacts
 	EventArtifactCreated         EventType = "artifact_created"
@@ -206,10 +207,19 @@ type CompactEndPayload struct {
 
 // RetrievalUsedPayload is emitted after the live retrieval step runs each turn.
 type RetrievalUsedPayload struct {
-	SnippetCount int  `json:"snippet_count"`
-	TokensUsed   int  `json:"tokens_used"`
-	AnchorCount  int  `json:"anchor_count"`
-	Skipped      bool `json:"skipped"`
+	SnippetCount  int  `json:"snippet_count"`
+	TokensUsed    int  `json:"tokens_used"`
+	AnchorCount   int  `json:"anchor_count"`
+	EdgesExpanded int  `json:"edges_expanded"`
+	Skipped       bool `json:"skipped"`
+}
+
+// AttemptLogSurfacedPayload is emitted when session attempt-log entries are
+// injected into the prompt to prevent repeated failures.
+type AttemptLogSurfacedPayload struct {
+	EntryCount int  `json:"entry_count"`
+	TokensUsed int  `json:"tokens_used"`
+	Injected   bool `json:"injected"`
 }
 
 type ArtifactCreatedPayload struct {
