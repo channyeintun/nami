@@ -1116,12 +1116,47 @@ export function useEvents(initialModel: string, initialMode: string) {
         const p = event.payload as SessionUpdatedPayload;
         setUIState((s) => {
           const normalizedTitle = p.title?.trim() ? p.title.trim() : null;
-          if (
-            normalizedTitle &&
+          const sessionChanged =
+            typeof p.session_id === "string" &&
+            p.session_id.length > 0 &&
             s.sessionId !== null &&
-            s.sessionId !== p.session_id
-          ) {
+            s.sessionId !== p.session_id;
+          if (normalizedTitle && sessionChanged) {
             return s;
+          }
+
+          if (sessionChanged) {
+            return {
+              ...s,
+              messages: [],
+              transcript: [],
+              liveAssistantBlocks: [],
+              activeTurnStatus: "idle",
+              showPlanPanel: false,
+              sessionId: p.session_id,
+              sessionTitle: normalizedTitle,
+              memoryRecall: {
+                source: null,
+                entries: [],
+              },
+              retrieval: null,
+              artifacts: [],
+              focusedArtifactId: null,
+              pendingArtifactReview: null,
+              submittingArtifactReviewRequestId: null,
+              toolCalls: [],
+              compact: null,
+              turnTiming: {
+                firstTokenMs: null,
+                firstToolResultMs: null,
+                firstArtifactFocusMs: null,
+                totalMs: null,
+              },
+              statusLine: null,
+              pendingPermission: null,
+              error: null,
+              isStreaming: false,
+            };
           }
 
           return {

@@ -8,9 +8,20 @@ interface AssistantThinkingMessageProps {
   toggleHint?: string;
 }
 
-function truncateThinking(text: string, maxLines: number): string {
-  const lines = text.split("\n").filter((line) => line.trim().length > 0);
-  return lines.slice(-maxLines).join("\n");
+function truncateThinking(
+  text: string,
+  maxLines: number,
+  maxChars: number,
+): string {
+  const trimmed = text.trimEnd();
+  if (!trimmed) {
+    return "";
+  }
+
+  const tail =
+    trimmed.length > maxChars ? trimmed.slice(trimmed.length - maxChars) : trimmed;
+  const lines = tail.split("\n");
+  return lines.slice(-maxLines).join("\n").trimStart();
 }
 
 const AssistantThinkingMessage: FC<AssistantThinkingMessageProps> = ({
@@ -19,7 +30,7 @@ const AssistantThinkingMessage: FC<AssistantThinkingMessageProps> = ({
   toggleHint,
 }) => {
   const content = useMemo(
-    () => (streaming ? truncateThinking(text, 4) : text.trimEnd()),
+    () => (streaming ? truncateThinking(text, 6, 800) : text.trimEnd()),
     [streaming, text],
   );
   if (!content) {

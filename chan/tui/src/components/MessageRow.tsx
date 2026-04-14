@@ -5,13 +5,13 @@ interface MessageRowProps {
   children: ReactNode;
   label?: ReactNode;
   meta?: ReactNode;
-  marker?: string;
+  marker?: ReactNode;
   markerColor?: ComponentProps<typeof Text>["color"];
   markerDim?: boolean;
   marginBottom?: number;
 }
 
-const DEFAULT_MARKER = "●";
+const DEFAULT_MARKER: ReactNode = "●";
 
 const MessageRow: FC<MessageRowProps> = ({
   children,
@@ -29,9 +29,13 @@ const MessageRow: FC<MessageRowProps> = ({
       marginBottom={marginBottom}
     >
       <Box minWidth={2}>
-        <Text color={markerColor} dimColor={markerDim}>
-          {marker}
-        </Text>
+        {typeof marker === "string" ? (
+          <Text color={markerColor} dimColor={markerDim}>
+            {marker}
+          </Text>
+        ) : (
+          marker
+        )}
       </Box>
       <Box flexDirection="column" flexGrow={1}>
         {label || meta ? (

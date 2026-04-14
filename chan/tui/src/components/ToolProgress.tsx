@@ -1,5 +1,5 @@
 import React, { type FC } from "react";
-import { Box, Text } from "silvery";
+import { Box, Spinner, Text } from "silvery";
 import type { UIToolCall } from "../hooks/useEvents.js";
 import { formatSubagentType } from "../utils/subagentLabels.js";
 import FileDiffPreview from "./FileDiffPreview.js";
@@ -60,9 +60,11 @@ const ToolProgress: FC<ToolProgressProps> = ({ toolCall }) => {
   const isDim =
     toolCall.status === "running" || toolCall.status === "waiting_permission";
   const response = renderResponse(toolCall);
+  const marker =
+    toolCall.status === "running" ? <Spinner type="dots" /> : undefined;
 
   return (
-    <MessageRow markerColor={headerColor} markerDim={isDim}>
+    <MessageRow marker={marker} markerColor={headerColor} markerDim={isDim}>
       <Text color={headerColor} dimColor={isDim}>
         <Text bold>{descriptor.title}</Text>
         {descriptor.summary ? ` (${descriptor.summary})` : ""}

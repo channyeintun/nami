@@ -434,7 +434,7 @@ const App: FC<AppProps> = ({ enginePath, model, mode }) => {
       ) : uiState.pendingArtifactReview ? (
         <Box
           flexDirection="column"
-          flexShrink={1}
+          flexShrink={0}
           minHeight={0}
           marginTop={1}
         >

@@ -60,12 +60,11 @@ const ArtifactReviewPrompt: FC<ArtifactReviewPromptProps> = ({
   return (
     <Box
       flexDirection="column"
-      flexGrow={1}
+      flexGrow={0}
       flexShrink={1}
       minHeight={0}
       borderStyle="round"
       borderColor="blue"
-      overflow="scroll"
       paddingX={1}
       marginTop={1}
     >
