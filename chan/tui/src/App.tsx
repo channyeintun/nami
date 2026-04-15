@@ -13,6 +13,7 @@ import {
   disableBracketedPaste,
   enableBracketedPaste,
   type ToastData,
+  useFocusManager,
   useToast,
 } from "silvery";
 import { useEngine } from "./hooks/useEngine.js";
@@ -81,6 +82,7 @@ const App: FC<AppProps> = ({ enginePath, model, mode }) => {
   const [showThinking, setShowThinking] = useState(false);
   const [showArtifacts, setShowArtifacts] = useState(true);
   const previousStreamingRef = useRef(false);
+  const focusManager = useFocusManager();
   const { toast, toasts, dismissAll } = useToast();
   const {
     uiState,
@@ -116,6 +118,23 @@ const App: FC<AppProps> = ({ enginePath, model, mode }) => {
       dismissAll();
     }
   }, [dismissAll, uiState.isStreaming]);
+
+  useEffect(() => {
+    if (
+      uiState.pendingPermission ||
+      uiState.pendingResumeSelection ||
+      uiState.pendingModelSelection ||
+      uiState.pendingArtifactReview
+    ) {
+      focusManager.blur();
+    }
+  }, [
+    focusManager,
+    uiState.pendingArtifactReview,
+    uiState.pendingModelSelection,
+    uiState.pendingPermission,
+    uiState.pendingResumeSelection,
+  ]);
 
   useEffect(() => {
     const wasStreaming = previousStreamingRef.current;
@@ -536,21 +555,21 @@ const App: FC<AppProps> = ({ enginePath, model, mode }) => {
           />
         </Box>
       ) : uiState.pendingResumeSelection ? (
-        <Box flexDirection="column" flexShrink={1} minHeight={0} marginTop={1}>
+        <CenteredViewportOverlay>
           <ResumeSelectionPrompt
             selection={uiState.pendingResumeSelection}
             onSelect={handleResumeSelection}
             onCancel={() => handleResumeSelection()}
           />
-        </Box>
+        </CenteredViewportOverlay>
       ) : uiState.pendingModelSelection ? (
-        <Box flexDirection="column" flexShrink={1} minHeight={0} marginTop={1}>
+        <CenteredViewportOverlay>
           <ModelSelectionPrompt
             selection={uiState.pendingModelSelection}
             onSelect={handleModelSelection}
             onCancel={() => handleModelSelection()}
           />
-        </Box>
+        </CenteredViewportOverlay>
       ) : uiState.pendingArtifactReview ? (
         <Box flexDirection="column" flexShrink={0} minHeight={0} marginTop={1}>
           <ArtifactReviewPrompt
@@ -663,6 +682,31 @@ function SafeToastContainer({ toasts }: { toasts: ToastData[] }) {
       alignItems="center"
     >
       <SafeToastItem toast={latestToast} />
+    </Box>
+  );
+}
+
+function CenteredViewportOverlay({ children }: { children: React.ReactNode }) {
+  return (
+    <Box
+      position="absolute"
+      width="100%"
+      height="100%"
+      justifyContent="center"
+      alignItems="center"
+      paddingX={1}
+      paddingY={1}
+    >
+      <Box
+        flexDirection="column"
+        width="72%"
+        height="60%"
+        maxHeight="85%"
+        flexShrink={1}
+        minHeight={0}
+      >
+        {children}
+      </Box>
     </Box>
   );
 }

@@ -317,7 +317,7 @@ const Input: FC<InputProps> = ({
       prompt.insertText(text);
       return;
     }
-  });
+  }, { isActive: !disabled });
 
   usePaste((text) => {
     if (disabled) {

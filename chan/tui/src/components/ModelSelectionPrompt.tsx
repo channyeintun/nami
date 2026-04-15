@@ -1,5 +1,5 @@
-import React, { type FC, useEffect, useMemo, useState } from "react";
-import { Box, Text, useInput } from "silvery";
+import React, { type FC, useEffect, useMemo, useRef, useState } from "react";
+import { Box, Text, useFocusManager, useInput } from "silvery";
 import type {
   UIModelSelection,
   UIModelSelectionOption,
@@ -19,6 +19,7 @@ const ModelSelectionPrompt: FC<ModelSelectionPromptProps> = ({
   onSelect,
   onCancel,
 }) => {
+  const focusManager = useFocusManager();
   const initialIndex = useMemo(() => {
     const activeIndex = selection.options.findIndex((option) => option.active);
     return activeIndex >= 0 ? activeIndex : 0;
@@ -27,90 +28,165 @@ const ModelSelectionPrompt: FC<ModelSelectionPromptProps> = ({
   const [customMode, setCustomMode] = useState(false);
   const [customValue, setCustomValue] = useState("");
   const [cursorOffset, setCursorOffset] = useState(0);
+  const selectedIndexRef = useRef(initialIndex);
+  const customModeRef = useRef(false);
+  const customValueRef = useRef("");
+  const cursorOffsetRef = useRef(0);
+
+  selectedIndexRef.current = selectedIndex;
+  customModeRef.current = customMode;
+  customValueRef.current = customValue;
+  cursorOffsetRef.current = cursorOffset;
 
   useEffect(() => {
     setSelectedIndex(initialIndex);
     setCustomMode(false);
     setCustomValue("");
     setCursorOffset(0);
+    selectedIndexRef.current = initialIndex;
+    customModeRef.current = false;
+    customValueRef.current = "";
+    cursorOffsetRef.current = 0;
   }, [initialIndex, selection.requestId]);
+
+  useEffect(() => {
+    if (customMode) {
+      focusManager.blur();
+    }
+  }, [customMode, focusManager]);
+
+  const updateSelectedIndex = (updater: number | ((current: number) => number)) => {
+    const next =
+      typeof updater === "function"
+        ? updater(selectedIndexRef.current)
+        : updater;
+    selectedIndexRef.current = next;
+    setSelectedIndex(next);
+  };
+
+  const updateCustomMode = (next: boolean) => {
+    customModeRef.current = next;
+    setCustomMode(next);
+  };
+
+  const updateCustomValue = (
+    updater: string | ((current: string) => string),
+  ) => {
+    const next =
+      typeof updater === "function"
+        ? updater(customValueRef.current)
+        : updater;
+    customValueRef.current = next;
+    setCustomValue(next);
+  };
+
+  const updateCursorOffset = (
+    updater: number | ((current: number) => number),
+  ) => {
+    const next =
+      typeof updater === "function"
+        ? updater(cursorOffsetRef.current)
+        : updater;
+    cursorOffsetRef.current = next;
+    setCursorOffset(next);
+  };
 
   useInput((input, key) => {
     const text = key.text ?? input;
-    const selectedOption = selection.options[selectedIndex];
+    const isEscape = key.escape || input === "\u001b" || text === "\u001b";
+    const selectedOption = selection.options[selectedIndexRef.current];
 
-    if (customMode) {
-      if (key.escape) {
-        setCustomMode(false);
+    if (customModeRef.current) {
+      if (isEscape) {
+        updateCustomMode(false);
         return;
       }
       if (key.return) {
-        const value = customValue.trim();
+        const value = customValueRef.current.trim();
         if (value.length > 0) {
           onSelect(value);
         }
         return;
       }
       if (key.leftArrow || (key.ctrl && input === "b")) {
-        setCursorOffset((current) => Math.max(0, current - 1));
+        updateCursorOffset((current) => Math.max(0, current - 1));
         return;
       }
       if (key.rightArrow || (key.ctrl && input === "f")) {
-        setCursorOffset((current) => Math.min(customValue.length, current + 1));
+        updateCursorOffset((current) =>
+          Math.min(customValueRef.current.length, current + 1),
+        );
         return;
       }
       if (key.home || (key.ctrl && input === "a")) {
-        setCursorOffset(0);
+        updateCursorOffset(0);
         return;
       }
       if (key.end || (key.ctrl && input === "e")) {
-        setCursorOffset(customValue.length);
+        updateCursorOffset(customValueRef.current.length);
         return;
       }
       if (key.backspace || (key.ctrl && input === "h")) {
-        if (cursorOffset === 0) {
+        if (cursorOffsetRef.current === 0) {
           return;
         }
-        setCustomValue((current) =>
-          replaceRange(current, cursorOffset - 1, cursorOffset, ""),
+        updateCustomValue((current) =>
+          replaceRange(
+            current,
+            cursorOffsetRef.current - 1,
+            cursorOffsetRef.current,
+            "",
+          ),
         );
-        setCursorOffset((current) => Math.max(0, current - 1));
+        updateCursorOffset((current) => Math.max(0, current - 1));
         return;
       }
       if (key.delete) {
-        setCustomValue((current) =>
-          replaceRange(current, cursorOffset, cursorOffset + 1, ""),
+        updateCustomValue((current) =>
+          replaceRange(
+            current,
+            cursorOffsetRef.current,
+            cursorOffsetRef.current + 1,
+            "",
+          ),
         );
         return;
       }
       if (key.ctrl && input === "u") {
-        setCustomValue("");
-        setCursorOffset(0);
+        updateCustomValue("");
+        updateCursorOffset(0);
         return;
       }
       if (text && !key.ctrl && !key.meta) {
-        setCustomValue((current) =>
-          replaceRange(current, cursorOffset, cursorOffset, text),
+        updateCustomValue((current) =>
+          replaceRange(
+            current,
+            cursorOffsetRef.current,
+            cursorOffsetRef.current,
+            text,
+          ),
         );
-        setCursorOffset((current) => current + text.length);
+        updateCursorOffset((current) => current + text.length);
       }
       return;
     }
 
-    if (key.escape) {
+    if (isEscape) {
       onCancel();
       return;
     }
 
     if (key.upArrow) {
-      setSelectedIndex((current) =>
+      updateSelectedIndex((current) =>
         current === 0 ? selection.options.length - 1 : current - 1,
       );
       return;
     }
 
     if (key.downArrow) {
-      setSelectedIndex((current) => (current + 1) % selection.options.length);
+      updateSelectedIndex(
+        (current) => (current + 1) % selection.options.length,
+      );
       return;
     }
 
@@ -119,8 +195,9 @@ const ModelSelectionPrompt: FC<ModelSelectionPromptProps> = ({
         return;
       }
       if (selectedOption.isCustom) {
-        setCustomMode(true);
-        setCursorOffset(customValue.length);
+        focusManager.blur();
+        updateCustomMode(true);
+        updateCursorOffset(customValueRef.current.length);
         return;
       }
       if (selectedOption.model) {
@@ -194,21 +271,23 @@ const ModelSelectionPrompt: FC<ModelSelectionPromptProps> = ({
           );
         })}
       </Box>
-      {customMode ? (
-        <Box
-          marginTop={1}
-          paddingX={1}
-          borderStyle="round"
-          borderColor="cyan"
-          flexDirection="column"
-        >
-          <Text color="cyan">Custom model</Text>
-          <Text color="gray">
-            Enter a model id only. Provider prefixes are not accepted.
-          </Text>
-          <Text>{renderEditableValue(customValue, cursorOffset)}</Text>
-        </Box>
-      ) : null}
+      <Box
+        marginTop={1}
+        paddingX={1}
+        borderStyle="round"
+        borderColor={customMode ? "cyan" : "gray"}
+        flexDirection="column"
+      >
+        <Text color={customMode ? "cyan" : "gray"}>Custom model</Text>
+        <Text color="gray">
+          {customMode
+            ? "Enter a model id only. Provider prefixes are not accepted."
+            : "Choose Custom model and press Enter to edit."}
+        </Text>
+        <Text>
+          {customMode ? renderEditableValue(customValue, cursorOffset) : " "}
+        </Text>
+      </Box>
       <Box marginTop={1} flexDirection="column">
         <Text dimColor>
           {customMode
