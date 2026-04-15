@@ -423,6 +423,9 @@ func defaultSessionSubagentModel(cfg config.Config, activeModelID string) string
 	if normalizeProvider(activeProvider) == "github-copilot" {
 		return modelRef("github-copilot", api.GitHubCopilotDefaultSubagentModel)
 	}
+	if strings.TrimSpace(activeModelID) != "" {
+		return strings.TrimSpace(activeModelID)
+	}
 	return api.GitHubCopilotDefaultSubagentModel
 }
 

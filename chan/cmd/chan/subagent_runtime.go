@@ -157,10 +157,11 @@ func makeSubagentRunner(
 }
 
 func resolveSubagentClient(parent api.LLMClient, activeModelID string, subagentModelState *activeSubagentModelState) (api.LLMClient, string, error) {
-	provider, _ := config.ParseModel(strings.TrimSpace(activeModelID))
+	provider, activeModel := config.ParseModel(strings.TrimSpace(activeModelID))
 	provider = normalizeProvider(provider)
-	if provider != "github-copilot" {
-		return parent, activeModelID, nil
+	if strings.TrimSpace(activeModel) == "" {
+		activeModel = strings.TrimSpace(provider)
+		provider = ""
 	}
 
 	cfg := config.Load()
@@ -175,6 +176,9 @@ func resolveSubagentClient(parent api.LLMClient, activeModelID string, subagentM
 	}
 
 	childProvider, childModel := resolveModelSelection(selection, provider)
+	if childProvider == provider && strings.EqualFold(strings.TrimSpace(childModel), strings.TrimSpace(activeModel)) {
+		return parent, modelRef(provider, activeModel), nil
+	}
 	childClient, err := newLLMClient(childProvider, childModel, cfg)
 	if err != nil {
 		return nil, "", fmt.Errorf("initialize subagent model %q: %w", selection, err)

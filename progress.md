@@ -2,7 +2,7 @@
 
 ## Current
 
-- Optional protocol cleanup is partially complete; `ModelChanged` remains intentionally unchanged.
+- Post-review regression fixes are complete; `ModelChanged` remains intentionally unchanged.
 
 ## Completed
 
@@ -24,6 +24,11 @@
 - Phase 4 protocol cleanup partially completed.
 	- `ModelSelectionRequested.CurrentModel` now sends model-only display text.
 	- `ModelChangedPayload.Model` remains `provider/model` because the TUI still uses the full value.
+- Post-review regression fixes completed.
+	- `/model default` now preserves the configured provider/model instead of re-inferring a backend.
+	- `/subagent` selections now apply in non-Copilot sessions, and non-Copilot sessions default to the active model unless explicitly overridden.
+	- The TUI model picker custom-entry mode no longer exits after the first keystroke.
+	- App toast rendering again preserves toast variants and descriptions.
 
 ## Next
 

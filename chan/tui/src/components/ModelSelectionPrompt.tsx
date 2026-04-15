@@ -31,8 +31,9 @@ const ModelSelectionPrompt: FC<ModelSelectionPromptProps> = ({
   useEffect(() => {
     setSelectedIndex(initialIndex);
     setCustomMode(false);
-    setCursorOffset(customValue.length);
-  }, [customValue.length, initialIndex, selection.requestId]);
+    setCustomValue("");
+    setCursorOffset(0);
+  }, [initialIndex, selection.requestId]);
 
   useInput((input, key) => {
     const text = key.text ?? input;

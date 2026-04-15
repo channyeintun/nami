@@ -667,19 +667,56 @@ function SafeToastContainer({ toasts }: { toasts: ToastData[] }) {
 }
 
 function SafeToastItem({ toast }: { toast: ToastData }) {
+  const accentColor = toastAccentColor(toast.variant);
+  const description =
+    typeof toast.description === "string" && toast.description.trim().length > 0
+      ? toast.description.trim()
+      : null;
+
   return (
     <Box
       backgroundColor="$surface-bg"
-      borderColor="$success"
+      borderColor={accentColor}
       borderStyle="round"
+      flexDirection="column"
       flexShrink={0}
+      paddingY={1}
       paddingX={2}
     >
-      <Text color="$success" bold>
-        {toast.title}
+      <Text color={accentColor} bold>
+        {toastVariantIcon(toast.variant)} {toast.title}
       </Text>
+      {description ? <Text color="$muted">{description}</Text> : null}
     </Box>
   );
+}
+
+function toastAccentColor(variant: ToastData["variant"]): string {
+  switch (variant) {
+    case "success":
+      return "$success";
+    case "error":
+      return "$error";
+    case "warning":
+      return "$warning";
+    case "info":
+      return "$info";
+    default:
+      return "$fg";
+  }
+}
+
+function toastVariantIcon(variant: ToastData["variant"]): string {
+  switch (variant) {
+    case "success":
+      return "+";
+    case "error":
+      return "x";
+    case "warning":
+      return "!";
+    default:
+      return "i";
+  }
 }
 
 function selectVisibleArtifacts(

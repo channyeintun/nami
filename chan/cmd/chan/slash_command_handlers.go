@@ -382,14 +382,13 @@ func handleModelSlashCommand(cmd *slashCommandContext) error {
 	}
 
 	if strings.EqualFold(selected.Model, "default") {
-		_, configuredModel := config.ParseModel(strings.TrimSpace(cmd.cfg.Model))
-		if strings.TrimSpace(configuredModel) == "" {
-			selected.Model = strings.TrimSpace(cmd.cfg.Model)
-		} else {
-			selected.Model = configuredModel
+		configuredChoice, err := configuredModelChoice(cmd.cfg.Model)
+		if err != nil {
+			return emitTextResponse(cmd.bridge, err.Error())
 		}
-		selected.Provider = ""
+		selected = configuredChoice
 	}
+	requestedDefault := strings.EqualFold(strings.TrimSpace(cmd.args), "default")
 
 	selectedModel, err := normalizeModelSlashInput(selected.Model)
 	if err != nil {
@@ -397,9 +396,10 @@ func handleModelSlashCommand(cmd *slashCommandContext) error {
 	}
 
 	currentProvider, _ := config.ParseModel(cmd.state.ActiveModelID)
+	currentProvider = normalizeProvider(currentProvider)
 	providerHint := strings.TrimSpace(selected.Provider)
 	provider, model := resolveModelSelection(selectedModel, currentProvider)
-	if normalizeProvider(currentProvider) != "github-copilot" && providerHint != "" {
+	if providerHint != "" && (currentProvider != "github-copilot" || requestedDefault) {
 		provider = normalizeProvider(providerHint)
 		model = selectedModel
 	}
@@ -461,9 +461,10 @@ func handleSubagentSlashCommand(cmd *slashCommandContext) error {
 	}
 
 	currentProvider, _ := config.ParseModel(cmd.state.ActiveModelID)
+	currentProvider = normalizeProvider(currentProvider)
 	providerHint := strings.TrimSpace(selected.Provider)
 	provider, model := resolveModelSelection(selectedModel, currentProvider)
-	if normalizeProvider(currentProvider) != "github-copilot" && providerHint != "" {
+	if currentProvider != "github-copilot" && providerHint != "" {
 		provider = normalizeProvider(providerHint)
 		model = selectedModel
 	}
@@ -483,6 +484,19 @@ func normalizeModelSlashInput(input string) (string, error) {
 		return "", fmt.Errorf("/model only accepts a model name. Remove the provider prefix and try again")
 	}
 	return compact, nil
+}
+
+func configuredModelChoice(raw string) (modelSelectionChoice, error) {
+	provider, model := config.ParseModel(strings.TrimSpace(raw))
+	provider = normalizeProvider(provider)
+	if strings.TrimSpace(model) == "" {
+		model = strings.TrimSpace(provider)
+		provider = ""
+	}
+	if strings.TrimSpace(model) == "" {
+		return modelSelectionChoice{}, fmt.Errorf("default model is not configured")
+	}
+	return modelSelectionChoice{Model: model, Provider: provider}, nil
 }
 
 func promptModelSelection(cmd *slashCommandContext, currentSelection string) (modelSelectionChoice, error) {

@@ -820,6 +820,9 @@ func modelRef(provider, model string) string {
 	if model == "" {
 		return provider
 	}
+	if provider == "" {
+		return model
+	}
 	return provider + "/" + model
 }
 
