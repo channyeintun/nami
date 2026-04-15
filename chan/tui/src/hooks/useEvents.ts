@@ -41,6 +41,11 @@ import type {
 
 const BEL = "\u0007";
 const STREAM_FLUSH_INTERVAL_MS = 33;
+const MAX_AGENT_TOOL_JSON_CHARS = 128 * 1024;
+const MAX_AGENT_TOOL_DISPLAY_CHARS = 16_000;
+const MAX_BACKGROUND_AGENT_SUMMARY_CHARS = 4_000;
+const AGENT_UI_TRUNCATION_NOTE =
+  "\n\n[truncated for live UI; full child-agent result is available in the child session files]";
 
 function ringTerminalBell() {
   if (!process.stdout.isTTY) {
@@ -635,7 +640,7 @@ export function useEvents(initialModel: string, initialMode: string) {
           toolCalls: upsertToolCall(s.toolCalls, {
             id: p.tool_id,
             name: p.name,
-            input: p.input,
+            input: sanitizeToolCallInput(p.name, p.input),
             status: "running",
             output: undefined,
             error: undefined,
@@ -669,6 +674,7 @@ export function useEvents(initialModel: string, initialMode: string) {
       case "tool_result": {
         const p = event.payload as ToolResultPayload;
         setUIState((s) => {
+          const normalizedToolResult = sanitizeToolResultPayload(p);
           const backgroundNotice = buildBackgroundCommandNotice(
             s.backgroundCommands,
             p,
@@ -703,23 +709,30 @@ export function useEvents(initialModel: string, initialMode: string) {
                   },
             ),
             toolCalls: upsertToolCall(s.toolCalls, {
-              id: p.tool_id,
-              name: p.name ?? toolCallName(s.toolCalls, p.tool_id),
-              input: p.input ?? toolCallInput(s.toolCalls, p.tool_id),
+              id: normalizedToolResult.tool_id,
+              name:
+                normalizedToolResult.name ??
+                toolCallName(s.toolCalls, normalizedToolResult.tool_id),
+              input:
+                normalizedToolResult.input ??
+                toolCallInput(s.toolCalls, normalizedToolResult.tool_id),
               status: "completed",
-              output: p.output,
-              truncated: p.truncated,
+              output: normalizedToolResult.output,
+              truncated: normalizedToolResult.truncated,
               error: undefined,
               permissionRequestId: undefined,
-              filePath: p.file_path,
-              preview: p.preview,
-              insertions: p.insertions,
-              deletions: p.deletions,
-              diagnostics: p.diagnostics,
-              errorKind: p.error_kind,
-              errorHint: p.error_hint,
+              filePath: normalizedToolResult.file_path,
+              preview: normalizedToolResult.preview,
+              insertions: normalizedToolResult.insertions,
+              deletions: normalizedToolResult.deletions,
+              diagnostics: normalizedToolResult.diagnostics,
+              errorKind: normalizedToolResult.error_kind,
+              errorHint: normalizedToolResult.error_hint,
             }),
-            backgroundAgents: applyBackgroundAgentResult(s.backgroundAgents, p),
+            backgroundAgents: applyBackgroundAgentResult(
+              s.backgroundAgents,
+              normalizedToolResult,
+            ),
             backgroundCommands: nextBackgroundCommands,
             messages: noticeMessage
               ? [...s.messages, noticeMessage]
@@ -742,7 +755,10 @@ export function useEvents(initialModel: string, initialMode: string) {
           toolCalls: upsertToolCall(s.toolCalls, {
             id: p.tool_id,
             name: p.name ?? toolCallName(s.toolCalls, p.tool_id),
-            input: p.input ?? toolCallInput(s.toolCalls, p.tool_id),
+            input: sanitizeToolCallInput(
+              p.name ?? toolCallName(s.toolCalls, p.tool_id),
+              p.input ?? toolCallInput(s.toolCalls, p.tool_id),
+            ),
             status: "error",
             error: p.error,
             filePath: p.file_path,
@@ -1112,14 +1128,17 @@ export function useEvents(initialModel: string, initialMode: string) {
           const previousAgent = s.backgroundAgents.find(
             (agent) => agent.agentId === p.agent_id,
           );
-          const metadata = normalizeChildAgentMetadata(p.metadata, {
-            invocationId: p.invocation_id,
-            description: p.description,
-            subagentType: p.subagent_type,
-            sessionId: p.session_id,
-            transcriptPath: p.transcript_path,
-            resultPath: p.output_file,
-          });
+          const metadata = normalizeChildAgentMetadata(
+            sanitizeChildAgentMetadataPayload(p.metadata),
+            {
+              invocationId: p.invocation_id,
+              description: p.description,
+              subagentType: p.subagent_type,
+              sessionId: p.session_id,
+              transcriptPath: p.transcript_path,
+              resultPath: p.output_file,
+            },
+          );
           const nextAgent = {
             agentId: p.agent_id,
             invocationId: metadata.invocationId,
@@ -1129,8 +1148,14 @@ export function useEvents(initialModel: string, initialMode: string) {
             summary: summarizeBackgroundAgent(
               p.status,
               metadata.subagentType,
-              p.summary,
-              p.error,
+              sanitizeAgentDisplayText(
+                p.summary,
+                MAX_BACKGROUND_AGENT_SUMMARY_CHARS,
+              ),
+              sanitizeAgentDisplayText(
+                p.error,
+                MAX_BACKGROUND_AGENT_SUMMARY_CHARS,
+              ),
               metadata.statusMessage,
             ),
             lifecycleState: metadata.lifecycleState,
@@ -1683,9 +1708,11 @@ function formatLatencyMs(value: number): string {
 
 interface AgentToolInput {
   description?: string;
+  prompt?: string;
   subagent_type?: string;
   agent_id?: string;
   run_in_background?: boolean;
+  wait_ms?: number;
 }
 
 interface AgentToolResult {
@@ -1849,8 +1876,14 @@ function parseBackgroundAgentResult(
     return null;
   }
 
-  const input = parseJSONObject<AgentToolInput>(payload.input);
-  const result = parseJSONObject<AgentToolResult>(payload.output);
+  const input = parseJSONObject<AgentToolInput>(
+    payload.input,
+    MAX_AGENT_TOOL_JSON_CHARS,
+  );
+  const result = parseJSONObject<AgentToolResult>(
+    payload.output,
+    MAX_AGENT_TOOL_JSON_CHARS,
+  );
   if (!result) {
     return null;
   }
@@ -2525,8 +2558,11 @@ function summarizeNoticeWithDetail(prefix: string, detail: string): string {
   return `${prefix} ${truncated}`;
 }
 
-function parseJSONObject<T>(value: string | undefined): T | null {
+function parseJSONObject<T>(value: string | undefined, maxChars?: number): T | null {
   if (!value) {
+    return null;
+  }
+  if (typeof maxChars === "number" && value.length > maxChars) {
     return null;
   }
   try {
@@ -2536,8 +2572,11 @@ function parseJSONObject<T>(value: string | undefined): T | null {
   }
 }
 
-function parseJSONArray<T>(value: string | undefined): T[] | null {
+function parseJSONArray<T>(value: string | undefined, maxChars?: number): T[] | null {
   if (!value) {
+    return null;
+  }
+  if (typeof maxChars === "number" && value.length > maxChars) {
     return null;
   }
   try {
@@ -2546,6 +2585,137 @@ function parseJSONArray<T>(value: string | undefined): T[] | null {
   } catch {
     return null;
   }
+}
+
+function sanitizeToolCallInput(name: string | undefined, input: string): string {
+  if (!isAgentToolName(name)) {
+    return input;
+  }
+  return sanitizeAgentToolInput(input) ?? "";
+}
+
+function sanitizeToolResultPayload(payload: ToolResultPayload): ToolResultPayload {
+  if (!isAgentToolName(payload.name)) {
+    return payload;
+  }
+
+  const input = sanitizeAgentToolInput(payload.input);
+  const output = sanitizeAgentToolOutput(payload.output);
+  const mutated = input !== payload.input || output !== payload.output;
+  if (!mutated) {
+    return payload;
+  }
+
+  return {
+    ...payload,
+    input,
+    output,
+    truncated: payload.truncated || mutated,
+  };
+}
+
+function sanitizeAgentToolInput(input: string | undefined): string | undefined {
+  if (!input) {
+    return input;
+  }
+
+  const parsed = parseJSONObject<AgentToolInput>(input, MAX_AGENT_TOOL_JSON_CHARS);
+  if (!parsed) {
+    return sanitizeAgentDisplayText(input, MAX_AGENT_TOOL_DISPLAY_CHARS);
+  }
+
+  return JSON.stringify(
+    {
+      description: stringOrUndefined(parsed.description),
+      subagent_type: stringOrUndefined(parsed.subagent_type),
+      agent_id: stringOrUndefined(parsed.agent_id),
+      run_in_background: parsed.run_in_background === true ? true : undefined,
+      wait_ms: numberOrUndefined(parsed.wait_ms),
+    },
+    null,
+    2,
+  );
+}
+
+function sanitizeAgentToolOutput(output: string | undefined): string {
+  if (!output) {
+    return "";
+  }
+
+  const parsed = parseJSONObject<AgentToolResult>(
+    output,
+    MAX_AGENT_TOOL_JSON_CHARS,
+  );
+  if (!parsed) {
+    return JSON.stringify(
+      {
+        status: "truncated",
+        summary:
+          "Child agent result omitted from live UI because the payload exceeded the replay safety limit. See the child session files for the full output.",
+      },
+      null,
+      2,
+    );
+  }
+
+  const compact: AgentToolResult = {
+    status: parsed.status,
+    invocation_id: parsed.invocation_id,
+    agent_id: parsed.agent_id,
+    subagent_type: parsed.subagent_type,
+    session_id: parsed.session_id,
+    transcript_path: parsed.transcript_path,
+    output_file: parsed.output_file,
+    summary: stringOrUndefined(
+      sanitizeAgentDisplayText(parsed.summary, MAX_AGENT_TOOL_DISPLAY_CHARS),
+    ),
+    error: stringOrUndefined(
+      sanitizeAgentDisplayText(parsed.error, MAX_AGENT_TOOL_DISPLAY_CHARS),
+    ),
+    total_cost_usd: parsed.total_cost_usd,
+    input_tokens: parsed.input_tokens,
+    output_tokens: parsed.output_tokens,
+    metadata: sanitizeChildAgentMetadataPayload(parsed.metadata),
+  };
+
+  return JSON.stringify(compact, null, 2);
+}
+
+function sanitizeChildAgentMetadataPayload(
+  metadata?: ChildAgentMetadata,
+): ChildAgentMetadata | undefined {
+  if (!metadata) {
+    return metadata;
+  }
+
+  return {
+    ...metadata,
+    status_message: stringOrUndefined(
+      sanitizeAgentDisplayText(
+        metadata.status_message,
+        MAX_BACKGROUND_AGENT_SUMMARY_CHARS,
+      ),
+    ),
+    tools: Array.isArray(metadata.tools) ? [...metadata.tools] : undefined,
+  };
+}
+
+function sanitizeAgentDisplayText(
+  value: string | undefined,
+  maxChars: number,
+): string {
+  const normalized = stringOrEmpty(value);
+  if (normalized.length <= maxChars) {
+    return normalized;
+  }
+  if (AGENT_UI_TRUNCATION_NOTE.length >= maxChars) {
+    return normalized.slice(0, maxChars);
+  }
+  return `${normalized.slice(0, maxChars - AGENT_UI_TRUNCATION_NOTE.length)}${AGENT_UI_TRUNCATION_NOTE}`;
+}
+
+function isAgentToolName(name: string | undefined): boolean {
+  return name === "agent" || name === "agent_status" || name === "agent_stop";
 }
 
 function stringOrEmpty(value: unknown): string {

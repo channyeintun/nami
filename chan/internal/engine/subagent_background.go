@@ -92,21 +92,22 @@ func emitBackgroundAgentUpdated(bridge *ipc.Bridge, bg *backgroundAgent, result 
 	if bridge == nil || bg == nil {
 		return
 	}
+	displayResult := toolpkg.DisplaySafeAgentResult(result)
 	_ = bridge.Emit(ipc.EventBackgroundAgentUpdated, ipc.BackgroundAgentUpdatedPayload{
 		AgentID:        bg.id,
-		InvocationID:   firstNonEmpty(result.InvocationID, bg.invocationID, result.SessionID),
+		InvocationID:   firstNonEmpty(displayResult.InvocationID, bg.invocationID, displayResult.SessionID),
 		Description:    bg.description,
-		SubagentType:   firstNonEmpty(result.SubagentType, bg.subagentType),
-		Status:         result.Status,
-		Summary:        result.Summary,
-		SessionID:      result.SessionID,
-		TranscriptPath: result.TranscriptPath,
-		OutputFile:     result.OutputFile,
-		Error:          result.Error,
-		TotalCostUSD:   result.TotalCostUSD,
-		InputTokens:    result.InputTokens,
-		OutputTokens:   result.OutputTokens,
-		Metadata:       toIPCChildAgentMetadata(buildChildMetadata(result, bg.description)),
+		SubagentType:   firstNonEmpty(displayResult.SubagentType, bg.subagentType),
+		Status:         displayResult.Status,
+		Summary:        displayResult.Summary,
+		SessionID:      displayResult.SessionID,
+		TranscriptPath: displayResult.TranscriptPath,
+		OutputFile:     displayResult.OutputFile,
+		Error:          displayResult.Error,
+		TotalCostUSD:   displayResult.TotalCostUSD,
+		InputTokens:    displayResult.InputTokens,
+		OutputTokens:   displayResult.OutputTokens,
+		Metadata:       toIPCChildAgentMetadata(buildChildMetadata(displayResult, bg.description)),
 	})
 }
 

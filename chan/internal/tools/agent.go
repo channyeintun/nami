@@ -7,6 +7,13 @@ import (
 	"strings"
 )
 
+const (
+	maxAgentDisplaySummaryRunes       = 4000
+	maxAgentDisplayErrorRunes         = 2000
+	maxAgentDisplayStatusMessageRunes = 2000
+	agentDisplayTruncationNote        = "\n\n[truncated for live transcript; full child-agent result is kept on disk]"
+)
+
 const subagentTypeExplore = "explore"
 const subagentTypeSearch = "search"
 const subagentTypeExecution = "execution"
@@ -69,6 +76,50 @@ type AgentStopLookup func(context.Context, AgentStopRequest) (AgentRunResult, er
 
 type AgentTool struct {
 	runner AgentRunner
+}
+
+func DisplaySafeAgentResult(result AgentRunResult) AgentRunResult {
+	display := result
+	display.Summary = truncateAgentDisplayText(display.Summary, maxAgentDisplaySummaryRunes)
+	display.Error = truncateAgentDisplayText(display.Error, maxAgentDisplayErrorRunes)
+	if display.Metadata != nil {
+		metadata := *display.Metadata
+		metadata.Tools = append([]string(nil), display.Metadata.Tools...)
+		metadata.StatusMessage = truncateAgentDisplayText(
+			metadata.StatusMessage,
+			maxAgentDisplayStatusMessageRunes,
+		)
+		display.Metadata = &metadata
+	}
+	return display
+}
+
+func marshalDisplayAgentResult(result AgentRunResult) (string, error) {
+	encoded, err := json.MarshalIndent(DisplaySafeAgentResult(result), "", "  ")
+	if err != nil {
+		return "", err
+	}
+	return string(encoded), nil
+}
+
+func truncateAgentDisplayText(value string, maxRunes int) string {
+	normalized := strings.TrimSpace(value)
+	if normalized == "" || maxRunes <= 0 {
+		return normalized
+	}
+	runes := []rune(normalized)
+	if len(runes) <= maxRunes {
+		return normalized
+	}
+	note := []rune(agentDisplayTruncationNote)
+	if len(note) >= maxRunes {
+		return string(runes[:maxRunes])
+	}
+	keep := maxRunes - len(note)
+	if keep < 0 {
+		keep = 0
+	}
+	return string(runes[:keep]) + agentDisplayTruncationNote
 }
 
 func NewAgentTool(runner AgentRunner) *AgentTool {
@@ -154,11 +205,11 @@ func (t *AgentTool) Execute(ctx context.Context, input ToolInput) (ToolOutput, e
 		return ToolOutput{}, err
 	}
 
-	encoded, err := json.MarshalIndent(result, "", "  ")
+	encoded, err := marshalDisplayAgentResult(result)
 	if err != nil {
 		return ToolOutput{}, fmt.Errorf("marshal agent result: %w", err)
 	}
-	return ToolOutput{Output: string(encoded)}, nil
+	return ToolOutput{Output: encoded}, nil
 }
 
 // IsSupportedSubagentType reports whether subagentType is a recognized subagent mode.
@@ -236,11 +287,11 @@ func (t *AgentStatusTool) Execute(ctx context.Context, input ToolInput) (ToolOut
 	if err != nil {
 		return ToolOutput{}, err
 	}
-	encoded, err := json.MarshalIndent(result, "", "  ")
+	encoded, err := marshalDisplayAgentResult(result)
 	if err != nil {
 		return ToolOutput{}, fmt.Errorf("marshal agent status: %w", err)
 	}
-	return ToolOutput{Output: string(encoded)}, nil
+	return ToolOutput{Output: encoded}, nil
 }
 
 type AgentStopTool struct {
@@ -308,9 +359,9 @@ func (t *AgentStopTool) Execute(ctx context.Context, input ToolInput) (ToolOutpu
 	if err != nil {
 		return ToolOutput{}, err
 	}
-	encoded, err := json.MarshalIndent(result, "", "  ")
+	encoded, err := marshalDisplayAgentResult(result)
 	if err != nil {
 		return ToolOutput{}, fmt.Errorf("marshal agent stop result: %w", err)
 	}
-	return ToolOutput{Output: string(encoded)}, nil
+	return ToolOutput{Output: encoded}, nil
 }
