@@ -27,6 +27,7 @@ const (
 	sessionMemoryMaxFileCount            = 8
 	sessionMemoryMaxSectionTokens        = 2000
 	sessionMemoryMaxTotalTokens          = 12000
+	sessionMemoryTranscriptDedupeWindow  = 8
 )
 
 type sessionMemoryDocument struct {
@@ -59,10 +60,11 @@ func loadSessionMemorySnapshot(ctx context.Context, artifactManager *artifactspk
 	if err != nil {
 		return agent.SessionMemorySnapshot{}, err
 	}
+	parsed := parseSessionMemoryMarkdown(content)
 
 	return agent.SessionMemorySnapshot{
 		ArtifactID:               loaded.ID,
-		Title:                    loaded.Title,
+		Title:                    firstNonEmptySnippet(metadataString(loaded.Metadata, "session_title"), parsed.SessionTitle, loaded.Title),
 		Content:                  content,
 		Version:                  loaded.Version,
 		UpdatedAt:                loaded.UpdatedAt,
@@ -91,6 +93,7 @@ func maybeRefreshSessionMemory(ctx context.Context, bridge *ipc.Bridge, artifact
 	if strings.TrimSpace(content) == "" {
 		return nil
 	}
+	parsed := parseSessionMemoryMarkdown(content)
 
 	artifact, _, created, err := artifactManager.UpsertSessionMarkdown(ctx, artifactspkg.MarkdownRequest{
 		Kind:    artifactspkg.KindSessionMemory,
@@ -100,6 +103,7 @@ func maybeRefreshSessionMemory(ctx context.Context, bridge *ipc.Bridge, artifact
 		Content: content,
 		Metadata: map[string]any{
 			"status":                     "active",
+			"session_title":              parsed.SessionTitle,
 			"updated_turn":               turnID,
 			"updated_message_count":      len(messages),
 			"source_conversation_tokens": compact.EstimateConversationTokens(messages),
@@ -128,25 +132,32 @@ func shouldRefreshSessionMemory(ctx context.Context, artifactManager *artifactsp
 	if len(messages) < sessionMemoryMinMessages {
 		return false
 	}
-	if turnHasCompactionSummary(messages, fromIndex) || turnHasToolActivity(messages, fromIndex) {
-		currentTokens := compact.EstimateConversationTokens(messages)
-		if currentTokens >= sessionMemoryMinInitTokens {
-			return true
-		}
-	}
+	hasCompactionSummary := turnHasCompactionSummary(messages, fromIndex)
+	hasToolActivity := turnHasToolActivity(messages, fromIndex)
 	currentTokens := compact.EstimateConversationTokens(messages)
 	currentToolCalls := totalToolCallCount(messages)
 	current, err := loadSessionMemorySnapshot(ctx, artifactManager, sessionID)
 	if err == nil && current.HasContent() {
-		if currentTokens-current.SourceConversationTokens >= sessionMemoryMinUpdateTokens {
+		if hasCompactionSummary {
 			return true
 		}
-		if currentToolCalls-current.SourceToolCallCount >= sessionMemoryToolCallsBetweenUpdates {
+		tokenDelta := currentTokens - current.SourceConversationTokens
+		toolCallDelta := currentToolCalls - current.SourceToolCallCount
+		if tokenDelta < 0 || toolCallDelta < 0 {
+			return hasToolActivity
+		}
+		if tokenDelta >= sessionMemoryMinUpdateTokens {
+			return true
+		}
+		if hasToolActivity && toolCallDelta >= sessionMemoryToolCallsBetweenUpdates {
 			return true
 		}
 		return false
 	}
-	return currentTokens >= sessionMemoryMinInitTokens
+	if hasCompactionSummary {
+		return true
+	}
+	return hasToolActivity && currentTokens >= sessionMemoryMinInitTokens
 }
 
 func turnHasToolActivity(messages []api.Message, fromIndex int) bool {
@@ -176,6 +187,7 @@ func turnHasCompactionSummary(messages []api.Message, fromIndex int) bool {
 
 func buildSessionMemoryMarkdown(previous agent.SessionMemorySnapshot, messages []api.Message, fromIndex int) string {
 	durableMemoryCorpus := buildDurableMemoryCorpus()
+	transcriptCorpus := buildRecentTranscriptCorpus(messages, fromIndex)
 	current := sessionMemoryDocument{
 		SessionTitle:          deriveSessionTitle(messages, previous),
 		CurrentState:          firstNonEmptySnippet(recentAssistantSnippets(messages, fromIndex, 3)...),
@@ -189,7 +201,7 @@ func buildSessionMemoryMarkdown(previous agent.SessionMemorySnapshot, messages [
 		Worklog:               recentWorklogEntries(messages, fromIndex),
 	}
 	merged := mergeSessionMemoryDocuments(parseSessionMemoryMarkdown(previous.Content), current)
-	merged = filterSessionMemoryDocument(merged, durableMemoryCorpus)
+	merged = filterSessionMemoryDocument(merged, durableMemoryCorpus, transcriptCorpus)
 
 	var b strings.Builder
 	b.WriteString("# Session Memory\n\n")
@@ -252,10 +264,12 @@ func mergeSessionMemoryDocuments(previous, current sessionMemoryDocument) sessio
 	return merged
 }
 
-func filterSessionMemoryDocument(doc sessionMemoryDocument, durableMemoryCorpus string) sessionMemoryDocument {
-	doc.TaskSpecification = filterRedundantBullets(doc.TaskSpecification, durableMemoryCorpus)
-	doc.CodebaseAndSystemDocs = filterRedundantBullets(doc.CodebaseAndSystemDocs, durableMemoryCorpus)
-	doc.Learnings = filterRedundantBullets(doc.Learnings, durableMemoryCorpus)
+func filterSessionMemoryDocument(doc sessionMemoryDocument, durableMemoryCorpus string, transcriptCorpus string) sessionMemoryDocument {
+	doc.TaskSpecification = filterRedundantBullets(doc.TaskSpecification, durableMemoryCorpus, transcriptCorpus)
+	doc.Workflow = filterRedundantBullets(doc.Workflow, transcriptCorpus)
+	doc.CodebaseAndSystemDocs = filterRedundantBullets(doc.CodebaseAndSystemDocs, durableMemoryCorpus, transcriptCorpus)
+	doc.Learnings = filterRedundantBullets(doc.Learnings, durableMemoryCorpus, transcriptCorpus)
+	doc.KeyResults = filterRedundantBullets(doc.KeyResults, transcriptCorpus)
 	return doc
 }
 
@@ -533,7 +547,11 @@ func totalToolCallCount(messages []api.Message) int {
 }
 
 func deriveSessionTitle(messages []api.Message, previous agent.SessionMemorySnapshot) string {
-	if title := strings.TrimSpace(previous.Title); title != "" {
+	previousDoc := parseSessionMemoryMarkdown(previous.Content)
+	if title := strings.TrimSpace(previousDoc.SessionTitle); title != "" && !strings.EqualFold(title, sessionMemoryArtifactTitle) {
+		return title
+	}
+	if title := strings.TrimSpace(previous.Title); title != "" && !strings.EqualFold(title, sessionMemoryArtifactTitle) {
 		return title
 	}
 	objective := firstNonEmptySnippet(recentUserSnippets(messages, 1)...)
@@ -558,19 +576,63 @@ func buildDurableMemoryCorpus() string {
 	return strings.Join(parts, "\n")
 }
 
-func filterRedundantBullets(items []string, corpus string) []string {
-	if strings.TrimSpace(corpus) == "" {
+func buildRecentTranscriptCorpus(messages []api.Message, fromIndex int) string {
+	if fromIndex < 0 {
+		fromIndex = 0
+	}
+	start := fromIndex
+	windowStart := len(messages) - sessionMemoryTranscriptDedupeWindow
+	if windowStart > start {
+		start = windowStart
+	}
+	if start < 0 {
+		start = 0
+	}
+	parts := make([]string, 0, (len(messages)-start)*2)
+	for index := start; index < len(messages); index++ {
+		message := messages[index]
+		if content := normalizeMemoryText(message.Content); content != "" {
+			parts = append(parts, content)
+		}
+		for _, call := range message.ToolCalls {
+			if input := normalizeMemoryText(call.Input); input != "" {
+				parts = append(parts, input)
+			}
+		}
+		if message.ToolResult != nil {
+			if output := normalizeMemoryText(message.ToolResult.Output); output != "" {
+				parts = append(parts, output)
+			}
+		}
+	}
+	return strings.Join(parts, "\n")
+}
+
+func filterRedundantBullets(items []string, corpora ...string) []string {
+	if len(corpora) == 0 {
 		return items
 	}
 	filtered := make([]string, 0, len(items))
 	for _, item := range items {
 		normalized := normalizeMemoryText(item)
-		if len(normalized) >= 24 && strings.Contains(corpus, normalized) {
+		if len(normalized) >= 24 && redundantInCorpora(normalized, corpora...) {
 			continue
 		}
 		filtered = append(filtered, item)
 	}
 	return filtered
+}
+
+func redundantInCorpora(value string, corpora ...string) bool {
+	for _, corpus := range corpora {
+		if strings.TrimSpace(corpus) == "" {
+			continue
+		}
+		if strings.Contains(corpus, value) {
+			return true
+		}
+	}
+	return false
 }
 
 func normalizeMemoryText(value string) string {
@@ -592,6 +654,16 @@ func metadataInt(metadata map[string]any, key string) int {
 	default:
 		return 0
 	}
+}
+
+func metadataString(metadata map[string]any, key string) string {
+	if metadata == nil {
+		return ""
+	}
+	if value, ok := metadata[key].(string); ok {
+		return strings.TrimSpace(value)
+	}
+	return ""
 }
 
 func looksLikeWorkflowTool(name string) bool {

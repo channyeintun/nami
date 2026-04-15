@@ -12,6 +12,7 @@
 - Reworked session-memory extraction to follow Claude Code more closely by gating initialization and refresh on token and tool-call thresholds, switching to a richer structured template with workflow and worklog sections, and deduplicating extracted notes against durable memory before prompt injection.
 - Expanded continuity-aware compaction heuristics to account for fresh session memory, pending tool chains, retry loops, and recent file focus, and upgraded microcompaction so truncated tool results retain file or command identity instead of collapsing to a generic marker.
 - Added a non-test trace-tuning path by introducing a `timing-summary` CLI command over `timings.ndjson`, so real sessions can be inspected for compaction strategy mix, session-memory freshness at compaction time, token savings, and follow-up threshold recommendations.
+- Tightened the quality of the new context-memory runtime by fixing over-eager session-memory refreshes on tool-heavy turns, narrowing retry-loop detection to repeated failures instead of any two errors, propagating real session titles instead of the generic artifact title, and filtering extracted notes against the recent live transcript as well as durable memory.
 - Added the enhancement planning and reference-comparison markdown documents to the repository so the implementation history, ratings, and rollout plan are tracked alongside the code changes.
 
 ## 2026-04-15

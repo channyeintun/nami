@@ -171,24 +171,54 @@ func hasRecentRetryLoop(entries []AttemptEntry) bool {
 		start = len(entries) - recentAttemptsWindow
 	}
 	recent := entries[start:]
-	if len(recent) >= 2 {
-		return true
-	}
-	seen := map[string]struct{}{}
+	seen := map[string]int{}
+	commandErrors := map[string]int{}
+	blockedPaths := map[string]int{}
 	for _, entry := range recent {
 		if entry.DoNotRetry {
 			return true
 		}
-		signature := strings.TrimSpace(entry.Command + "|" + entry.ErrorSignature + "|" + entry.BlockedPath)
-		if signature == "||" {
-			continue
+		signature := retryLoopSignature(entry)
+		if signature != "" {
+			seen[signature]++
+			if seen[signature] >= 2 {
+				return true
+			}
 		}
-		if _, ok := seen[signature]; ok {
-			return true
+		command := strings.TrimSpace(entry.Command)
+		errorSignature := strings.TrimSpace(entry.ErrorSignature)
+		blockedPath := strings.TrimSpace(entry.BlockedPath)
+		if command != "" && errorSignature != "" {
+			commandErrors[command+"|"+errorSignature]++
+			if commandErrors[command+"|"+errorSignature] >= 2 {
+				return true
+			}
 		}
-		seen[signature] = struct{}{}
+		if blockedPath != "" {
+			blockedPaths[blockedPath]++
+			if blockedPaths[blockedPath] >= 2 {
+				return true
+			}
+		}
 	}
 	return false
+}
+
+func retryLoopSignature(entry AttemptEntry) string {
+	parts := make([]string, 0, 3)
+	if command := strings.TrimSpace(entry.Command); command != "" {
+		parts = append(parts, command)
+	}
+	if signature := strings.TrimSpace(entry.ErrorSignature); signature != "" {
+		parts = append(parts, signature)
+	}
+	if path := strings.TrimSpace(entry.BlockedPath); path != "" {
+		parts = append(parts, path)
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return strings.Join(parts, "|")
 }
 
 func hasRecentFileFocus(messages []api.Message, retrievalTouched []string) bool {
