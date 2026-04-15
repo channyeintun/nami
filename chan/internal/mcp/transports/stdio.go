@@ -14,6 +14,6 @@ func NewStdio(definition Config) sdkmcp.Transport {
 	}
 	return &sdkmcp.CommandTransport{
 		Command:           command,
-		TerminateDuration: definition.ConnectTimeout,
+		TerminateDuration: definition.ShutdownGrace,
 	}
 }

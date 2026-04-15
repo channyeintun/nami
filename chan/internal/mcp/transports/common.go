@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -18,6 +19,7 @@ type Config struct {
 	URL            string
 	Headers        map[string]string
 	ConnectTimeout time.Duration
+	ShutdownGrace  time.Duration
 }
 
 func Build(definition Config) (sdkmcp.Transport, error) {
@@ -101,10 +103,5 @@ func mergeEnv(overrides map[string]string) []string {
 }
 
 func splitEnv(entry string) (string, string, bool) {
-	for index := 0; index < len(entry); index++ {
-		if entry[index] == '=' {
-			return entry[:index], entry[index+1:], true
-		}
-	}
-	return "", "", false
+	return strings.Cut(entry, "=")
 }

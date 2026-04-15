@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -14,6 +15,7 @@ import (
 const (
 	defaultDiscoveryTimeout    = 15 * time.Second
 	defaultStdioStartupTimeout = 10 * time.Second
+	defaultShutdownGrace       = 5 * time.Second
 )
 
 type TransportKind string
@@ -40,6 +42,7 @@ type ServerDefinition struct {
 	Trusted           bool
 	WorkingDir        string
 	ConnectTimeout    time.Duration
+	ShutdownGrace     time.Duration
 	ExcludeTools      map[string]struct{}
 	IncludeTools      map[string]struct{}
 	ToolPermissions   map[string]ToolPermission
@@ -130,6 +133,7 @@ func resolveServerDefinition(cwd, projectPath, name string, cfg configpkg.MCPSer
 		Trusted:           cfg.Trust != nil && *cfg.Trust,
 		WorkingDir:        workingDir,
 		ConnectTimeout:    defaultDiscoveryTimeout,
+		ShutdownGrace:     defaultShutdownGrace,
 		ExcludeTools:      normalizeToolSet(cfg.ExcludeTools),
 		IncludeTools:      normalizeToolSet(cfg.IncludeTools),
 		ToolPermissions:   make(map[string]ToolPermission),
@@ -215,16 +219,23 @@ func resolveHTTPDefinition(definition ServerDefinition, cfg configpkg.MCPServerC
 		return ServerDefinition{}, fmt.Errorf("%s transport does not accept env", transport)
 	}
 
-	url, err := expandEnvString(*cfg.URL)
+	rawURL, err := expandEnvString(*cfg.URL)
 	if err != nil {
 		return ServerDefinition{}, fmt.Errorf("expand url: %w", err)
+	}
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return ServerDefinition{}, fmt.Errorf("invalid url: %w", err)
+	}
+	if parsed.Scheme == "" || parsed.Host == "" {
+		return ServerDefinition{}, fmt.Errorf("url must include scheme and host")
 	}
 	headers, err := expandEnvMap(cfg.Headers)
 	if err != nil {
 		return ServerDefinition{}, fmt.Errorf("expand headers: %w", err)
 	}
 
-	definition.URL = url
+	definition.URL = rawURL
 	definition.Headers = headers
 	return definition, nil
 }

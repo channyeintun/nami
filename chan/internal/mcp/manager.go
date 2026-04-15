@@ -91,6 +91,7 @@ func NewManager(cwd string, cfg configpkg.MCPConfig) *Manager {
 		}
 	}
 
+	sort.Strings(manager.order)
 	return manager
 }
 
@@ -107,16 +108,19 @@ func (m *Manager) Start(ctx context.Context) {
 	}
 	m.mu.RUnlock()
 
+	var wg sync.WaitGroup
 	for _, name := range order {
 		definition, ok := definitions[name]
-		if !ok {
+		if !ok || !definition.Enabled {
 			continue
 		}
-		if !definition.Enabled {
-			continue
-		}
-		m.startServer(ctx, definition)
+		wg.Add(1)
+		go func(def ServerDefinition) {
+			defer wg.Done()
+			m.startServer(ctx, def)
+		}(definition)
 	}
+	wg.Wait()
 }
 
 func (m *Manager) Close() error {
@@ -308,9 +312,6 @@ func (m *Manager) appendOrder(name string) {
 		}
 	}
 	m.order = append(m.order, name)
-	if len(m.order) > 1 {
-		sort.Strings(m.order)
-	}
 }
 
 func (r *serverRuntime) toolPermission(toolName string) ToolPermission {
@@ -358,6 +359,7 @@ func connectSession(ctx context.Context, definition ServerDefinition) (Session, 
 		URL:            definition.URL,
 		Headers:        cloneStringMap(definition.Headers),
 		ConnectTimeout: definition.ConnectTimeout,
+		ShutdownGrace:  definition.ShutdownGrace,
 	})
 	if err != nil {
 		return nil, err

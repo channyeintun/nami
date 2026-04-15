@@ -60,7 +60,7 @@ func FindProjectRoot(start string) string {
 			return dir
 		}
 	}
-	return filepath.Clean(start)
+	return ""
 }
 
 // MergeMCPConfig overlays project-local MCP config on top of user config.
