@@ -84,7 +84,7 @@ This ordering is correct and doesn't need restructuring.
 **Goal**: Reduce `provider/model` transit through IPC where it's unnecessary.
 
 - [ ] `ModelChangedPayload.Model` currently sends `provider/model` — TUI always strips it. Could send model-only, but the TUI also uses the full string for context window inference. **Keep as-is** unless context window logic moves server-side.
-- [ ] `ModelSelectionRequestedPayload.CurrentModel` sends `provider/model` — only used for display (immediately stripped). Could strip server-side. Low priority.
+- [x] `ModelSelectionRequestedPayload.CurrentModel` sends `provider/model` — only used for display (immediately stripped). Could strip server-side. Low priority.
 
 ### Phase 5: `/subagent` model selection
 
@@ -104,4 +104,4 @@ This ordering is correct and doesn't need restructuring.
 
 ## Summary
 
-The architecture is sound: `provider/model` internally, model-only user-facing. The main feature gaps are closed. Phase 1 removed duplicate display utils, Phase 2 added provider hints for curated presets, Phase 3 confirmed the existing `/connect` flow is already correct, and Phase 5 added `/subagent` selection using the same model list as `/model`, with `claude-haiku-4.5` as the default. Phase 4 remains optional polish.
+The architecture is sound: `provider/model` internally, model-only user-facing. The main feature gaps are closed. Phase 1 removed duplicate display utils, Phase 2 added provider hints for curated presets, Phase 3 confirmed the existing `/connect` flow is already correct, and Phase 5 added `/subagent` selection using the same model list as `/model`, with `claude-haiku-4.5` as the default. Phase 4 is mostly optional polish; the display-only `CurrentModel` path is now cleaned up, while `ModelChanged` intentionally remains unchanged.

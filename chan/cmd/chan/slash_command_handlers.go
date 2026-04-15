@@ -511,7 +511,7 @@ func promptModelSelection(cmd *slashCommandContext, currentSelection string) (mo
 	requestID := fmt.Sprintf("model-%d", time.Now().UnixNano())
 	if err := cmd.bridge.Emit(ipc.EventModelSelectionRequested, ipc.ModelSelectionRequestedPayload{
 		RequestID:    requestID,
-		CurrentModel: currentSelection,
+		CurrentModel: activeModel,
 		Options:      options,
 	}); err != nil {
 		return modelSelectionChoice{}, err
