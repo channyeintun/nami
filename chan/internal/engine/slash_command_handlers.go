@@ -19,6 +19,7 @@ import (
 	costpkg "github.com/channyeintun/chan/internal/cost"
 	"github.com/channyeintun/chan/internal/debuglog"
 	"github.com/channyeintun/chan/internal/ipc"
+	mcppkg "github.com/channyeintun/chan/internal/mcp"
 	"github.com/channyeintun/chan/internal/session"
 	"github.com/channyeintun/chan/internal/timing"
 )
@@ -41,6 +42,7 @@ type slashCommandContext struct {
 	timingLogger    *timing.Logger
 	cfg             config.Config
 	artifactManager *artifactspkg.Manager
+	mcpManager      *mcppkg.Manager
 	tracker         *costpkg.Tracker
 	command         string
 	args            string
@@ -123,6 +125,7 @@ func newSlashCommandContext(
 	timingLogger *timing.Logger,
 	cfg config.Config,
 	artifactManager *artifactspkg.Manager,
+	mcpManager *mcppkg.Manager,
 	tracker *costpkg.Tracker,
 	payload ipc.SlashCommandPayload,
 	sessionID string,
@@ -142,6 +145,7 @@ func newSlashCommandContext(
 		timingLogger:    timingLogger,
 		cfg:             cfg,
 		artifactManager: artifactManager,
+		mcpManager:      mcpManager,
 		tracker:         tracker,
 		command:         strings.ToLower(strings.TrimSpace(payload.Command)),
 		args:            strings.TrimSpace(payload.Args),
@@ -832,6 +836,9 @@ func handleHelpSlashCommand(cmd *slashCommandContext) error {
 
 func handleStatusSlashCommand(cmd *slashCommandContext) error {
 	statusText := commandspkg.FormatStatusText(cmd.state.SessionID, cmd.state.StartedAt, cmd.state.Mode, cmd.state.ActiveModelID, cmd.state.SubagentModelID, cmd.state.CWD, len(cmd.state.Messages), cmd.tracker)
+	if mcpText := formatMCPStatusText(cmd.mcpManager); mcpText != "" {
+		statusText += "\n\n" + mcpText
+	}
 	return emitTextResponse(cmd.bridge, statusText)
 }
 

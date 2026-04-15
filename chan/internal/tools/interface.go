@@ -46,6 +46,13 @@ type ToolOutput struct {
 	Artifacts   []ArtifactMutation
 }
 
+// PermissionTarget describes the primary object a tool acts on for approval UI.
+type PermissionTarget struct {
+	Kind       string
+	Value      string
+	WorkingDir string
+}
+
 // ArtifactMutation describes an artifact created or updated during tool execution.
 type ArtifactMutation struct {
 	Artifact artifactspkg.Artifact
@@ -79,6 +86,12 @@ type Tool interface {
 // permission resolution and execution.
 type SemanticValidator interface {
 	Validate(input ToolInput) error
+}
+
+// PermissionTargetProvider lets a tool override the generic permission target
+// heuristics used for approval prompts.
+type PermissionTargetProvider interface {
+	PermissionTarget(input ToolInput) PermissionTarget
 }
 
 // MaxResultSizeChars is the default per-tool result budget.

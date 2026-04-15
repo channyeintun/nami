@@ -21,6 +21,7 @@ import (
 	"github.com/channyeintun/chan/internal/debuglog"
 	"github.com/channyeintun/chan/internal/hooks"
 	"github.com/channyeintun/chan/internal/ipc"
+	mcppkg "github.com/channyeintun/chan/internal/mcp"
 	"github.com/channyeintun/chan/internal/session"
 	"github.com/channyeintun/chan/internal/timing"
 	toolpkg "github.com/channyeintun/chan/internal/tools"
@@ -95,6 +96,16 @@ func RunStdioEngine(ctx context.Context, cfg config.Config) error {
 	cwd, err := os.Getwd()
 	if err != nil {
 		return err
+	}
+	mcpManager := mcppkg.NewManager(cwd, cfg.MCP)
+	mcpManager.Start(ctx)
+	defer func() {
+		if err := mcpManager.Close(); err != nil && debuglog.Enabled {
+			fmt.Fprintf(os.Stderr, "mcp: close: %v\n", err)
+		}
+	}()
+	for _, discovered := range mcpManager.Tools() {
+		registry.Register(toolpkg.NewMCPTool(mcpManager, discovered))
 	}
 	registry.Register(toolpkg.NewAgentTool(makeSubagentRunner(bridge, registry, permissionCtx, tracker, sessionStore, artifactManager, hookRunner, modelState, subagentModelState, cwd)))
 	registry.Register(toolpkg.NewAgentStatusTool(lookupBackgroundAgentStatus))
@@ -215,6 +226,7 @@ func RunStdioEngine(ctx context.Context, cfg config.Config) error {
 				timingLogger,
 				cfg,
 				artifactManager,
+				mcpManager,
 				tracker,
 				payload,
 				loopState.sessionID,

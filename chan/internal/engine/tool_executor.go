@@ -588,6 +588,12 @@ func permissionLevelLabel(call toolpkg.PendingCall) string {
 }
 
 func permissionTargetKind(call toolpkg.PendingCall) string {
+	if provider, ok := call.Tool.(toolpkg.PermissionTargetProvider); ok {
+		target := provider.PermissionTarget(call.Input)
+		if strings.TrimSpace(target.Kind) != "" {
+			return target.Kind
+		}
+	}
 	if command, ok := stringParamFromMap(call.Input.Params, "command"); ok && strings.TrimSpace(command) != "" {
 		return "command"
 	}
@@ -616,6 +622,12 @@ func permissionTargetKind(call toolpkg.PendingCall) string {
 }
 
 func permissionWorkingDir(call toolpkg.PendingCall) string {
+	if provider, ok := call.Tool.(toolpkg.PermissionTargetProvider); ok {
+		target := provider.PermissionTarget(call.Input)
+		if strings.TrimSpace(target.WorkingDir) != "" {
+			return strings.TrimSpace(target.WorkingDir)
+		}
+	}
 	workingDir, ok := stringParamFromMap(call.Input.Params, "cwd")
 	if !ok {
 		return ""
@@ -624,6 +636,12 @@ func permissionWorkingDir(call toolpkg.PendingCall) string {
 }
 
 func summarizePermissionTarget(call toolpkg.PendingCall) string {
+	if provider, ok := call.Tool.(toolpkg.PermissionTargetProvider); ok {
+		target := provider.PermissionTarget(call.Input)
+		if strings.TrimSpace(target.Value) != "" {
+			return target.Value
+		}
+	}
 	if command, ok := stringParamFromMap(call.Input.Params, "command"); ok && strings.TrimSpace(command) != "" {
 		return command
 	}

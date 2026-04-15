@@ -12,6 +12,7 @@ import (
 	"github.com/channyeintun/chan/internal/config"
 	costpkg "github.com/channyeintun/chan/internal/cost"
 	"github.com/channyeintun/chan/internal/ipc"
+	mcppkg "github.com/channyeintun/chan/internal/mcp"
 	"github.com/channyeintun/chan/internal/session"
 	"github.com/channyeintun/chan/internal/timing"
 )
@@ -24,6 +25,7 @@ func handleSlashCommand(
 	timingLogger *timing.Logger,
 	cfg config.Config,
 	artifactManager *artifactspkg.Manager,
+	mcpManager *mcppkg.Manager,
 	tracker *costpkg.Tracker,
 	payload ipc.SlashCommandPayload,
 	sessionID string,
@@ -43,6 +45,7 @@ func handleSlashCommand(
 		timingLogger,
 		cfg,
 		artifactManager,
+		mcpManager,
 		tracker,
 		payload,
 		sessionID,

@@ -181,7 +181,7 @@ chan --help
 | `/compact`            | Compact conversation to save context           |
 | `/resume [id]`        | Resume a previous session                      |
 | `/clear`              | Clear the conversation and start fresh         |
-| `/status`             | Show current session status                    |
+| `/status`             | Show current session and MCP server status     |
 | `/sessions`           | List recent sessions                           |
 | `/diff [args]`        | Show git diff                                  |
 | `/debug [subcommand]` | Enable debug logging or inspect its path       |
@@ -245,6 +245,7 @@ Chan exposes a broad local-tool runtime, including:
 | `git`                            | Read-only git operations                              |
 | `list_commands` / `command_status` | Inspect background shell sessions                   |
 | `file_history`                   | Snapshot and inspect tracked file history             |
+| `mcp__<server>__<tool>`          | Dynamically discovered MCP tools from configured servers |
 
 ### Child agent modes
 
@@ -285,6 +286,70 @@ Environment variables override config:
 | `CHAN_PERMISSION_MODE` | `default`, `autoApprove`, or `bypassPermissions` |
 
 If you use GitHub Copilot, config may also persist Copilot credentials and a `subagent_model`.
+
+### MCP servers
+
+Chan can load external MCP servers at startup from either `~/.config/chan/config.json` or `.chan/mcp.json` in the current workspace. The workspace file is merged on top of the user config for the current session, so team-local MCP settings can live in the repo without replacing your personal global setup.
+
+Example user config:
+
+```json
+{
+  "model": "anthropic/claude-sonnet-4-20250514",
+  "default_mode": "plan",
+  "mcp": {
+    "servers": {
+      "github": {
+        "transport": "stdio",
+        "command": "github-mcp-server",
+        "args": ["stdio"],
+        "env": {
+          "GITHUB_TOKEN": "$GITHUB_TOKEN"
+        },
+        "enabled": true,
+        "trust": false,
+        "exclude_tools": []
+      },
+      "docs": {
+        "transport": "http",
+        "url": "http://127.0.0.1:8787/mcp",
+        "headers": {
+          "Authorization": "Bearer $DOCS_MCP_TOKEN"
+        },
+        "enabled": true,
+        "trust": true,
+        "tool_permissions": {
+          "search": "read"
+        }
+      }
+    }
+  }
+}
+```
+
+Example workspace override in `.chan/mcp.json`:
+
+```json
+{
+  "servers": {
+    "browser": {
+      "transport": "ws",
+      "url": "ws://127.0.0.1:9000/mcp",
+      "enabled": true
+    }
+  }
+}
+```
+
+Supported transport values are `stdio`, `sse`, `http`, and `ws`.
+
+Permission behavior for MCP tools is conservative by default:
+
+- untrusted servers default to execute-style approval
+- trusted servers can map individual tools to `read`, `write`, or `execute`
+- `exclude_tools` hides discovered tools from the model
+
+Discovered MCP tools are exposed with stable names like `mcp__github__search_issues`. Run `/status` to see which servers connected, which failed, and how many tools each server exported.
 
 ### Debug logging
 
