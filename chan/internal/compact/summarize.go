@@ -8,41 +8,39 @@ import (
 
 // CompactionPromptTemplate is the 9-section summary format adapted from
 // the production-tested prompt in services/compact/prompt.ts.
-const CompactionPromptTemplate = `Summarize the following conversation for an AI coding assistant. Preserve ALL of the following:
+const CompactionPromptTemplate = `Summarize this conversation for an AI coding assistant. Preserve:
 
-1. **Primary Request**: What the user originally asked for
-2. **Technical Concepts**: Languages, frameworks, APIs, patterns discussed
-3. **Files & Code**: All file paths mentioned, code snippets written or discussed, modifications made
-4. **Errors & Fixes**: Any errors encountered, debugging steps taken, solutions found
-5. **Problem Solving**: Key decisions, trade-offs discussed, approaches tried
-6. **All User Messages**: Preserve the intent and specifics of every user message
-7. **Pending Tasks**: Anything not yet completed, open questions
-8. **Current Work**: What was being worked on when this summary was requested
-9. **Optional Next Step**: If there's a clear next action, state it
+1. **Primary Request**: original user ask
+2. **Technical Concepts**: languages, frameworks, APIs, patterns
+3. **Files & Code**: all paths, snippets, modifications
+4. **Errors & Fixes**: errors, debugging steps, solutions
+5. **Decisions**: key choices, trade-offs, approaches tried
+6. **User Messages**: intent and specifics of every user message
+7. **Pending**: incomplete tasks, open questions
+8. **Current Work**: what was active at summary time
+9. **Next Step**: clear next action if any
 
-Format as a structured summary that another AI can use to continue the conversation seamlessly.
-Do NOT include tool call details or raw API responses — only their meaningful outcomes.
-Keep the summary concise but complete. Aim for 1000-2000 tokens.`
+Structured summary for seamless continuation. Omit raw tool calls and API responses — outcomes only.
+1000-2000 tokens.`
 
 // PartialCompactionPromptTemplate scopes the summary to recent messages while
 // preserving earlier compacted context verbatim.
-const PartialCompactionPromptTemplate = `Summarize only the RECENT portion of the conversation for an AI coding assistant. Earlier retained context will stay verbatim, so preserve only the recent work needed to continue seamlessly.
+const PartialCompactionPromptTemplate = `Summarize only RECENT messages. Earlier context stays verbatim — cover only new work.
 
-Preserve ALL of the following from the recent messages:
+Preserve from recent messages:
 
-1. **Primary Request**: What the user most recently asked for
-2. **Technical Concepts**: Languages, frameworks, APIs, patterns discussed recently
-3. **Files & Code**: All file paths mentioned recently, code snippets written or discussed, modifications made
-4. **Errors & Fixes**: Any recent errors encountered, debugging steps taken, solutions found
-5. **Problem Solving**: Key recent decisions, trade-offs discussed, approaches tried
-6. **All User Messages**: Preserve the intent and specifics of every recent user message
-7. **Pending Tasks**: Anything not yet completed from the recent work
-8. **Current Work**: What was being worked on immediately before compaction
-9. **Optional Next Step**: If there's a clear next action, state it
+1. **Primary Request**: latest user ask
+2. **Technical Concepts**: languages, frameworks, APIs, patterns
+3. **Files & Code**: paths, snippets, modifications
+4. **Errors & Fixes**: errors, debugging, solutions
+5. **Decisions**: choices, trade-offs, approaches tried
+6. **User Messages**: intent and specifics of every recent user message
+7. **Pending**: incomplete tasks, open questions
+8. **Current Work**: what was active immediately before compaction
+9. **Next Step**: clear next action if any
 
-Format as a structured summary that another AI can use to continue the conversation seamlessly.
-Do NOT include tool call details or raw API responses — only their meaningful outcomes.
-Keep the summary concise but complete. Aim for 750-1500 tokens.`
+Structured summary for seamless continuation. Omit raw tool calls and API responses — outcomes only.
+750-1500 tokens.`
 
 const summaryMessagePrefix = "Conversation summary for continuation:"
 
@@ -55,7 +53,7 @@ func BuildCompactionPrompt(basePrompt string, sessionMemoryContent string) strin
 	}
 	return basePrompt + `
 
-The following session memory is already preserved separately and does NOT need to be repeated in the summary. Skip facts, file lists, and decisions already covered here — focus the summary on information NOT captured below.
+Session memory below is preserved separately. Do NOT repeat these facts, files, or decisions. Summarize only information NOT already captured here.
 
 <already_preserved_session_memory>
 ` + sessionMemoryContent + `

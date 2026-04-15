@@ -38,17 +38,16 @@ const (
 // reasoning context.
 type sessionMemoryRefineFunc func(ctx context.Context, draft string, recentUserMessages []string) (string, error)
 
-const sessionMemoryRefinePrompt = `You are refining a session memory document for an AI coding assistant.
+const sessionMemoryRefinePrompt = `Refine this session memory for an AI coding assistant resuming after compaction.
 
-The document captures the state of an ongoing coding session so the assistant can resume seamlessly after context compaction. Below is a heuristic draft extracted from the conversation. Your job is to:
+Rules:
+1. Keep exact markdown structure (# Session Memory, ## sections)
+2. Fix misattributions and oversimplifications
+3. Add reasoning/intent heuristics missed (WHY, not just WHAT)
+4. Remove noise, redundancy, obvious facts
+5. 800-1500 tokens
 
-1. Keep the exact same markdown structure (# Session Memory header, ## section headers)
-2. Improve accuracy — fix any misattributions or oversimplifications
-3. Add reasoning and intent that pure heuristics missed (WHY decisions were made, not just what happened)
-4. Remove noise, redundancy, and trivially obvious facts
-5. Keep it concise — aim for 800-1500 tokens total
-
-Return ONLY the refined markdown document, starting with "# Session Memory".`
+Return ONLY the refined markdown starting with "# Session Memory".`
 
 type sessionMemoryDocument struct {
 	SessionTitle          string

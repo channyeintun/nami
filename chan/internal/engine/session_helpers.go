@@ -258,7 +258,7 @@ func newSessionMemoryRefiner(bridge *ipc.Bridge, tracker *costpkg.Tracker, clien
 			Messages: []api.Message{
 				{Role: api.RoleUser, Content: prompt.String()},
 			},
-			SystemPrompt: "You refine session memory documents. Return only the refined markdown.",
+			SystemPrompt: "Refine session memory. Return only refined markdown.",
 			MaxTokens:    1536,
 		})
 		if err != nil {

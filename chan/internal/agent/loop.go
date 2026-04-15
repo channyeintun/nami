@@ -490,7 +490,7 @@ func capabilitySystemPrompt(capabilities api.ModelCapabilities) string {
 	if capabilities.SupportsToolUse {
 		return ""
 	}
-	return "Native tool use is unavailable for the current model. Do not emit tool calls. Respond with text only, explain limitations plainly, and avoid pretending a tool was executed."
+	return "No native tool use for current model. Text-only responses. Do not emit tool calls or pretend tools executed."
 }
 
 func warnUnsupportedThinking(

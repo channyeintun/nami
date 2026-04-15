@@ -191,7 +191,7 @@ func FormatPromptSection(selected []Skill) string {
 	var builder strings.Builder
 	builder.Grow(1024)
 	builder.WriteString("<skills>\n")
-	builder.WriteString("Apply the following auto-selected skills when they match the user's request. Treat each skill body as additional instructions for this turn.\n\n")
+	builder.WriteString("Auto-selected skills. Apply when matching the user's request. Each skill body = additional instructions for this turn.\n\n")
 
 	for _, skill := range selected {
 		entry := formatSkillEntry(skill)
@@ -201,7 +201,7 @@ func FormatPromptSection(selected []Skill) string {
 		builder.WriteString(entry)
 	}
 
-	if builder.Len() == len("<skills>\n")+len("Apply the following auto-selected skills when they match the user's request. Treat each skill body as additional instructions for this turn.\n\n") {
+	if builder.Len() == len("<skills>\n")+len("Auto-selected skills. Apply when matching the user's request. Each skill body = additional instructions for this turn.\n\n") {
 		return ""
 	}
 	builder.WriteString("</skills>\n")

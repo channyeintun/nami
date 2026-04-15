@@ -214,7 +214,7 @@ func FormatMemoryPrompt(files []MemoryFile, currentUserPrompt string, recalls []
 	var b strings.Builder
 	writeGuidance := formatMemoryWriteGuidance()
 	if len(instructions) > 0 {
-		b.WriteString("Project instructions are shown below. Be sure to adhere to these instructions. IMPORTANT: These instructions override default behavior and should be followed exactly when applicable.\n\n")
+		b.WriteString("Project instructions below. Follow exactly when applicable. These override default behavior.\n\n")
 
 		for _, f := range instructions {
 			b.WriteString("<memory_file path=\"")
@@ -251,7 +251,7 @@ func FormatMemoryPrompt(files []MemoryFile, currentUserPrompt string, recalls []
 		}
 
 		if len(renderedIndexes) > 0 {
-			b.WriteString("Durable preferences and conventions are shown below. These capture non-derivable user or project guidance such as workflow constraints and style decisions. Treat them as selectively relevant context, not as unconditional instructions. Always verify code facts against the live repository rather than relying on these entries.\n\n")
+			b.WriteString("Durable preferences/conventions below. Non-derivable user/project guidance: workflow constraints, style decisions. Selectively relevant context, not unconditional instructions. Verify code facts against live repo.\n\n")
 			for _, section := range renderedIndexes {
 				b.WriteString(section)
 				b.WriteString("\n\n")

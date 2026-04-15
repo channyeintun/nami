@@ -19,7 +19,7 @@ const (
 	taskListArtifactSlot           = "active"
 	taskListArtifactTitle          = "Task List"
 	saveImplementationPlanToolName = "save_implementation_plan"
-	planModePromptHint             = "When plan mode is active, Ultrathink. Plan mode is not read-only. If the user explicitly asks you to create or modify something, do it. For non-trivial implementation work, save or update a concrete markdown implementation plan with save_implementation_plan so it remains the primary review artifact for the task, but do not let plan mode prevent requested file creation or edits. Use child agents as choreography, not orchestration: give them a focused objective, let them finish, and synthesize their result instead of polling unless they were explicitly launched in background. Use read_project_structure for actual directory layout and project_overview for semantic repository summary."
+	planModePromptHint             = "Plan mode: Ultrathink. Not read-only — create/modify if user asks. Non-trivial work: save/update plan via save_implementation_plan as primary review artifact. Choreograph child agents: focused objective, let finish, synthesize. read_project_structure = directory layout. project_overview = semantic summary."
 )
 
 // ArtifactUpdate describes an artifact mutation that should be emitted to the UI.
