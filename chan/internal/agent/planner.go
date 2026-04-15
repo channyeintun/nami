@@ -19,7 +19,7 @@ const (
 	taskListArtifactSlot           = "active"
 	taskListArtifactTitle          = "Task List"
 	saveImplementationPlanToolName = "save_implementation_plan"
-	planModePromptHint             = "When plan mode is active, you MUST still use read tools (read_file, file_search, grep_search, read_project_structure, bash with read-only commands like ls/cat/find) and may use read-only child agents for bounded exploration. Only avoid write tools (create_file, file_write, replace_string_in_file, multi_replace_string_in_file, apply_patch). Use child agents as choreography, not orchestration: give them a focused objective, let them finish, and synthesize their result instead of polling unless they were explicitly launched in background. Use read_project_structure for actual directory layout and project_overview for semantic repository summary. When you have a real implementation plan, save or update it with save_implementation_plan so it remains the primary review artifact for the task. Ask the user to review the plan, revise it in place when needed, and only move to /fast when they want implementation to begin."
+	planModePromptHint             = "When plan mode is active, Ultrathink. Plan mode is not read-only. If the user explicitly asks you to create or modify something, do it. For non-trivial implementation work, save or update a concrete markdown implementation plan with save_implementation_plan so it remains the primary review artifact for the task, but do not let plan mode prevent requested file creation or edits. Use child agents as choreography, not orchestration: give them a focused objective, let them finish, and synthesize their result instead of polling unless they were explicitly launched in background. Use read_project_structure for actual directory layout and project_overview for semantic repository summary."
 )
 
 // ArtifactUpdate describes an artifact mutation that should be emitted to the UI.
@@ -69,8 +69,7 @@ func (p *Planner) FinalizeTurn(ctx context.Context, artifactID string, userReque
 	return nil, nil
 }
 
-// ValidateTool blocks write tools while plan mode is active.
-// ReadOnly and Execute tools (bash, git) are always allowed.
+// ValidateTool optionally enforces plan-mode write gating.
 func (p *Planner) ValidateTool(ctx context.Context, toolName string, permission toolpkg.PermissionLevel) error {
 	if p == nil || permission != toolpkg.PermissionWrite {
 		return nil
@@ -88,10 +87,10 @@ func (p *Planner) ValidateTool(ctx context.Context, toolName string, permission 
 		return &PlanReviewRequiredError{ToolName: toolName, PlanTitle: title}
 	}
 
-	return fmt.Errorf("write tool %q blocked in plan mode: you must call save_implementation_plan with a complete implementation plan before modifying any files — write the plan, save it, and wait for the user to review and approve it", toolName)
+	return fmt.Errorf("write tool %q blocked in plan mode: you must call save_implementation_plan with a complete implementation plan before modifying any files", toolName)
 }
 
-// PlanModePromptHint returns the instruction that keeps plan mode read-only.
+// PlanModePromptHint returns the instruction that shapes plan-mode behavior.
 func PlanModePromptHint() string {
 	return planModePromptHint
 }

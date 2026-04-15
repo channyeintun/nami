@@ -87,7 +87,7 @@ func slashCommandSpecs() []slashCommandSpec {
 		{
 			Descriptor: commandspkg.Descriptor{
 				Name:           "plan",
-				Description:    "Switch to plan mode (read-only until approved)",
+				Description:    "Switch to plan mode (Ultrathink)",
 				Usage:          "/plan",
 				TakesArguments: false,
 			},
