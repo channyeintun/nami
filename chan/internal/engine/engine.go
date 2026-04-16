@@ -108,6 +108,7 @@ func RunStdioEngine(ctx context.Context, cfg config.Config) error {
 		subagentModelID: subagentModelID,
 		cwd:             cwd,
 		messages:        messages,
+		timeline:        newConversationTimeline(),
 		titleGenerated:  false,
 	}
 	mcpManager := mcppkg.NewManager(cwd, cfg.MCP)
@@ -136,6 +137,9 @@ func RunStdioEngine(ctx context.Context, cfg config.Config) error {
 		Tracker:       tracker,
 		Messages:      messages,
 	}); err != nil {
+		return err
+	}
+	if err := persistConversationHydratedPayload(sessionStore, sessionID, loopState.timeline, messages, activeModelID); err != nil {
 		return err
 	}
 	startupMetrics.Mark("session_persisted")
@@ -243,6 +247,7 @@ func RunStdioEngine(ctx context.Context, cfg config.Config) error {
 				loopState.subagentModelID,
 				loopState.cwd,
 				loopState.messages,
+				loopState.timeline,
 				registry.Definitions(),
 				&loopState.client,
 			)
@@ -258,6 +263,7 @@ func RunStdioEngine(ctx context.Context, cfg config.Config) error {
 				loopState.subagentModelID = slashState.SubagentModelID
 				loopState.cwd = slashState.CWD
 				loopState.messages = slashState.Messages
+				loopState.timeline = slashState.Timeline
 				modelState.Set(loopState.client, loopState.activeModelID)
 				subagentModelState.Set(loopState.subagentModelID)
 				toolpkg.SetGlobalSessionArtifacts(loopState.sessionID, artifactManager)
@@ -305,6 +311,9 @@ func RunStdioEngine(ctx context.Context, cfg config.Config) error {
 				Tracker:       tracker,
 				Messages:      loopState.messages,
 			}); err != nil {
+				return err
+			}
+			if err := persistConversationHydratedPayload(sessionStore, loopState.sessionID, loopState.timeline, loopState.messages, loopState.activeModelID); err != nil {
 				return err
 			}
 			if err := bridge.Emit(ipc.EventModeChanged, ipc.ModeChangedPayload{Mode: string(loopState.mode)}); err != nil {

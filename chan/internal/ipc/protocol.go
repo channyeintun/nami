@@ -201,6 +201,11 @@ type ConversationHydratedMessagePayload struct {
 	Model  string                                    `json:"model,omitempty"`
 }
 
+type ConversationHydratedProgressPayload struct {
+	ID      string `json:"id"`
+	Message string `json:"message"`
+}
+
 type ConversationHydratedToolCallPayload struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
@@ -226,6 +231,7 @@ type ConversationHydratedTranscriptEntryPayload struct {
 
 type ConversationHydratedPayload struct {
 	Messages   []ConversationHydratedMessagePayload         `json:"messages,omitempty"`
+	Progress   []ConversationHydratedProgressPayload        `json:"progress,omitempty"`
 	ToolCalls  []ConversationHydratedToolCallPayload        `json:"tool_calls,omitempty"`
 	Transcript []ConversationHydratedTranscriptEntryPayload `json:"transcript,omitempty"`
 }

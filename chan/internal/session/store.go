@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/channyeintun/chan/internal/api"
+	"github.com/channyeintun/chan/internal/ipc"
 )
 
 // Metadata holds session state for persistence and resume.
@@ -113,6 +114,35 @@ func (s *Store) SaveTranscript(sessionID string, messages []api.Message) error {
 		}
 	}
 	return nil
+}
+
+// SaveConversationTimeline persists the hydrated conversation timeline for a session.
+func (s *Store) SaveConversationTimeline(sessionID string, payload ipc.ConversationHydratedPayload) error {
+	dir := s.SessionDir(sessionID)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(payload, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal conversation timeline: %w", err)
+	}
+	return os.WriteFile(filepath.Join(dir, "timeline.json"), data, 0o644)
+}
+
+// LoadConversationTimeline reads the hydrated conversation timeline for a session.
+func (s *Store) LoadConversationTimeline(sessionID string) (ipc.ConversationHydratedPayload, error) {
+	data, err := os.ReadFile(filepath.Join(s.SessionDir(sessionID), "timeline.json"))
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return ipc.ConversationHydratedPayload{}, nil
+		}
+		return ipc.ConversationHydratedPayload{}, fmt.Errorf("read conversation timeline: %w", err)
+	}
+	var payload ipc.ConversationHydratedPayload
+	if err := json.Unmarshal(data, &payload); err != nil {
+		return ipc.ConversationHydratedPayload{}, fmt.Errorf("unmarshal conversation timeline: %w", err)
+	}
+	return payload, nil
 }
 
 // ListSessions returns all available session IDs, most recent first.

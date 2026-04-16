@@ -7,18 +7,63 @@ import (
 	"github.com/channyeintun/chan/internal/api"
 	"github.com/channyeintun/chan/internal/compact"
 	"github.com/channyeintun/chan/internal/ipc"
+	"github.com/channyeintun/chan/internal/session"
 )
 
-func emitConversationHydrated(bridge *ipc.Bridge, messages []api.Message, model string) error {
+func emitConversationHydrated(bridge *ipc.Bridge, store *session.Store, sessionID string, messages []api.Message, model string) error {
 	if bridge == nil {
 		return nil
 	}
-	return bridge.Emit(ipc.EventConversationHydrated, buildConversationHydratedPayload(messages, model))
+	payload, err := loadConversationHydratedPayload(store, sessionID, messages, model)
+	if err != nil {
+		return err
+	}
+	return bridge.Emit(ipc.EventConversationHydrated, payload)
+}
+
+func loadConversationHydratedPayload(
+	store *session.Store,
+	sessionID string,
+	messages []api.Message,
+	model string,
+) (ipc.ConversationHydratedPayload, error) {
+	if store != nil && strings.TrimSpace(sessionID) != "" {
+		payload, err := store.LoadConversationTimeline(sessionID)
+		if err != nil {
+			return ipc.ConversationHydratedPayload{}, err
+		}
+		if conversationHydratedPayloadHasContent(payload) {
+			return payload, nil
+		}
+	}
+	return buildConversationHydratedPayload(messages, model), nil
+}
+
+func persistConversationHydratedPayload(
+	store *session.Store,
+	sessionID string,
+	timeline *conversationTimeline,
+	messages []api.Message,
+	model string,
+) error {
+	if store == nil || strings.TrimSpace(sessionID) == "" {
+		return nil
+	}
+	payload := buildConversationHydratedPayload(messages, model)
+	if timeline != nil {
+		payload = timeline.HydratedPayload(messages, model)
+	}
+	return store.SaveConversationTimeline(sessionID, payload)
+}
+
+func conversationHydratedPayloadHasContent(payload ipc.ConversationHydratedPayload) bool {
+	return len(payload.Messages) > 0 || len(payload.Progress) > 0 || len(payload.ToolCalls) > 0 || len(payload.Transcript) > 0
 }
 
 func buildConversationHydratedPayload(messages []api.Message, model string) ipc.ConversationHydratedPayload {
 	payload := ipc.ConversationHydratedPayload{
 		Messages:   make([]ipc.ConversationHydratedMessagePayload, 0, len(messages)),
+		Progress:   nil,
 		ToolCalls:  make([]ipc.ConversationHydratedToolCallPayload, 0, len(messages)),
 		Transcript: make([]ipc.ConversationHydratedTranscriptEntryPayload, 0, len(messages)),
 	}
@@ -39,8 +84,9 @@ func buildConversationHydratedPayload(messages []api.Message, model string) ipc.
 				Text: text,
 			})
 			payload.Transcript = append(payload.Transcript, ipc.ConversationHydratedTranscriptEntryPayload{
-				ID:   messageID,
-				Kind: "message",
+				ID:    messageID,
+				Kind:  "message",
+				RefID: messageID,
 			})
 		case api.RoleAssistant:
 			blocks := hydratedAssistantBlocks(message)
@@ -52,8 +98,9 @@ func buildConversationHydratedPayload(messages []api.Message, model string) ipc.
 					Model:  strings.TrimSpace(model),
 				})
 				payload.Transcript = append(payload.Transcript, ipc.ConversationHydratedTranscriptEntryPayload{
-					ID:   messageID,
-					Kind: "message",
+					ID:    messageID,
+					Kind:  "message",
+					RefID: messageID,
 				})
 			}
 			for toolIndex, call := range message.ToolCalls {
@@ -68,8 +115,9 @@ func buildConversationHydratedPayload(messages []api.Message, model string) ipc.
 					Status: "completed",
 				})
 				payload.Transcript = append(payload.Transcript, ipc.ConversationHydratedTranscriptEntryPayload{
-					ID:   toolID,
-					Kind: "tool_call",
+					ID:    toolID,
+					Kind:  "tool_call",
+					RefID: toolID,
 				})
 			}
 		case api.RoleSystem:
@@ -84,8 +132,9 @@ func buildConversationHydratedPayload(messages []api.Message, model string) ipc.
 				Tone: hydratedSystemTone(message),
 			})
 			payload.Transcript = append(payload.Transcript, ipc.ConversationHydratedTranscriptEntryPayload{
-				ID:   messageID,
-				Kind: "message",
+				ID:    messageID,
+				Kind:  "message",
+				RefID: messageID,
 			})
 		}
 
@@ -164,8 +213,9 @@ func applyHydratedToolResult(
 			Status: "completed",
 		})
 		payload.Transcript = append(payload.Transcript, ipc.ConversationHydratedTranscriptEntryPayload{
-			ID:   fallbackID,
-			Kind: "tool_call",
+			ID:    fallbackID,
+			Kind:  "tool_call",
+			RefID: fallbackID,
 		})
 		if toolID != "" {
 			toolIndexes[toolID] = toolIndex

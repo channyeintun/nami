@@ -14,6 +14,7 @@ import type {
   ConversationHydratedMessageBlockPayload,
   ConversationHydratedMessagePayload,
   ConversationHydratedPayload,
+  ConversationHydratedProgressPayload,
   ConversationHydratedToolCallPayload,
   ConversationHydratedTranscriptEntryPayload,
   ContextWindowPayload,
@@ -1011,7 +1012,7 @@ export function useEvents(initialModel: string, initialMode: string) {
         setUIState((s) => ({
           ...s,
           messages: normalizeHydratedMessages(p.messages),
-          progressEntries: [],
+          progressEntries: normalizeHydratedProgressEntries(p.progress),
           toolCalls: normalizeHydratedToolCalls(p.tool_calls),
           transcript: normalizeHydratedTranscriptEntries(p.transcript),
           liveAssistantBlocks: [],
@@ -1823,6 +1824,24 @@ function normalizeHydratedToolCalls(
         errorHint: stringOrUndefined(toolCall.error_hint),
       },
     ];
+  });
+}
+
+function normalizeHydratedProgressEntries(
+  payload: ConversationHydratedProgressPayload[] | undefined,
+): UIProgressEntry[] {
+  if (!Array.isArray(payload)) {
+    return [];
+  }
+
+  return payload.flatMap((entry) => {
+    const id = stringOrUndefined(entry?.id);
+    const text = stringOrUndefined(entry?.message);
+    if (!id || !text) {
+      return [];
+    }
+
+    return [createProgressEntry(id, text)];
   });
 }
 

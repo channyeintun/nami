@@ -32,6 +32,7 @@ type slashCommandState struct {
 	SubagentModelID string
 	CWD             string
 	Messages        []api.Message
+	Timeline        *conversationTimeline
 }
 
 type slashCommandContext struct {
@@ -136,6 +137,7 @@ func newSlashCommandContext(
 	subagentModelID string,
 	cwd string,
 	messages []api.Message,
+	timeline *conversationTimeline,
 	tools []api.ToolDefinition,
 	client *api.LLMClient,
 ) *slashCommandContext {
@@ -160,6 +162,7 @@ func newSlashCommandContext(
 			SubagentModelID: subagentModelID,
 			CWD:             cwd,
 			Messages:        messages,
+			Timeline:        timeline,
 		},
 		client: client,
 	}
@@ -175,7 +178,7 @@ func lookupSlashCommandHandler(command string) (slashCommandHandler, bool) {
 }
 
 func (cmd *slashCommandContext) persistState() error {
-	return persistSessionState(cmd.store, sessionStateParams{
+	if err := persistSessionState(cmd.store, sessionStateParams{
 		SessionID:     cmd.state.SessionID,
 		CreatedAt:     cmd.state.StartedAt,
 		Mode:          cmd.state.Mode,
@@ -185,7 +188,10 @@ func (cmd *slashCommandContext) persistState() error {
 		Branch:        agent.LoadTurnContext().GitBranch,
 		Tracker:       cmd.tracker,
 		Messages:      cmd.state.Messages,
-	})
+	}); err != nil {
+		return err
+	}
+	return persistConversationHydratedPayload(cmd.store, cmd.state.SessionID, cmd.state.Timeline, cmd.state.Messages, cmd.state.ActiveModelID)
 }
 
 type connectResult struct {
@@ -708,6 +714,15 @@ func handleResumeSlashCommand(cmd *slashCommandContext) error {
 
 	cmd.state.Messages = append(cmd.state.Messages[:0], restored.Messages...)
 	cmd.state.SessionID = restored.Metadata.SessionID
+	timelinePayload, err := cmd.store.LoadConversationTimeline(cmd.state.SessionID)
+	if err != nil {
+		return err
+	}
+	if conversationHydratedPayloadHasContent(timelinePayload) {
+		cmd.state.Timeline = newConversationTimelineFromHydrated(timelinePayload, cmd.state.Messages)
+	} else {
+		cmd.state.Timeline = rebuildConversationTimeline(cmd.state.Messages)
+	}
 	if !restored.Metadata.CreatedAt.IsZero() {
 		cmd.state.StartedAt = restored.Metadata.CreatedAt
 	}
@@ -751,7 +766,7 @@ func handleResumeSlashCommand(cmd *slashCommandContext) error {
 	}); err != nil {
 		return err
 	}
-	if err := emitConversationHydrated(cmd.bridge, cmd.state.Messages, cmd.state.ActiveModelID); err != nil {
+	if err := emitConversationHydrated(cmd.bridge, cmd.store, cmd.state.SessionID, cmd.state.Messages, cmd.state.ActiveModelID); err != nil {
 		return err
 	}
 	if err := emitSessionUpdated(cmd.bridge, cmd.state.SessionID, restored.Metadata.Title); err != nil {
@@ -793,6 +808,7 @@ func handleRewindSlashCommand(cmd *slashCommandContext) error {
 	}
 
 	cmd.state.Messages = append(cmd.state.Messages[:0], cmd.state.Messages[:selectedIndex+1]...)
+	cmd.state.Timeline = rebuildConversationTimeline(cmd.state.Messages)
 	if err := cmd.persistState(); err != nil {
 		return err
 	}
@@ -811,7 +827,7 @@ func handleRewindSlashCommand(cmd *slashCommandContext) error {
 	}); err != nil {
 		return err
 	}
-	if err := emitConversationHydrated(cmd.bridge, cmd.state.Messages, cmd.state.ActiveModelID); err != nil {
+	if err := emitConversationHydrated(cmd.bridge, cmd.store, cmd.state.SessionID, cmd.state.Messages, cmd.state.ActiveModelID); err != nil {
 		return err
 	}
 	if err := emitSessionUpdated(cmd.bridge, cmd.state.SessionID, title); err != nil {

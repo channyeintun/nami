@@ -253,6 +253,11 @@ export interface ConversationHydratedMessagePayload {
   model?: string;
 }
 
+export interface ConversationHydratedProgressPayload {
+  id: string;
+  message: string;
+}
+
 export interface ConversationHydratedToolCallPayload {
   id: string;
   name: string;
@@ -278,6 +283,7 @@ export interface ConversationHydratedTranscriptEntryPayload {
 
 export interface ConversationHydratedPayload {
   messages?: ConversationHydratedMessagePayload[];
+  progress?: ConversationHydratedProgressPayload[];
   tool_calls?: ConversationHydratedToolCallPayload[];
   transcript?: ConversationHydratedTranscriptEntryPayload[];
 }

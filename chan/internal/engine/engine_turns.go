@@ -51,6 +51,7 @@ type engineLoopState struct {
 	subagentModelID string
 	cwd             string
 	messages        []api.Message
+	timeline        *conversationTimeline
 	titleGenerated  bool
 	queryIndex      int
 	toolUseNoticeID string
@@ -289,6 +290,16 @@ func (t *userTurnContext) handleQueryEvent(event ipc.StreamEvent) error {
 		if err := json.Unmarshal(event.Payload, &completion); err == nil {
 			t.turnStopReason = completion.StopReason
 		}
+	case ipc.EventProgress:
+		var progress ipc.ProgressPayload
+		if err := json.Unmarshal(event.Payload, &progress); err == nil && t.state.timeline != nil {
+			t.state.timeline.RecordProgress(progress)
+		}
+	case ipc.EventToolStart:
+		var toolStart ipc.ToolStartPayload
+		if err := json.Unmarshal(event.Payload, &toolStart); err == nil && t.state.timeline != nil {
+			t.state.timeline.RecordToolStart(toolStart)
+		}
 	}
 	return t.deps.bridge.EmitEvent(event)
 }
@@ -441,6 +452,12 @@ func (t *userTurnContext) newQueryDeps(planner *agent.Planner) agent.QueryDeps {
 		EmitTelemetry: t.deps.bridge.EmitEvent,
 		PersistMessages: func(updated []api.Message) {
 			t.state.messages = updated
+			if t.state.timeline != nil {
+				t.state.timeline.SyncMessages(updated)
+				if t.turnStopReason != "" {
+					t.state.timeline.FlushPendingAssistantMessages()
+				}
+			}
 			t.persistCurrentMessages()
 			_ = emitContextWindowUsage(t.deps.bridge, t.state.client, t.state.messages)
 		},
@@ -461,6 +478,7 @@ func (t *userTurnContext) persistCurrentMessages() {
 		Tracker:       t.deps.tracker,
 		Messages:      t.state.messages,
 	})
+	_ = persistConversationHydratedPayload(t.deps.sessionStore, t.state.sessionID, t.state.timeline, t.state.messages, t.state.activeModelID)
 }
 
 func (t *userTurnContext) markTurnMetric(checkpoint string) bool {

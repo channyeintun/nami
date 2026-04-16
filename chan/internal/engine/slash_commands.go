@@ -34,6 +34,7 @@ func handleSlashCommand(
 	subagentModelID string,
 	cwd string,
 	messages []api.Message,
+	timeline *conversationTimeline,
 	tools []api.ToolDefinition,
 	client *api.LLMClient,
 ) (slashCommandState, bool, error) {
@@ -55,6 +56,7 @@ func handleSlashCommand(
 		subagentModelID,
 		cwd,
 		messages,
+		timeline,
 		tools,
 		client,
 	)
