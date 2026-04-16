@@ -362,24 +362,16 @@ function renderSuccess(toolCall: UIToolCall) {
     case "grep":
     case "grep_search":
       return (
-        <MarkdownText
-          text={summarizeSearchMatches(
-            toolCall.output,
-            toolCall.truncated,
-            "match",
-          )}
-        />
+        <Text dimColor>
+          {summarizeSearchMatches(toolCall.output, toolCall.truncated, "match")}
+        </Text>
       );
     case "glob":
     case "file_search":
       return (
-        <MarkdownText
-          text={summarizeSearchMatches(
-            toolCall.output,
-            toolCall.truncated,
-            "file",
-          )}
-        />
+        <Text dimColor>
+          {summarizeSearchMatches(toolCall.output, toolCall.truncated, "file")}
+        </Text>
       );
     case "web_search":
       return <MarkdownText text={summarizeWebSearch(toolCall.output)} />;
@@ -471,11 +463,7 @@ function summarizeAgentOutput(output?: string): string {
     const status = summarizeAgentStatus(result.status);
     const metadata = result.metadata;
     const detail = compactAgentDetail(
-      firstNonEmpty(
-        result.summary,
-        metadata?.status_message,
-        result.error,
-      ),
+      firstNonEmpty(result.summary, metadata?.status_message, result.error),
     );
     lines.push(status);
 
@@ -684,8 +672,8 @@ function summarizeSearchMatches(
 ): string {
   if (!raw) {
     return truncated
-      ? `Results truncated for ${noun ?? "result"} search.`
-      : "No output.";
+      ? "Search completed. Output hidden in chat."
+      : "Search completed.";
   }
   const trimmed = raw.trim();
   if (trimmed === "No matches found" || trimmed === "No files found") {
@@ -693,11 +681,13 @@ function summarizeSearchMatches(
   }
 
   const lines = trimmed.split("\n").filter(Boolean);
-  const preview = lines.slice(0, 8).join("\n");
   const count = lines.filter((line) => !line.startsWith("(")).length;
-  const suffix =
-    count > 0 ? `Found ${count} ${count === 1 ? noun : `${noun}s`}.\n\n` : "";
-  return `${suffix}${summarizeOutput(preview, truncated || lines.length > 8)}`;
+  if (count > 0) {
+    return `Found ${count} ${count === 1 ? noun : `${noun}s`}. Output hidden in chat.`;
+  }
+  return truncated
+    ? "Search completed. Output hidden in chat."
+    : "Search completed.";
 }
 
 function summarizeWebSearch(raw?: string): string {
