@@ -199,14 +199,32 @@ func QueryStream(ctx context.Context, req QueryRequest, deps QueryDeps) iter.Seq
 	}
 }
 
+// ComposeStableSystemPrompt builds the cacheable prompt prefix shared across
+// normal turns and helper flows.
+func ComposeStableSystemPrompt(basePrompt string, sys SystemContext, capabilities api.ModelCapabilities) string {
+	return composeStableSystemPrompt(expandBaseSystemPrompt(basePrompt, capabilities), sys)
+}
+
 func composeSystemPrompt(basePrompt string, sys SystemContext, turn TurnContext, currentUserPrompt string, recalls []MemoryRecallResult, sessionMemory SessionMemorySnapshot, capabilities api.ModelCapabilities, skillPrompt string, liveRetrievalSection string, attemptLogSection string) string {
+	basePrompt = expandBaseSystemPrompt(basePrompt, capabilities)
 	if capabilities.SupportsCaching {
-		basePrompt = strings.TrimSpace(basePrompt)
-		memoryInstructionsPrompt := strings.TrimSpace(FormatMemoryInstructionPrompt(sys.MemoryFiles))
-		systemContextPrompt := strings.TrimSpace(FormatSystemContextPrompt(sys))
-		return joinPromptSections([]string{basePrompt, memoryInstructionsPrompt, systemContextPrompt})
+		return composeStableSystemPrompt(basePrompt, sys)
 	}
 	return composeLegacySystemPrompt(basePrompt, sys, turn, currentUserPrompt, recalls, sessionMemory, capabilities, skillPrompt, liveRetrievalSection, attemptLogSection)
+}
+
+func composeStableSystemPrompt(basePrompt string, sys SystemContext) string {
+	basePrompt = strings.TrimSpace(basePrompt)
+	memoryInstructionsPrompt := strings.TrimSpace(FormatMemoryInstructionPrompt(sys.MemoryFiles))
+	systemContextPrompt := strings.TrimSpace(FormatSystemContextPrompt(sys))
+	return joinPromptSections([]string{basePrompt, memoryInstructionsPrompt, systemContextPrompt})
+}
+
+func expandBaseSystemPrompt(basePrompt string, capabilities api.ModelCapabilities) string {
+	if capabilityPrompt := capabilitySystemPrompt(capabilities); capabilityPrompt != "" {
+		basePrompt = strings.TrimSpace(basePrompt + "\n\n" + capabilityPrompt)
+	}
+	return strings.TrimSpace(basePrompt)
 }
 
 func composeLegacySystemPrompt(basePrompt string, sys SystemContext, turn TurnContext, currentUserPrompt string, recalls []MemoryRecallResult, sessionMemory SessionMemorySnapshot, capabilities api.ModelCapabilities, skillPrompt string, liveRetrievalSection string, attemptLogSection string) string {

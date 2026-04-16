@@ -205,12 +205,13 @@ func compactWithMetrics(
 	turnID int,
 	reason string,
 	sessionMemory agent.SessionMemorySnapshot,
-	systemPrompt string,
+	basePrompt string,
 	tools []api.ToolDefinition,
 	messages []api.Message,
 ) (compact.CompactResult, error) {
 	metrics := timing.NewCheckpointRecorder(time.Now())
-	pipeline := newCompactionPipeline(bridge, tracker, client, systemPrompt, tools)
+	stableSystemPrompt := agent.ComposeStableSystemPrompt(basePrompt, agent.LoadSystemContext(), client.Capabilities())
+	pipeline := newCompactionPipeline(bridge, tracker, client, stableSystemPrompt, tools)
 	hasSessionMemory := sessionMemory.HasContent()
 	hasFreshSessionMemory := sessionMemory.IsFresh(time.Now())
 	if hasSessionMemory {

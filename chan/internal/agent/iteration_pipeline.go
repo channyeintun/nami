@@ -3,7 +3,6 @@ package agent
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/channyeintun/chan/internal/ipc"
 	skillspkg "github.com/channyeintun/chan/internal/skills"
@@ -184,9 +183,6 @@ func composeSystemPromptStage(
 	_ func(ipc.StreamEvent, error) bool,
 ) error {
 	basePrompt := state.BasePrompt
-	if capabilityPrompt := capabilitySystemPrompt(state.Capabilities); capabilityPrompt != "" {
-		basePrompt = strings.TrimSpace(basePrompt + "\n\n" + capabilityPrompt)
-	}
 	if state.PromptCache != nil {
 		state.SystemPrompt = state.PromptCache.Compose(
 			basePrompt,

@@ -31,6 +31,8 @@ func (c *PromptAssemblyCache) Compose(basePrompt string, sys SystemContext, turn
 		return composeSystemPrompt(basePrompt, sys, turn, currentUserPrompt, recalls, sessionMemory, capabilities, skillPrompt, liveRetrievalSection, attemptLogSection)
 	}
 
+	basePrompt = expandBaseSystemPrompt(basePrompt, capabilities)
+
 	basePrompt = c.memoize(&c.base, hashStrings("base", basePrompt), func() string {
 		return strings.TrimSpace(basePrompt)
 	})
@@ -47,7 +49,7 @@ func (c *PromptAssemblyCache) Compose(basePrompt string, sys SystemContext, turn
 
 	finalKey := hashStrings("final", boolString(capabilities.SupportsCaching), basePrompt, memoryPrompt, contextPrompt)
 	return c.memoize(&c.final, finalKey, func() string {
-		return joinPromptSections([]string{basePrompt, memoryPrompt, contextPrompt})
+		return composeStableSystemPrompt(basePrompt, sys)
 	})
 }
 

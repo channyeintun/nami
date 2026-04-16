@@ -120,7 +120,7 @@ func RunStdioEngine(ctx context.Context, cfg config.Config) error {
 	for _, discovered := range mcpManager.Tools() {
 		registry.Register(toolpkg.NewMCPTool(mcpManager, discovered))
 	}
-	registry.Register(toolpkg.NewAgentTool(makeSubagentRunner(bridge, registry, permissionCtx, tracker, sessionStore, artifactManager, hookRunner, modelState, subagentModelState, loopState, cwd)))
+	registry.Register(toolpkg.NewAgentTool(makeSubagentRunner(bridge, registry, permissionCtx, tracker, sessionStore, artifactManager, hookRunner, modelState, subagentModelState, cwd)))
 	registry.Register(toolpkg.NewAgentStatusTool(lookupBackgroundAgentStatus))
 	registry.Register(toolpkg.NewAgentStopTool(func(ctx context.Context, req toolpkg.AgentStopRequest) (toolpkg.AgentRunResult, error) {
 		return stopBackgroundAgent(ctx, bridge, req)

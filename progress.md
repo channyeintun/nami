@@ -13,6 +13,8 @@
 - Added an explicit model-switch cache-bust warning on the slash-command path: when a session changes the active model after accumulating prompt-cache activity, Chan now emits a notice that the hot cache is being invalidated and includes the cache read/write totals being discarded instead of letting the miss happen silently.
 - Added a smaller cache-friendly child handoff path for oversized delegated prompts: subagents now archive the full raw delegated prompt into the child session directory and receive a shorter structured brief with key instructions, extracted anchors, and the saved prompt path so they can pull the full task only when the brief is insufficient.
 - Reworked compaction to preserve cache-critical request prefixes where possible: summary runs now distinguish fresh vs cache-safe execution, the compaction pipeline records that summary mode in timing snapshots, and both automatic compaction and manual `/compact` reuse the live session system prompt plus tool schema by appending a final compaction request message instead of always switching to a separate summarizer request shape.
+- Tightened the prompt-caching follow-up after code review: normal turns and cache-safe compaction now share the same stable prompt builder for capability fallback, memory instructions, and stable environment context, while bounded subagents no longer widen back to the parent tool schema for pseudo cache reuse and instead keep the exact child tool contract.
+- Removed the two targeted regression test files that were added during the prompt-caching follow-up, per user preference to avoid adding new tests in this repo.
 
 ## 2026-04-16
 
