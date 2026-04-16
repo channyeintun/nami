@@ -454,9 +454,6 @@ func (t *userTurnContext) newQueryDeps(planner *agent.Planner) agent.QueryDeps {
 			t.state.messages = updated
 			if t.state.timeline != nil {
 				t.state.timeline.SyncMessages(updated)
-				if t.turnStopReason != "" {
-					t.state.timeline.FlushPendingAssistantMessages()
-				}
 			}
 			t.persistCurrentMessages()
 			_ = emitContextWindowUsage(t.deps.bridge, t.state.client, t.state.messages)

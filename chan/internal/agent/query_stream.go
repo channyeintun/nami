@@ -89,6 +89,7 @@ type QueryState struct {
 	ContextWindow       int
 	MaxTokens           int
 	MaxOutputCeiling    int
+	ProgressIDBase      int
 	TurnCount           int
 	MaxTurns            int
 	StopRequested       bool
@@ -127,6 +128,7 @@ func NewQueryState(req QueryRequest) *QueryState {
 		ContextWindow:    req.ContextWindow,
 		MaxTokens:        initialOutputBudget,
 		MaxOutputCeiling: req.MaxTokens,
+		ProgressIDBase:   len(req.Messages),
 		MaxTurns:         50,
 		Continuation:     NewContinuationTracker(req.MaxTokens),
 		Graph:            NewRetrievalGraph(ctx.CurrentDir),

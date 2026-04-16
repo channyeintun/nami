@@ -9,23 +9,19 @@ import (
 )
 
 type conversationTimeline struct {
-	progress                 []ipc.ConversationHydratedProgressPayload
-	progressIndex            map[string]int
-	transcript               []ipc.ConversationHydratedTranscriptEntryPayload
-	transcriptIndex          map[string]int
-	pendingAssistantMessages []string
-	pendingAssistantIndex    map[string]struct{}
-	syncedMessageCount       int
+	progress           []ipc.ConversationHydratedProgressPayload
+	progressIndex      map[string]int
+	transcript         []ipc.ConversationHydratedTranscriptEntryPayload
+	transcriptIndex    map[string]struct{}
+	syncedMessageCount int
 }
 
 func newConversationTimeline() *conversationTimeline {
 	return &conversationTimeline{
-		progress:                 make([]ipc.ConversationHydratedProgressPayload, 0, 8),
-		progressIndex:            make(map[string]int),
-		transcript:               make([]ipc.ConversationHydratedTranscriptEntryPayload, 0, 32),
-		transcriptIndex:          make(map[string]int),
-		pendingAssistantMessages: make([]string, 0, 8),
-		pendingAssistantIndex:    make(map[string]struct{}),
+		progress:        make([]ipc.ConversationHydratedProgressPayload, 0, 8),
+		progressIndex:   make(map[string]int),
+		transcript:      make([]ipc.ConversationHydratedTranscriptEntryPayload, 0, 32),
+		transcriptIndex: make(map[string]struct{}),
 	}
 }
 
@@ -47,7 +43,6 @@ func newConversationTimelineFromHydrated(
 func rebuildConversationTimeline(messages []api.Message) *conversationTimeline {
 	timeline := newConversationTimeline()
 	timeline.SyncMessages(messages)
-	timeline.FlushPendingAssistantMessages()
 	return timeline
 }
 
@@ -114,44 +109,33 @@ func (t *conversationTimeline) SyncMessages(messages []api.Message) {
 				RefID: messageID,
 			})
 		case api.RoleAssistant:
+			toolIDs := make([]string, 0, len(message.ToolCalls))
 			for toolIndex, call := range message.ToolCalls {
 				toolID := hydratedToolID(index, toolIndex, call.ID)
+				toolIDs = append(toolIDs, toolID)
+			}
+			if len(hydratedAssistantBlocks(message)) > 0 {
+				entry := ipc.ConversationHydratedTranscriptEntryPayload{
+					ID:    messageID,
+					Kind:  "message",
+					RefID: messageID,
+				}
+				if len(toolIDs) > 0 {
+					t.insertTranscriptEntryBeforeToolCalls(entry, toolIDs)
+				} else {
+					t.appendTranscriptEntry(entry)
+				}
+			}
+			for _, toolID := range toolIDs {
 				t.appendTranscriptEntry(ipc.ConversationHydratedTranscriptEntryPayload{
 					ID:    toolID,
 					Kind:  "tool_call",
 					RefID: toolID,
 				})
 			}
-			if len(hydratedAssistantBlocks(message)) == 0 {
-				continue
-			}
-			if len(message.ToolCalls) > 0 {
-				t.queuePendingAssistantMessage(messageID)
-				continue
-			}
-			t.appendTranscriptEntry(ipc.ConversationHydratedTranscriptEntryPayload{
-				ID:    messageID,
-				Kind:  "message",
-				RefID: messageID,
-			})
 		}
 	}
 	t.syncedMessageCount = len(messages)
-}
-
-func (t *conversationTimeline) FlushPendingAssistantMessages() {
-	if t == nil || len(t.pendingAssistantMessages) == 0 {
-		return
-	}
-	for _, messageID := range t.pendingAssistantMessages {
-		t.appendTranscriptEntry(ipc.ConversationHydratedTranscriptEntryPayload{
-			ID:    messageID,
-			Kind:  "message",
-			RefID: messageID,
-		})
-	}
-	t.pendingAssistantMessages = t.pendingAssistantMessages[:0]
-	t.pendingAssistantIndex = make(map[string]struct{})
 }
 
 func (t *conversationTimeline) HydratedPayload(
@@ -168,16 +152,46 @@ func (t *conversationTimeline) HydratedPayload(
 	return payload
 }
 
-func (t *conversationTimeline) queuePendingAssistantMessage(messageID string) {
-	trimmedID := strings.TrimSpace(messageID)
-	if trimmedID == "" {
-		return
+func trimConversationTimelineToMessage(
+	current *conversationTimeline,
+	messageID string,
+	messages []api.Message,
+) *conversationTimeline {
+	trimmedMessageID := strings.TrimSpace(messageID)
+	if current == nil || trimmedMessageID == "" || len(current.transcript) == 0 {
+		return rebuildConversationTimeline(messages)
 	}
-	if _, exists := t.pendingAssistantIndex[trimmedID]; exists {
-		return
+
+	progressByID := make(map[string]ipc.ConversationHydratedProgressPayload, len(current.progress))
+	for _, progress := range current.progress {
+		progressID := strings.TrimSpace(progress.ID)
+		if progressID == "" {
+			continue
+		}
+		progressByID[progressID] = progress
 	}
-	t.pendingAssistantIndex[trimmedID] = struct{}{}
-	t.pendingAssistantMessages = append(t.pendingAssistantMessages, trimmedID)
+
+	next := newConversationTimeline()
+	found := false
+	for _, entry := range current.transcript {
+		if strings.TrimSpace(entry.Kind) == "progress" {
+			progress, ok := progressByID[transcriptEntryRefID(entry)]
+			if !ok {
+				continue
+			}
+			next.recordProgress(progress)
+		}
+		next.appendTranscriptEntry(entry)
+		if strings.TrimSpace(entry.Kind) == "message" && transcriptEntryRefID(entry) == trimmedMessageID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		return rebuildConversationTimeline(messages)
+	}
+	next.syncedMessageCount = len(messages)
+	return next
 }
 
 func (t *conversationTimeline) recordProgress(
@@ -205,22 +219,76 @@ func (t *conversationTimeline) recordProgress(
 func (t *conversationTimeline) appendTranscriptEntry(
 	entry ipc.ConversationHydratedTranscriptEntryPayload,
 ) {
+	normalizedEntry, key, ok := normalizeTranscriptEntry(entry)
+	if !ok {
+		return
+	}
+	if _, exists := t.transcriptIndex[key]; exists {
+		return
+	}
+	t.transcriptIndex[key] = struct{}{}
+	t.transcript = append(t.transcript, normalizedEntry)
+}
+
+func (t *conversationTimeline) insertTranscriptEntryBeforeToolCalls(
+	entry ipc.ConversationHydratedTranscriptEntryPayload,
+	toolIDs []string,
+) {
+	normalizedEntry, key, ok := normalizeTranscriptEntry(entry)
+	if !ok {
+		return
+	}
+	if _, exists := t.transcriptIndex[key]; exists {
+		return
+	}
+	toolIDSet := make(map[string]struct{}, len(toolIDs))
+	for _, toolID := range toolIDs {
+		trimmedToolID := strings.TrimSpace(toolID)
+		if trimmedToolID == "" {
+			continue
+		}
+		toolIDSet[trimmedToolID] = struct{}{}
+	}
+	insertIndex := len(t.transcript)
+	for index, existing := range t.transcript {
+		if strings.TrimSpace(existing.Kind) != "tool_call" {
+			continue
+		}
+		if _, ok := toolIDSet[transcriptEntryRefID(existing)]; !ok {
+			continue
+		}
+		insertIndex = index
+		break
+	}
+	t.transcript = append(t.transcript, ipc.ConversationHydratedTranscriptEntryPayload{})
+	copy(t.transcript[insertIndex+1:], t.transcript[insertIndex:])
+	t.transcript[insertIndex] = normalizedEntry
+	t.transcriptIndex[key] = struct{}{}
+}
+
+func normalizeTranscriptEntry(
+	entry ipc.ConversationHydratedTranscriptEntryPayload,
+) (ipc.ConversationHydratedTranscriptEntryPayload, string, bool) {
 	id := strings.TrimSpace(entry.ID)
 	kind := strings.TrimSpace(entry.Kind)
 	if id == "" || kind == "" {
-		return
+		return ipc.ConversationHydratedTranscriptEntryPayload{}, "", false
 	}
 	entry.ID = id
 	entry.Kind = kind
 	if strings.TrimSpace(entry.RefID) == "" {
 		entry.RefID = id
+	} else {
+		entry.RefID = strings.TrimSpace(entry.RefID)
 	}
-	key := fmt.Sprintf("%s:%s", kind, id)
-	if _, exists := t.transcriptIndex[key]; exists {
-		return
+	return entry, fmt.Sprintf("%s:%s", kind, id), true
+}
+
+func transcriptEntryRefID(entry ipc.ConversationHydratedTranscriptEntryPayload) string {
+	if refID := strings.TrimSpace(entry.RefID); refID != "" {
+		return refID
 	}
-	t.transcriptIndex[key] = len(t.transcript)
-	t.transcript = append(t.transcript, entry)
+	return strings.TrimSpace(entry.ID)
 }
 
 func conversationTimelineMessageID(index int) string {

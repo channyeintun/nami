@@ -808,7 +808,11 @@ func handleRewindSlashCommand(cmd *slashCommandContext) error {
 	}
 
 	cmd.state.Messages = append(cmd.state.Messages[:0], cmd.state.Messages[:selectedIndex+1]...)
-	cmd.state.Timeline = rebuildConversationTimeline(cmd.state.Messages)
+	cmd.state.Timeline = trimConversationTimelineToMessage(
+		cmd.state.Timeline,
+		conversationTimelineMessageID(selectedIndex),
+		cmd.state.Messages,
+	)
 	if err := cmd.persistState(); err != nil {
 		return err
 	}

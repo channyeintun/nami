@@ -267,7 +267,7 @@ func emitIterationProgress(
 		return nil
 	}
 	if !yield(newEvent(ipc.EventProgress, ipc.ProgressPayload{
-		ID:      fmt.Sprintf("turn-%d-progress-%s", state.TurnCount, trimmedStageID),
+		ID:      fmt.Sprintf("msg-%d-iter-%d-progress-%s", state.ProgressIDBase, state.TurnCount, trimmedStageID),
 		Message: trimmedMessage,
 	}), nil) {
 		return context.Canceled
