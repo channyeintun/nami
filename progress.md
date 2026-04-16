@@ -2,6 +2,7 @@
 
 ## 2026-04-17
 
+- Completed the first chat-timeline implementation slice in the TUI renderer: `StreamOutput` now renders transcript entries strictly in stored order, no longer promotes assistant blocks ahead of earlier tool/system events, and no longer collapses adjacent read/search activity into synthetic grouped rows, so the visible transcript preserves real chronology.
 - Compared the prompt-caching guidance in `reference/prompt-caching.txt` and the Claude Code reference implementation against Chan, identified the main architectural gaps in Chan's current prompt-caching approach, and added `plan.md` with a phased remediation plan that explicitly excludes test work.
 - Expanded `plan.md` with a Claude Code reference mapping section so each prompt-caching phase is tied back to the specific `reference/claudecode/` files that informed it.
 - Tightened `plan.md` with one missing prompt-caching detail from the reference: Claude Code keeps normal date context conversation-stable and isolates cache-breaking system injection as an explicit path, while Chan currently injects a fresh per-turn timestamp into prompt context; the plan now calls out that exact fix and a broader audit of prompt-visible metadata like `updated_at`.

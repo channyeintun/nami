@@ -19,7 +19,6 @@ import type {
   UITranscriptEntry,
 } from "../hooks/useEvents.js";
 import ArtifactView from "./ArtifactView.js";
-import GroupedToolCalls, { type ToolCallGroup } from "./GroupedToolCalls.js";
 import MessageRow from "./MessageRow.js";
 import PlanPanel from "./PlanPanel.js";
 import PreservedText from "./PreservedText.js";
@@ -69,8 +68,7 @@ type TranscriptBlock =
       prompt: QueuedPromptPreview;
     }
   | { kind: "artifact"; key: string; artifact: UIArtifact }
-  | { kind: "tool_call"; key: string; toolCall: UIToolCall }
-  | { kind: "tool_group"; key: string; group: ToolCallGroup };
+  | { kind: "tool_call"; key: string; toolCall: UIToolCall };
 
 type DisplayBlock =
   | {
@@ -310,15 +308,6 @@ function renderTranscriptBlock(
     );
   }
 
-  if (block.kind === "tool_group") {
-    return (
-      <Box key={block.key} flexDirection="column">
-        {searchLabel}
-        <GroupedToolCalls group={block.group} />
-      </Box>
-    );
-  }
-
   if (block.kind === "tool_call") {
     return (
       <Box key={block.key} flexDirection="column">
@@ -401,8 +390,6 @@ function estimateDisplayBlockHeight(block: DisplayBlock | undefined): number {
   switch (block.block.kind) {
     case "artifact":
       return estimateArtifactHeight(block.block.artifact);
-    case "tool_group":
-      return Math.max(4, block.block.group.toolCalls.length * 2);
     case "tool_call":
       return 4;
     case "queued_prompt":
@@ -443,8 +430,7 @@ function buildTranscriptBlocks(
 ): TranscriptBlock[] {
   const blocks: TranscriptBlock[] = [];
 
-  for (let index = 0; index < transcript.length; index += 1) {
-    const entry = transcript[index];
+  for (const entry of transcript) {
     if (!entry) {
       continue;
     }
@@ -478,86 +464,19 @@ function buildTranscriptBlocks(
       continue;
     }
 
-    const run: UIToolCall[] = [];
-    let cursor = index;
-    while (
-      cursor < transcript.length &&
-      transcript[cursor]?.kind === "tool_call"
-    ) {
-      const toolCall = toolCallById.get(transcript[cursor]!.id);
-      if (toolCall) {
-        run.push(toolCall);
-      }
-      cursor += 1;
-    }
-
-    blocks.push(...buildToolBlocks(run));
-    index = cursor - 1;
-  }
-
-  return withMessageContinuations(reorderTurnBlocks(blocks));
-}
-
-function reorderTurnBlocks(blocks: TranscriptBlock[]): TranscriptBlock[] {
-  const reordered: TranscriptBlock[] = [];
-  let index = 0;
-
-  while (index < blocks.length) {
-    const current = blocks[index];
-    if (!current) {
-      index += 1;
+    const toolCall = toolCallById.get(entry.id);
+    if (!toolCall) {
       continue;
     }
 
-    reordered.push(current);
-    index += 1;
-
-    if (current.kind !== "message" || current.message.role !== "user") {
-      continue;
-    }
-
-    const turnBlocks: TranscriptBlock[] = [];
-    while (index < blocks.length) {
-      const nextBlock = blocks[index];
-      if (nextBlock?.kind === "message" && nextBlock.message.role === "user") {
-        break;
-      }
-      if (nextBlock) {
-        turnBlocks.push(nextBlock);
-      }
-      index += 1;
-    }
-
-    reordered.push(...promoteLeadAssistantRun(turnBlocks));
+    blocks.push({
+      kind: "tool_call",
+      key: `tool-${toolCall.id}`,
+      toolCall,
+    });
   }
 
-  return reordered;
-}
-
-function promoteLeadAssistantRun(blocks: TranscriptBlock[]): TranscriptBlock[] {
-  const firstAssistantIndex = blocks.findIndex(
-    (block) => block.kind === "message" && block.message.role === "assistant",
-  );
-
-  if (firstAssistantIndex <= 0) {
-    return blocks;
-  }
-
-  let assistantRunEnd = firstAssistantIndex;
-  while (assistantRunEnd < blocks.length) {
-    const block = blocks[assistantRunEnd];
-    if (!(block?.kind === "message" && block.message.role === "assistant")) {
-      break;
-    }
-
-    assistantRunEnd += 1;
-  }
-
-  return [
-    ...blocks.slice(firstAssistantIndex, assistantRunEnd),
-    ...blocks.slice(0, firstAssistantIndex),
-    ...blocks.slice(assistantRunEnd),
-  ];
+  return withMessageContinuations(blocks);
 }
 
 function withMessageContinuations(
@@ -603,70 +522,6 @@ function isMessageContinuation(
   return true;
 }
 
-function buildToolBlocks(toolCalls: UIToolCall[]): TranscriptBlock[] {
-  const blocks: TranscriptBlock[] = [];
-
-  for (let index = 0; index < toolCalls.length; index += 1) {
-    const toolCall = toolCalls[index];
-    const groupKind = toolGroupKind(toolCall);
-
-    if (groupKind !== "read_search") {
-      blocks.push({
-        kind: "tool_call",
-        key: `tool-${toolCall.id}`,
-        toolCall,
-      });
-      continue;
-    }
-
-    const grouped: UIToolCall[] = [toolCall];
-    let cursor = index + 1;
-    while (
-      cursor < toolCalls.length &&
-      toolGroupKind(toolCalls[cursor]!) === groupKind
-    ) {
-      grouped.push(toolCalls[cursor]!);
-      cursor += 1;
-    }
-
-    if (grouped.length >= 2) {
-      blocks.push({
-        kind: "tool_group",
-        key: `tool-group-${grouped[0]!.id}-${grouped[grouped.length - 1]!.id}`,
-        group: {
-          id: `tool-group-${grouped[0]!.id}-${grouped[grouped.length - 1]!.id}`,
-          kind: "read_search",
-          toolCalls: grouped,
-        },
-      });
-      index = cursor - 1;
-      continue;
-    }
-
-    blocks.push({
-      kind: "tool_call",
-      key: `tool-${toolCall.id}`,
-      toolCall,
-    });
-  }
-
-  return blocks;
-}
-
-function toolGroupKind(toolCall: UIToolCall): ToolCallGroup["kind"] | null {
-  switch (toolCall.name) {
-    case "file_read":
-    case "grep":
-    case "glob":
-    case "web_search":
-    case "web_fetch":
-    case "git":
-      return "read_search";
-    default:
-      return null;
-  }
-}
-
 function blockSearchText(block: TranscriptBlock): string {
   switch (block.kind) {
     case "message":
@@ -687,8 +542,6 @@ function blockSearchText(block: TranscriptBlock): string {
         .toLowerCase();
     case "tool_call":
       return toolCallSearchText(block.toolCall);
-    case "tool_group":
-      return block.group.toolCalls.map(toolCallSearchText).join("\n");
     case "queued_prompt":
       return queuedPromptSearchText(block.prompt);
     default:
