@@ -1,8 +1,12 @@
 package engine
 
 import (
+	"sort"
+	"strings"
+
 	commandspkg "github.com/channyeintun/chan/internal/commands"
 	"github.com/channyeintun/chan/internal/ipc"
+	skillspkg "github.com/channyeintun/chan/internal/skills"
 )
 
 type slashCommandSpec struct {
@@ -160,7 +164,7 @@ func slashCommandSpecs() []slashCommandSpec {
 	}
 }
 
-func slashCommandCatalog() []commandspkg.Descriptor {
+func builtinSlashCommandCatalog() []commandspkg.Descriptor {
 	catalog := make([]commandspkg.Descriptor, 0, len(slashCommandSpecs()))
 	for _, spec := range slashCommandSpecs() {
 		catalog = append(catalog, spec.Descriptor)
@@ -168,6 +172,71 @@ func slashCommandCatalog() []commandspkg.Descriptor {
 	return catalog
 }
 
-func slashCommandDescriptors() []ipc.SlashCommandDescriptorPayload {
-	return commandspkg.Descriptors(slashCommandCatalog())
+func builtinSlashCommandNames() map[string]struct{} {
+	names := make(map[string]struct{}, len(slashCommandSpecs()))
+	for _, spec := range slashCommandSpecs() {
+		names[strings.ToLower(strings.TrimSpace(spec.Descriptor.Name))] = struct{}{}
+	}
+	return names
+}
+
+func skillSlashCommandCatalog(skills []skillspkg.Skill) []commandspkg.Descriptor {
+	builtinNames := builtinSlashCommandNames()
+	catalog := make([]commandspkg.Descriptor, 0, len(skills))
+	seen := make(map[string]struct{}, len(skills))
+	orderedSkills := append([]skillspkg.Skill(nil), skills...)
+	sort.SliceStable(orderedSkills, func(i, j int) bool {
+		return strings.ToLower(strings.TrimSpace(orderedSkills[i].Name)) < strings.ToLower(strings.TrimSpace(orderedSkills[j].Name))
+	})
+	for _, skill := range orderedSkills {
+		name := strings.TrimSpace(skill.Name)
+		if name == "" {
+			continue
+		}
+		key := strings.ToLower(name)
+		if _, exists := builtinNames[key]; exists {
+			continue
+		}
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+		description := strings.TrimSpace(skill.Description)
+		if description == "" {
+			description = "Invoke the " + name + " skill"
+		}
+		catalog = append(catalog, commandspkg.Descriptor{
+			Name:           name,
+			Description:    description,
+			Usage:          "/" + name + " [instructions]",
+			TakesArguments: true,
+		})
+	}
+	return catalog
+}
+
+func slashCommandCatalog(cwd string) ([]commandspkg.Descriptor, error) {
+	catalog := builtinSlashCommandCatalog()
+	skills, err := skillspkg.LoadAll(cwd)
+	if len(skills) == 0 {
+		return catalog, err
+	}
+	return append(catalog, skillSlashCommandCatalog(skills)...), err
+}
+
+func slashCommandDescriptors(cwd string) ([]ipc.SlashCommandDescriptorPayload, error) {
+	catalog, err := slashCommandCatalog(cwd)
+	return commandspkg.Descriptors(catalog), err
+}
+
+func lookupSlashSkill(cwd string, command string) (skillspkg.Skill, bool, error) {
+	if _, exists := builtinSlashCommandNames()[strings.ToLower(strings.TrimSpace(command))]; exists {
+		return skillspkg.Skill{}, false, nil
+	}
+	skills, err := skillspkg.LoadAll(cwd)
+	skill, ok := skillspkg.LookupByName(skills, command)
+	if !ok {
+		return skillspkg.Skill{}, false, err
+	}
+	return skill, true, err
 }

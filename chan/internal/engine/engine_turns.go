@@ -60,6 +60,7 @@ type userTurnContext struct {
 	deps               engineLoopDeps
 	state              *engineLoopState
 	payload            ipc.UserInputPayload
+	explicitSkills     []skillspkg.Skill
 	plannerUserRequest string
 	messageCountBefore int
 	turnID             int
@@ -69,10 +70,14 @@ type userTurnContext struct {
 }
 
 func handleUserInputMessage(ctx context.Context, payload ipc.UserInputPayload, deps engineLoopDeps, state *engineLoopState) error {
+	return handleUserInputMessageWithSkills(ctx, payload, deps, state, nil)
+}
+
+func handleUserInputMessageWithSkills(ctx context.Context, payload ipc.UserInputPayload, deps engineLoopDeps, state *engineLoopState, explicitSkills []skillspkg.Skill) error {
 	if strings.TrimSpace(payload.Text) == "" && len(payload.Images) == 0 {
 		return nil
 	}
-	turn := newUserTurnContext(deps, state, payload)
+	turn := newUserTurnContext(deps, state, payload, explicitSkills)
 	continueTurn, err := turn.prepareInput()
 	if err != nil {
 		return err
@@ -83,12 +88,13 @@ func handleUserInputMessage(ctx context.Context, payload ipc.UserInputPayload, d
 	return turn.run(ctx)
 }
 
-func newUserTurnContext(deps engineLoopDeps, state *engineLoopState, payload ipc.UserInputPayload) *userTurnContext {
+func newUserTurnContext(deps engineLoopDeps, state *engineLoopState, payload ipc.UserInputPayload, explicitSkills []skillspkg.Skill) *userTurnContext {
 	state.queryIndex++
 	return &userTurnContext{
 		deps:               deps,
 		state:              state,
 		payload:            payload,
+		explicitSkills:     append([]skillspkg.Skill(nil), explicitSkills...),
 		plannerUserRequest: payload.Text,
 		messageCountBefore: len(state.messages),
 		turnID:             state.queryIndex,
@@ -392,6 +398,7 @@ func (t *userTurnContext) newQueryRequest(availableSkills []skillspkg.Skill) age
 		Mode:            t.state.mode,
 		SessionID:       t.state.sessionID,
 		Skills:          availableSkills,
+		ExplicitSkills:  t.explicitSkills,
 		Tools:           t.deps.registry.Definitions(),
 		Capabilities:    t.state.client.Capabilities(),
 		ContextWindow:   t.state.client.Capabilities().MaxContextWindow,

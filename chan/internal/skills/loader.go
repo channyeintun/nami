@@ -182,6 +182,39 @@ func SelectRelevant(available []Skill, userPrompt string) []Skill {
 	return selected
 }
 
+// SelectForPrompt returns skills that should be injected for a specific turn.
+// Explicitly invoked skills are always included before auto-selected skills.
+func SelectForPrompt(available []Skill, userPrompt string, explicit []Skill) []Skill {
+	selected := make([]Skill, 0, len(explicit)+maxAutoSelectedSkills)
+	seen := make(map[string]struct{}, len(explicit)+maxAutoSelectedSkills)
+
+	for _, skill := range explicit {
+		key := skillKey(skill.Name)
+		if key == "" {
+			continue
+		}
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+		selected = append(selected, skill)
+	}
+
+	for _, skill := range SelectRelevant(available, userPrompt) {
+		key := skillKey(skill.Name)
+		if key == "" {
+			continue
+		}
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+		selected = append(selected, skill)
+	}
+
+	return selected
+}
+
 // FormatPromptSection renders selected skills as additional system instructions.
 func FormatPromptSection(selected []Skill) string {
 	if len(selected) == 0 {
@@ -302,6 +335,20 @@ func mergeSkills(existing []Skill, next []Skill) []Skill {
 
 func skillKey(name string) string {
 	return strings.ToLower(strings.TrimSpace(name))
+}
+
+// LookupByName finds a skill by its slash-command name.
+func LookupByName(available []Skill, name string) (Skill, bool) {
+	key := skillKey(name)
+	if key == "" {
+		return Skill{}, false
+	}
+	for _, skill := range available {
+		if skillKey(skill.Name) == key {
+			return skill, true
+		}
+	}
+	return Skill{}, false
 }
 
 func tokenSet(text string) map[string]struct{} {

@@ -23,6 +23,7 @@ import (
 	"github.com/channyeintun/chan/internal/ipc"
 	mcppkg "github.com/channyeintun/chan/internal/mcp"
 	"github.com/channyeintun/chan/internal/session"
+	skillspkg "github.com/channyeintun/chan/internal/skills"
 	"github.com/channyeintun/chan/internal/timing"
 	toolpkg "github.com/channyeintun/chan/internal/tools"
 )
@@ -128,7 +129,8 @@ func RunStdioEngine(ctx context.Context, cfg config.Config) error {
 	startupMetrics.Mark("session_persisted")
 
 	// Emit ready event
-	if err := bridge.EmitReady(slashCommandDescriptors()); err != nil {
+	slashDescriptors, slashDescriptorErr := slashCommandDescriptors(cwd)
+	if err := bridge.EmitReady(slashDescriptors); err != nil {
 		return fmt.Errorf("emit ready: %w", err)
 	}
 	startupMetrics.Mark("ready_emitted")
@@ -137,6 +139,11 @@ func RunStdioEngine(ctx context.Context, cfg config.Config) error {
 		"mode":  string(mode),
 		"model": activeModelID,
 	})
+	if slashDescriptorErr != nil {
+		if err := bridge.EmitNotice(fmt.Sprintf("load slash skills: %v", slashDescriptorErr)); err != nil {
+			return err
+		}
+	}
 	if err := emitSessionUpdated(bridge, sessionID, ""); err != nil {
 		return err
 	}
@@ -218,7 +225,7 @@ func RunStdioEngine(ctx context.Context, cfg config.Config) error {
 				return fmt.Errorf("decode slash command: %w", err)
 			}
 
-			slashState, err := handleSlashCommand(
+			slashState, handled, err := handleSlashCommand(
 				ctx,
 				bridge,
 				router,
@@ -241,17 +248,44 @@ func RunStdioEngine(ctx context.Context, cfg config.Config) error {
 			if err != nil {
 				return err
 			}
-			loopState.sessionID = slashState.SessionID
-			loopState.sessionDir = sessionStore.SessionDir(slashState.SessionID)
-			loopState.startedAt = slashState.StartedAt
-			loopState.mode = slashState.Mode
-			loopState.activeModelID = slashState.ActiveModelID
-			loopState.subagentModelID = slashState.SubagentModelID
-			loopState.cwd = slashState.CWD
-			loopState.messages = slashState.Messages
-			modelState.Set(loopState.client, loopState.activeModelID)
-			subagentModelState.Set(loopState.subagentModelID)
-			toolpkg.SetGlobalSessionArtifacts(loopState.sessionID, artifactManager)
+			if handled {
+				loopState.sessionID = slashState.SessionID
+				loopState.sessionDir = sessionStore.SessionDir(slashState.SessionID)
+				loopState.startedAt = slashState.StartedAt
+				loopState.mode = slashState.Mode
+				loopState.activeModelID = slashState.ActiveModelID
+				loopState.subagentModelID = slashState.SubagentModelID
+				loopState.cwd = slashState.CWD
+				loopState.messages = slashState.Messages
+				modelState.Set(loopState.client, loopState.activeModelID)
+				subagentModelState.Set(loopState.subagentModelID)
+				toolpkg.SetGlobalSessionArtifacts(loopState.sessionID, artifactManager)
+				continue
+			}
+
+			skill, ok, skillErr := lookupSlashSkill(loopState.cwd, payload.Command)
+			if skillErr != nil {
+				if err := bridge.EmitNotice(fmt.Sprintf("load skills: %v", skillErr)); err != nil {
+					return err
+				}
+			}
+			if ok {
+				promptText := "/" + strings.TrimSpace(payload.Command)
+				if args := strings.TrimSpace(payload.Args); args != "" {
+					promptText += " " + args
+				}
+				if err := handleUserInputMessageWithSkills(ctx, ipc.UserInputPayload{Text: promptText}, loopDeps, loopState, []skillspkg.Skill{skill}); err != nil {
+					return err
+				}
+				continue
+			}
+
+			if err := bridge.EmitError(fmt.Sprintf("unknown slash command: %s", payload.Command), true); err != nil {
+				return err
+			}
+			if err := bridge.Emit(ipc.EventTurnComplete, ipc.TurnCompletePayload{StopReason: "end_turn"}); err != nil {
+				return err
+			}
 			continue
 		case ipc.MsgModeToggle:
 			if loopState.mode == agent.ModePlan {

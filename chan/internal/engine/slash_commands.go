@@ -2,7 +2,6 @@ package engine
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"time"
 
@@ -36,7 +35,7 @@ func handleSlashCommand(
 	cwd string,
 	messages []api.Message,
 	client *api.LLMClient,
-) (slashCommandState, error) {
+) (slashCommandState, bool, error) {
 	cmd := newSlashCommandContext(
 		ctx,
 		bridge,
@@ -60,19 +59,13 @@ func handleSlashCommand(
 
 	handler, ok := lookupSlashCommandHandler(cmd.command)
 	if !ok {
-		if err := bridge.EmitError(fmt.Sprintf("unknown slash command: %s", payload.Command), true); err != nil {
-			return cmd.state, err
-		}
-		if err := bridge.Emit(ipc.EventTurnComplete, ipc.TurnCompletePayload{StopReason: "end_turn"}); err != nil {
-			return cmd.state, err
-		}
-		return cmd.state, nil
+		return cmd.state, false, nil
 	}
 
 	if err := handler.Handle(cmd); err != nil {
-		return cmd.state, err
+		return cmd.state, true, err
 	}
-	return cmd.state, nil
+	return cmd.state, true, nil
 }
 
 func emitTextResponse(bridge *ipc.Bridge, text string) error {

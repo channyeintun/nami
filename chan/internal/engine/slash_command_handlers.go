@@ -1004,7 +1004,13 @@ func handleClearSlashCommand(cmd *slashCommandContext) error {
 }
 
 func handleHelpSlashCommand(cmd *slashCommandContext) error {
-	return emitTextResponse(cmd.bridge, commandspkg.FormatHelpText(slashCommandCatalog()))
+	catalog, err := slashCommandCatalog(cmd.state.CWD)
+	if err != nil {
+		if noticeErr := cmd.bridge.EmitNotice(fmt.Sprintf("load slash skills: %v", err)); noticeErr != nil {
+			return noticeErr
+		}
+	}
+	return emitTextResponse(cmd.bridge, commandspkg.FormatHelpText(catalog))
 }
 
 func handleStatusSlashCommand(cmd *slashCommandContext) error {

@@ -21,6 +21,7 @@ type QueryRequest struct {
 	Mode            ExecutionMode
 	SessionID       string
 	Skills          []skillspkg.Skill
+	ExplicitSkills  []skillspkg.Skill
 	Tools           []api.ToolDefinition
 	Capabilities    api.ModelCapabilities
 	ContextWindow   int
@@ -81,6 +82,7 @@ type QueryState struct {
 	Mode                ExecutionMode
 	Profile             ExecutionProfile
 	Skills              []skillspkg.Skill
+	ExplicitSkills      []skillspkg.Skill
 	Tools               []api.ToolDefinition
 	Capabilities        api.ModelCapabilities
 	ContextWindow       int
@@ -118,6 +120,7 @@ func NewQueryState(req QueryRequest) *QueryState {
 		Mode:             req.Mode,
 		Profile:          ProfileForMode(req.Mode),
 		Skills:           req.Skills,
+		ExplicitSkills:   req.ExplicitSkills,
 		Tools:            req.Tools,
 		Capabilities:     req.Capabilities,
 		ContextWindow:    req.ContextWindow,

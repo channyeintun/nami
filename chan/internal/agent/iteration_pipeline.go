@@ -171,7 +171,7 @@ func selectSkillsStage(
 	runtime *iterationRuntime,
 	_ func(ipc.StreamEvent, error) bool,
 ) error {
-	selectedSkills := skillspkg.SelectRelevant(state.Skills, runtime.currentUserPrompt)
+	selectedSkills := skillspkg.SelectForPrompt(state.Skills, runtime.currentUserPrompt, state.ExplicitSkills)
 	runtime.skillPrompt = skillspkg.FormatPromptSection(selectedSkills)
 	return nil
 }

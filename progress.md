@@ -2,6 +2,7 @@
 
 ## 2026-04-16
 
+- Made Chan skills invocable as slash commands: startup slash-command descriptors now include loaded skills, `/help` lists them, and entering `/<skill-name> ...` routes through the normal user-turn pipeline while forcing that skill into prompt assembly for deterministic activation.
 - Added a Claude Code-style `/rewind` flow to Chan: the engine now offers an interactive picker of prior user turns, trims later conversation history in-place, rewrites persisted session state, resets the TUI transcript view, and resynchronizes session-memory artifacts so rewound sessions do not retain future context.
 - Restored visible transcript state after `/rewind` by hydrating the TUI from persisted conversation messages, including user and assistant messages plus completed tool-call runs, so rewound sessions no longer come back with an empty chat pane.
 - Applied the same transcript hydration path to `/resume`, so resuming a prior session now repopulates the visible conversation immediately instead of showing only a status response on top of an empty TUI history.
