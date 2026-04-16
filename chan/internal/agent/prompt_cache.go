@@ -17,9 +17,7 @@ type promptCacheEntry struct {
 // sections are not rebuilt on every turn.
 type PromptAssemblyCache struct {
 	base    promptCacheEntry
-	skill   promptCacheEntry
 	memory  promptCacheEntry
-	session promptCacheEntry
 	context promptCacheEntry
 	final   promptCacheEntry
 }
@@ -36,26 +34,20 @@ func (c *PromptAssemblyCache) Compose(basePrompt string, sys SystemContext, turn
 	basePrompt = c.memoize(&c.base, hashStrings("base", basePrompt), func() string {
 		return strings.TrimSpace(basePrompt)
 	})
-	skillPrompt = c.memoize(&c.skill, hashStrings("skill", skillPrompt), func() string {
-		return strings.TrimSpace(skillPrompt)
+	memoryPrompt := c.memoize(&c.memory, memoryInstructionPromptCacheKey(sys.MemoryFiles), func() string {
+		return strings.TrimSpace(FormatMemoryInstructionPrompt(sys.MemoryFiles))
 	})
-	memoryPrompt := c.memoize(&c.memory, memoryPromptCacheKey(currentUserPrompt, recalls), func() string {
-		return strings.TrimSpace(FormatMemoryPrompt(sys.MemoryFiles, currentUserPrompt, recalls))
-	})
-	sessionMemoryPrompt := c.memoize(&c.session, sessionMemoryPromptCacheKey(sessionMemory), func() string {
-		return strings.TrimSpace(FormatSessionMemorySection(sessionMemory))
-	})
-	contextPrompt := c.memoize(&c.context, contextPromptCacheKey(turn), func() string {
-		return strings.TrimSpace(FormatContextPrompt(sys, turn))
+	contextPrompt := c.memoize(&c.context, systemContextPromptCacheKey(sys), func() string {
+		return strings.TrimSpace(FormatSystemContextPrompt(sys))
 	})
 
-	// Live retrieval and attempt log sections change every turn; do not cache them.
-	liveSection := strings.TrimSpace(liveRetrievalSection)
-	attemptSection := strings.TrimSpace(attemptLogSection)
+	if !capabilities.SupportsCaching {
+		return composeLegacySystemPrompt(basePrompt, sys, turn, currentUserPrompt, recalls, sessionMemory, capabilities, skillPrompt, liveRetrievalSection, attemptLogSection)
+	}
 
-	finalKey := hashStrings("final", boolString(capabilities.SupportsCaching), basePrompt, skillPrompt, memoryPrompt, sessionMemoryPrompt, contextPrompt, liveSection, attemptSection)
+	finalKey := hashStrings("final", boolString(capabilities.SupportsCaching), basePrompt, memoryPrompt, contextPrompt)
 	return c.memoize(&c.final, finalKey, func() string {
-		return joinPromptSections(orderedPromptSections(capabilities.SupportsCaching, basePrompt, skillPrompt, memoryPrompt, sessionMemoryPrompt, contextPrompt, liveSection, attemptSection))
+		return joinPromptSections([]string{basePrompt, memoryPrompt, contextPrompt})
 	})
 }
 
@@ -77,18 +69,24 @@ func memoryPromptCacheKey(currentUserPrompt string, recalls []MemoryRecallResult
 	return hashStrings(parts...)
 }
 
-func sessionMemoryPromptCacheKey(snapshot SessionMemorySnapshot) string {
-	return hashStrings("session-memory", snapshot.ArtifactID, snapshot.Title, snapshot.Content, fmt.Sprintf("%d", snapshot.Version))
+func memoryInstructionPromptCacheKey(files []MemoryFile) string {
+	parts := []string{"memory-instructions"}
+	for _, file := range files {
+		if file.Type == memoryTypeProjectIndex || file.Type == memoryTypeUserIndex {
+			continue
+		}
+		parts = append(parts, file.Path, file.Type, file.Content)
+	}
+	return hashStrings(parts...)
 }
 
-func contextPromptCacheKey(turn TurnContext) string {
+func systemContextPromptCacheKey(sys SystemContext) string {
 	return hashStrings(
 		"context",
-		turn.CurrentDir,
-		turn.GitBranch,
-		turn.GitStatus,
-		turn.RecentLog,
-		turn.DirectoryListing,
+		sys.MainBranch,
+		sys.GitUser,
+		sys.OS,
+		sys.Architecture,
 	)
 }
 

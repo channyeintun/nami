@@ -200,10 +200,32 @@ func composeSystemPromptStage(
 			runtime.liveRetrievalSection,
 			runtime.attemptLogSection,
 		)
+		state.PromptInjection = composePromptInjection(
+			state.SystemContext,
+			state.TurnContext,
+			runtime.currentUserPrompt,
+			runtime.memoryRecalls,
+			runtime.sessionMemory,
+			state.Capabilities,
+			runtime.skillPrompt,
+			runtime.liveRetrievalSection,
+			runtime.attemptLogSection,
+		)
 		return nil
 	}
 	state.SystemPrompt = composeSystemPrompt(
 		basePrompt,
+		state.SystemContext,
+		state.TurnContext,
+		runtime.currentUserPrompt,
+		runtime.memoryRecalls,
+		runtime.sessionMemory,
+		state.Capabilities,
+		runtime.skillPrompt,
+		runtime.liveRetrievalSection,
+		runtime.attemptLogSection,
+	)
+	state.PromptInjection = composePromptInjection(
 		state.SystemContext,
 		state.TurnContext,
 		runtime.currentUserPrompt,

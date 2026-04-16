@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-	"time"
 )
 
 // SystemContext holds session-stable context (cached once per session).
@@ -21,7 +20,6 @@ type SystemContext struct {
 // TurnContext holds volatile context refreshed every user turn.
 type TurnContext struct {
 	CurrentDir       string
-	CurrentTime      string
 	GitBranch        string
 	GitStatus        string
 	RecentLog        string
@@ -48,7 +46,6 @@ func LoadSystemContext() SystemContext {
 func LoadTurnContext() TurnContext {
 	ctx := TurnContext{}
 	ctx.CurrentDir, _ = os.Getwd()
-	ctx.CurrentTime = time.Now().Format(time.RFC3339)
 	ctx.GitBranch = gitCommand("branch", "--show-current")
 	status := gitCommand("status", "--short")
 	if len(status) > 2000 {
@@ -60,17 +57,24 @@ func LoadTurnContext() TurnContext {
 	return ctx
 }
 
-// FormatContextPrompt formats system + turn context for the system prompt.
-func FormatContextPrompt(sys SystemContext, turn TurnContext) string {
+// FormatSystemContextPrompt formats session-stable environment context.
+func FormatSystemContextPrompt(sys SystemContext) string {
 	var b strings.Builder
 	b.WriteString("<environment>\n")
-	b.WriteString("Current time: " + turn.CurrentTime + "\n")
-	b.WriteString("Present working directory (pwd): " + turn.CurrentDir + "\n")
 	b.WriteString("OS: " + sys.OS + "\n")
 	b.WriteString("Architecture: " + sys.Architecture + "\n")
-	b.WriteString("Git branch: " + firstNonEmptyContext(turn.GitBranch, "(not on a git branch)") + "\n")
 	b.WriteString("Main branch: " + sys.MainBranch + "\n")
 	b.WriteString("Git user: " + sys.GitUser + "\n")
+	b.WriteString("</environment>\n")
+	return b.String()
+}
+
+// FormatTurnContextPrompt formats per-turn working context for transient injection.
+func FormatTurnContextPrompt(turn TurnContext) string {
+	var b strings.Builder
+	b.WriteString("<working_context>\n")
+	b.WriteString("Present working directory (pwd): " + turn.CurrentDir + "\n")
+	b.WriteString("Git branch: " + firstNonEmptyContext(turn.GitBranch, "(not on a git branch)") + "\n")
 	if turn.GitStatus != "" {
 		b.WriteString("\nGit status:\n" + turn.GitStatus + "\n")
 	}
@@ -80,8 +84,13 @@ func FormatContextPrompt(sys SystemContext, turn TurnContext) string {
 	if turn.DirectoryListing != "" {
 		b.WriteString("\nFiles and directories in working directory:\n" + turn.DirectoryListing + "\n")
 	}
-	b.WriteString("</environment>\n")
+	b.WriteString("</working_context>\n")
 	return b.String()
+}
+
+// FormatContextPrompt formats the combined environment context.
+func FormatContextPrompt(sys SystemContext, turn TurnContext) string {
+	return strings.TrimSpace(FormatSystemContextPrompt(sys) + "\n\n" + FormatTurnContextPrompt(turn))
 }
 
 func firstNonEmptyContext(value string, fallback string) string {

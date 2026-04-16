@@ -197,15 +197,13 @@ func readMemoryIndex(path string) (string, error) {
 	return content, nil
 }
 
-// FormatMemoryPrompt renders loaded instruction files into a system prompt section.
-func FormatMemoryPrompt(files []MemoryFile, currentUserPrompt string, recalls []MemoryRecallResult) string {
+// FormatMemoryInstructionPrompt renders session-stable instruction content.
+func FormatMemoryInstructionPrompt(files []MemoryFile) string {
 	instructions := make([]MemoryFile, 0, len(files))
-	memoryIndexes := make([]MemoryFile, 0, len(files))
-	recallByPath := memoryRecallLookup(recalls)
 	for _, f := range files {
 		switch f.Type {
 		case memoryTypeProjectIndex, memoryTypeUserIndex:
-			memoryIndexes = append(memoryIndexes, f)
+			continue
 		default:
 			instructions = append(instructions, f)
 		}
@@ -226,6 +224,33 @@ func FormatMemoryPrompt(files []MemoryFile, currentUserPrompt string, recalls []
 			b.WriteString("\n</memory_file>\n\n")
 		}
 	}
+
+	if writeGuidance != "" {
+		if b.Len() > 0 {
+			b.WriteString("\n\n")
+		}
+		b.WriteString(writeGuidance)
+	}
+
+	if b.Len() == 0 {
+		return ""
+	}
+
+	return strings.TrimSpace(b.String())
+}
+
+// FormatRelevantMemoryPrompt renders recalled durable memory snippets relevant to the current turn.
+func FormatRelevantMemoryPrompt(files []MemoryFile, currentUserPrompt string, recalls []MemoryRecallResult) string {
+	memoryIndexes := make([]MemoryFile, 0, len(files))
+	recallByPath := memoryRecallLookup(recalls)
+	for _, f := range files {
+		switch f.Type {
+		case memoryTypeProjectIndex, memoryTypeUserIndex:
+			memoryIndexes = append(memoryIndexes, f)
+		}
+	}
+
+	var b strings.Builder
 
 	if len(memoryIndexes) > 0 {
 		renderedIndexes := make([]string, 0, len(memoryIndexes))
@@ -259,18 +284,19 @@ func FormatMemoryPrompt(files []MemoryFile, currentUserPrompt string, recalls []
 		}
 	}
 
-	if writeGuidance != "" {
-		if b.Len() > 0 {
-			b.WriteString("\n\n")
-		}
-		b.WriteString(writeGuidance)
-	}
-
 	if b.Len() == 0 {
 		return ""
 	}
 
 	return strings.TrimSpace(b.String())
+}
+
+// FormatMemoryPrompt renders all loaded memory prompt sections.
+func FormatMemoryPrompt(files []MemoryFile, currentUserPrompt string, recalls []MemoryRecallResult) string {
+	return strings.TrimSpace(joinPromptSections([]string{
+		FormatMemoryInstructionPrompt(files),
+		FormatRelevantMemoryPrompt(files, currentUserPrompt, recalls),
+	}))
 }
 
 func userMemoryIndexPath() string {

@@ -79,6 +79,7 @@ type QueryState struct {
 	SystemContext       SystemContext
 	TurnContext         TurnContext
 	PromptCache         *PromptAssemblyCache
+	PromptInjection     string
 	Mode                ExecutionMode
 	Profile             ExecutionProfile
 	Skills              []skillspkg.Skill
@@ -199,6 +200,16 @@ func QueryStream(ctx context.Context, req QueryRequest, deps QueryDeps) iter.Seq
 }
 
 func composeSystemPrompt(basePrompt string, sys SystemContext, turn TurnContext, currentUserPrompt string, recalls []MemoryRecallResult, sessionMemory SessionMemorySnapshot, capabilities api.ModelCapabilities, skillPrompt string, liveRetrievalSection string, attemptLogSection string) string {
+	if capabilities.SupportsCaching {
+		basePrompt = strings.TrimSpace(basePrompt)
+		memoryInstructionsPrompt := strings.TrimSpace(FormatMemoryInstructionPrompt(sys.MemoryFiles))
+		systemContextPrompt := strings.TrimSpace(FormatSystemContextPrompt(sys))
+		return joinPromptSections([]string{basePrompt, memoryInstructionsPrompt, systemContextPrompt})
+	}
+	return composeLegacySystemPrompt(basePrompt, sys, turn, currentUserPrompt, recalls, sessionMemory, capabilities, skillPrompt, liveRetrievalSection, attemptLogSection)
+}
+
+func composeLegacySystemPrompt(basePrompt string, sys SystemContext, turn TurnContext, currentUserPrompt string, recalls []MemoryRecallResult, sessionMemory SessionMemorySnapshot, capabilities api.ModelCapabilities, skillPrompt string, liveRetrievalSection string, attemptLogSection string) string {
 	contextPrompt := strings.TrimSpace(FormatContextPrompt(sys, turn))
 	memoryPrompt := strings.TrimSpace(FormatMemoryPrompt(sys.MemoryFiles, currentUserPrompt, recalls))
 	sessionMemoryPrompt := strings.TrimSpace(FormatSessionMemorySection(sessionMemory))
@@ -207,6 +218,21 @@ func composeSystemPrompt(basePrompt string, sys SystemContext, turn TurnContext,
 	liveRetrievalSection = strings.TrimSpace(liveRetrievalSection)
 	attemptLogSection = strings.TrimSpace(attemptLogSection)
 	return joinPromptSections(orderedPromptSections(capabilities.SupportsCaching, basePrompt, skillPrompt, memoryPrompt, sessionMemoryPrompt, contextPrompt, liveRetrievalSection, attemptLogSection))
+}
+
+func composePromptInjection(sys SystemContext, turn TurnContext, currentUserPrompt string, recalls []MemoryRecallResult, sessionMemory SessionMemorySnapshot, capabilities api.ModelCapabilities, skillPrompt string, liveRetrievalSection string, attemptLogSection string) string {
+	if !capabilities.SupportsCaching {
+		return ""
+	}
+
+	return joinPromptSections([]string{
+		strings.TrimSpace(skillPrompt),
+		strings.TrimSpace(FormatRelevantMemoryPrompt(sys.MemoryFiles, currentUserPrompt, recalls)),
+		strings.TrimSpace(FormatSessionMemorySection(sessionMemory)),
+		strings.TrimSpace(FormatTurnContextPrompt(turn)),
+		strings.TrimSpace(liveRetrievalSection),
+		strings.TrimSpace(attemptLogSection),
+	})
 }
 
 func orderedPromptSections(supportsCaching bool, basePrompt, skillPrompt, memoryPrompt, sessionMemoryPrompt, contextPrompt, liveRetrievalSection, attemptLogSection string) []string {

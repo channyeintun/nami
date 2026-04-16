@@ -1,5 +1,13 @@
 # Progress
 
+## 2026-04-17
+
+- Compared the prompt-caching guidance in `reference/prompt-caching.txt` and the Claude Code reference implementation against Chan, identified the main architectural gaps in Chan's current prompt-caching approach, and added `plan.md` with a phased remediation plan that explicitly excludes test work.
+- Expanded `plan.md` with a Claude Code reference mapping section so each prompt-caching phase is tied back to the specific `reference/claudecode/` files that informed it.
+- Tightened `plan.md` with one missing prompt-caching detail from the reference: Claude Code keeps normal date context conversation-stable and isolates cache-breaking system injection as an explicit path, while Chan currently injects a fresh per-turn timestamp into prompt context; the plan now calls out that exact fix and a broader audit of prompt-visible metadata like `updated_at`.
+- Compared Chan's transcript rendering and hydration flow against `reference/vscode-copilot-chat/`, identified that Chan currently reorders and groups timeline content in the renderer instead of preserving an ordered mixed stream of progress, text, and tool activity, and added `chat-plan.md` with a phased plan to move Chan toward a Copilot-style append-only timeline model.
+- Implemented the first prompt-caching phase-1 slice in the Go agent loop: for caching-capable models, the system prompt now keeps only stable base instructions, stable memory instructions, and stable environment context, while turn-scoped context such as recalled memory, session memory, live retrieval, attempt log, and working-directory/git details are injected transiently into the request message path instead of rebuilding the system prompt every iteration; also removed the per-turn `Current time:` prompt line.
+
 ## 2026-04-16
 
 - Updated the static web docs in `web/docs.html` to document the new MCP management CLI, added sidebar and mobile-nav links for MCP management, and pointed the MCP configuration section at `chan mcp add` for routine setup.

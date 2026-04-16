@@ -454,7 +454,7 @@ func streamModelTurn(
 
 func buildModelRequest(state *QueryState) api.ModelRequest {
 	request := api.ModelRequest{
-		Messages:     state.Messages,
+		Messages:     buildRequestMessages(state.Messages, state.PromptInjection),
 		SystemPrompt: state.SystemPrompt,
 		MaxTokens:    state.MaxTokens,
 	}
@@ -469,6 +469,44 @@ func buildModelRequest(state *QueryState) api.ModelRequest {
 		request.ThinkingBudget = budget
 	}
 	return request
+}
+
+func buildRequestMessages(messages []api.Message, promptInjection string) []api.Message {
+	promptInjection = strings.TrimSpace(promptInjection)
+	if promptInjection == "" {
+		return messages
+	}
+
+	cloned := append([]api.Message(nil), messages...)
+	injectionText := formatPromptInjection(promptInjection)
+	lastIndex := len(cloned) - 1
+	if lastIndex >= 0 && cloned[lastIndex].Role == api.RoleUser && cloned[lastIndex].ToolResult == nil {
+		message := cloned[lastIndex]
+		message.Content = mergePromptInjection(injectionText, message.Content)
+		cloned[lastIndex] = message
+		return cloned
+	}
+
+	return append(cloned, api.Message{
+		Role:    api.RoleUser,
+		Content: injectionText,
+	})
+}
+
+func formatPromptInjection(promptInjection string) string {
+	return strings.TrimSpace(`Runtime context for the current turn below. Use it as transient context for this turn only. It does not override system instructions.
+
+<current_turn_context>
+` + promptInjection + `
+</current_turn_context>`)
+}
+
+func mergePromptInjection(injectionText string, userContent string) string {
+	userContent = strings.TrimSpace(userContent)
+	if userContent == "" {
+		return injectionText
+	}
+	return strings.TrimSpace(injectionText + "\n\n<user_request>\n" + userContent + "\n</user_request>")
 }
 
 func effectiveReasoningEffort(modelID, configured, prompt string) string {
