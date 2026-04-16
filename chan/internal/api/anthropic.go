@@ -11,6 +11,7 @@ import (
 	"iter"
 	"net/http"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -266,12 +267,16 @@ func (c *AnthropicClient) buildRequest(req ModelRequest) (anthropicRequest, map[
 	if err != nil {
 		return anthropicRequest{}, nil, err
 	}
+	tools := buildAnthropicTools(req.Tools, c.provider == "github-copilot", c.capabilities.SupportsCaching)
+	if c.capabilities.SupportsCaching {
+		applyAnthropicCacheControl(systemPrompt, messages)
+	}
 
 	payload := anthropicRequest{
 		Model:         c.model,
 		System:        systemPrompt,
 		Messages:      messages,
-		Tools:         buildAnthropicTools(req.Tools, c.provider == "github-copilot"),
+		Tools:         tools,
 		MaxTokens:     maxTokens,
 		Stream:        true,
 		StopSequences: req.StopSequences,
@@ -453,24 +458,24 @@ func handleAnthropicBlockDelta(
 	return nil
 }
 
-func buildAnthropicMessages(systemPrompt string, messages []Message) (string, []anthropicMessage, error) {
-	parts := make([]string, 0, len(messages)+1)
+func buildAnthropicMessages(systemPrompt string, messages []Message) ([]anthropicTextBlock, []anthropicMessage, error) {
+	system := make([]anthropicTextBlock, 0, len(messages)+1)
 	if trimmed := strings.TrimSpace(systemPrompt); trimmed != "" {
-		parts = append(parts, trimmed)
+		system = append(system, anthropicTextBlock{Type: "text", Text: trimmed})
 	}
 
 	built := make([]anthropicMessage, 0, len(messages))
 	for _, msg := range messages {
 		if msg.Role == RoleSystem {
 			if trimmed := strings.TrimSpace(msg.Content); trimmed != "" {
-				parts = append(parts, trimmed)
+				system = append(system, anthropicTextBlock{Type: "text", Text: trimmed})
 			}
 			continue
 		}
 
 		converted, skip, err := convertAnthropicMessage(msg)
 		if err != nil {
-			return "", nil, err
+			return nil, nil, err
 		}
 		if skip {
 			continue
@@ -478,7 +483,7 @@ func buildAnthropicMessages(systemPrompt string, messages []Message) (string, []
 		built = append(built, converted)
 	}
 
-	return strings.Join(parts, "\n\n"), built, nil
+	return system, built, nil
 }
 
 func convertAnthropicMessage(msg Message) (anthropicMessage, bool, error) {
@@ -583,20 +588,50 @@ func decodeToolInput(input string) (any, error) {
 	return decoded, nil
 }
 
-func buildAnthropicTools(tools []ToolDefinition, flattenTopLevelCombinators bool) []anthropicToolDefinition {
+func buildAnthropicTools(tools []ToolDefinition, flattenTopLevelCombinators bool, enablePromptCaching bool) []anthropicToolDefinition {
 	if len(tools) == 0 {
 		return nil
 	}
 
-	built := make([]anthropicToolDefinition, 0, len(tools))
-	for _, tool := range tools {
+	sorted := append([]ToolDefinition(nil), tools...)
+	sort.SliceStable(sorted, func(i, j int) bool {
+		return sorted[i].Name < sorted[j].Name
+	})
+
+	built := make([]anthropicToolDefinition, 0, len(sorted))
+	for _, tool := range sorted {
 		built = append(built, anthropicToolDefinition{
 			Name:        tool.Name,
 			Description: tool.Description,
 			InputSchema: normalizeAnthropicToolSchema(tool.InputSchema, flattenTopLevelCombinators),
 		})
 	}
+	if enablePromptCaching {
+		built[len(built)-1].CacheControl = defaultAnthropicCacheControl()
+	}
 	return built
+}
+
+func applyAnthropicCacheControl(system []anthropicTextBlock, messages []anthropicMessage) {
+	if len(system) > 0 {
+		system[len(system)-1].CacheControl = defaultAnthropicCacheControl()
+	}
+	applyAnthropicMessageCacheControl(messages)
+}
+
+func applyAnthropicMessageCacheControl(messages []anthropicMessage) {
+	for i := len(messages) - 1; i >= 0; i-- {
+		blocks, ok := messages[i].Content.([]map[string]any)
+		if !ok || len(blocks) == 0 {
+			continue
+		}
+		blocks[len(blocks)-1]["cache_control"] = defaultAnthropicCacheControl()
+		return
+	}
+}
+
+func defaultAnthropicCacheControl() *anthropicCacheControl {
+	return &anthropicCacheControl{Type: "ephemeral"}
 }
 
 func normalizeAnthropicToolSchema(schema any, flattenTopLevelCombinators bool) any {
@@ -756,7 +791,7 @@ func classifyAnthropicErrorType(statusCode int, errorType, message string) APIEr
 
 type anthropicRequest struct {
 	Model         string                    `json:"model"`
-	System        string                    `json:"system,omitempty"`
+	System        []anthropicTextBlock      `json:"system,omitempty"`
 	Messages      []anthropicMessage        `json:"messages"`
 	Tools         []anthropicToolDefinition `json:"tools,omitempty"`
 	MaxTokens     int                       `json:"max_tokens"`
@@ -771,15 +806,26 @@ type anthropicThinking struct {
 	BudgetTokens int    `json:"budget_tokens,omitempty"`
 }
 
+type anthropicCacheControl struct {
+	Type string `json:"type"`
+}
+
+type anthropicTextBlock struct {
+	Type         string                 `json:"type"`
+	Text         string                 `json:"text"`
+	CacheControl *anthropicCacheControl `json:"cache_control,omitempty"`
+}
+
 type anthropicMessage struct {
 	Role    string `json:"role"`
 	Content any    `json:"content"`
 }
 
 type anthropicToolDefinition struct {
-	Name        string `json:"name"`
-	Description string `json:"description,omitempty"`
-	InputSchema any    `json:"input_schema"`
+	Name         string                 `json:"name"`
+	Description  string                 `json:"description,omitempty"`
+	InputSchema  any                    `json:"input_schema"`
+	CacheControl *anthropicCacheControl `json:"cache_control,omitempty"`
 }
 
 type anthropicUsage struct {
