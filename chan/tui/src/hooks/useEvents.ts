@@ -26,6 +26,7 @@ import type {
   ModeChangedPayload,
   ModelChangedPayload,
   PermissionRequestPayload,
+  ProgressPayload,
   RateLimitUpdatePayload,
   RewindSelectionRequestedPayload,
   RewindSelectionTurnPayload,
@@ -156,9 +157,16 @@ export interface UIAssistantMessage extends UIMessageBase {
 
 export type UIMessage = UIUserMessage | UIAssistantMessage | UISystemMessage;
 
+export interface UIProgressEntry {
+  id: string;
+  text: string;
+  timestamp: string;
+}
+
 export interface UITranscriptEntry {
   id: string;
-  kind: "message" | "tool_call" | "artifact";
+  kind: "message" | "tool_call" | "artifact" | "progress";
+  refId?: string;
 }
 
 export type UIToolStatus =
@@ -271,6 +279,7 @@ export interface EngineUIState {
   ready: boolean;
   slashCommands: UISlashCommand[];
   messages: UIMessage[];
+  progressEntries: UIProgressEntry[];
   transcript: UITranscriptEntry[];
   liveAssistantBlocks: UIAssistantBlock[];
   activeTurnStatus: UIActiveTurnStatus;
@@ -347,6 +356,7 @@ const initialState = (model: string, mode: string): EngineUIState => ({
   ready: false,
   slashCommands: [],
   messages: [],
+  progressEntries: [],
   transcript: [],
   liveAssistantBlocks: [],
   activeTurnStatus: "idle",
@@ -424,6 +434,14 @@ function createSystemMessage(
     role: "system",
     text,
     tone,
+    timestamp: new Date().toISOString(),
+  };
+}
+
+function createProgressEntry(id: string, text: string): UIProgressEntry {
+  return {
+    id,
+    text,
     timestamp: new Date().toISOString(),
   };
 }
@@ -556,6 +574,32 @@ export function useEvents(initialModel: string, initialMode: string) {
             p.text,
           ),
           activeTurnStatus: "thinking",
+          isStreaming: true,
+          statusLine: null,
+          error: null,
+        }));
+        break;
+      }
+      case "progress": {
+        const p = event.payload as ProgressPayload;
+        const progressID = stringOrEmpty(p.id);
+        const progressMessage = stringOrEmpty(p.message);
+        if (!progressID || !progressMessage) {
+          break;
+        }
+
+        setUIState((s) => ({
+          ...s,
+          progressEntries: upsertProgressEntry(
+            s.progressEntries,
+            createProgressEntry(progressID, progressMessage),
+          ),
+          transcript: appendTranscriptEntry(s.transcript, {
+            id: progressID,
+            kind: "progress",
+          }),
+          activeTurnStatus:
+            s.activeTurnStatus === "idle" ? "working" : s.activeTurnStatus,
           isStreaming: true,
           statusLine: null,
           error: null,
@@ -967,6 +1011,7 @@ export function useEvents(initialModel: string, initialMode: string) {
         setUIState((s) => ({
           ...s,
           messages: normalizeHydratedMessages(p.messages),
+          progressEntries: [],
           toolCalls: normalizeHydratedToolCalls(p.tool_calls),
           transcript: normalizeHydratedTranscriptEntries(p.transcript),
           liveAssistantBlocks: [],
@@ -1274,6 +1319,7 @@ export function useEvents(initialModel: string, initialMode: string) {
         setUIState((s) => ({
           ...s,
           messages: [],
+          progressEntries: [],
           transcript: [],
           liveAssistantBlocks: [],
           activeTurnStatus: "idle",
@@ -1317,6 +1363,7 @@ export function useEvents(initialModel: string, initialMode: string) {
           const normalizedTitle = p.title?.trim() ? p.title.trim() : null;
           const hasSessionScopedState =
             s.messages.length > 0 ||
+            s.progressEntries.length > 0 ||
             s.transcript.length > 0 ||
             s.liveAssistantBlocks.length > 0 ||
             s.toolCalls.length > 0 ||
@@ -1341,6 +1388,7 @@ export function useEvents(initialModel: string, initialMode: string) {
             return {
               ...s,
               messages: [],
+              progressEntries: [],
               transcript: [],
               liveAssistantBlocks: [],
               activeTurnStatus: "idle",
@@ -1819,7 +1867,12 @@ function normalizeHydratedTranscriptEntries(
     if (typeof entry?.id !== "string" || entry.id.trim().length === 0) {
       return [];
     }
-    if (entry.kind !== "message" && entry.kind !== "tool_call") {
+    if (
+      entry.kind !== "message" &&
+      entry.kind !== "tool_call" &&
+      entry.kind !== "artifact" &&
+      entry.kind !== "progress"
+    ) {
       return [];
     }
 
@@ -1827,6 +1880,7 @@ function normalizeHydratedTranscriptEntries(
       {
         id: entry.id.trim(),
         kind: entry.kind,
+        refId: stringOrUndefined(entry.ref_id),
       },
     ];
   });
@@ -3084,6 +3138,27 @@ function upsertArtifact(
     (artifact) => artifact.id !== nextArtifact.id,
   );
   return [nextArtifact, ...remaining];
+}
+
+function upsertProgressEntry(
+  progressEntries: UIProgressEntry[],
+  nextProgressEntry: UIProgressEntry,
+): UIProgressEntry[] {
+  const existing = progressEntries.find(
+    (progressEntry) => progressEntry.id === nextProgressEntry.id,
+  );
+  if (!existing) {
+    return [...progressEntries, nextProgressEntry];
+  }
+
+  return progressEntries.map((progressEntry) =>
+    progressEntry.id === nextProgressEntry.id
+      ? {
+          ...progressEntry,
+          ...nextProgressEntry,
+        }
+      : progressEntry,
+  );
 }
 
 function appendTranscriptEntry(

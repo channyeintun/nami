@@ -2,6 +2,7 @@
 export type EventType =
   | "token_delta"
   | "thinking_delta"
+  | "progress"
   | "turn_complete"
   | "tool_start"
   | "tool_progress"
@@ -77,6 +78,11 @@ export interface UserInputPayload {
 // Typed payloads
 export interface TokenDeltaPayload {
   text: string;
+}
+
+export interface ProgressPayload {
+  id: string;
+  message: string;
 }
 
 export interface TurnCompletePayload {
@@ -267,6 +273,7 @@ export interface ConversationHydratedToolCallPayload {
 export interface ConversationHydratedTranscriptEntryPayload {
   id: string;
   kind: string;
+  ref_id?: string;
 }
 
 export interface ConversationHydratedPayload {

@@ -13,6 +13,7 @@ import type {
   UIArtifact,
   UIAssistantMessage,
   UIMessage,
+  UIProgressEntry,
   UISystemMessage,
   UIUserMessage,
   UIToolCall,
@@ -31,6 +32,7 @@ import UserTextMessage from "./messages/UserTextMessage.js";
 
 interface StreamOutputProps {
   messages: UIMessage[];
+  progressEntries: UIProgressEntry[];
   toolCalls: UIToolCall[];
   transcript: UITranscriptEntry[];
   artifacts: UIArtifact[];
@@ -67,6 +69,7 @@ type TranscriptBlock =
       key: string;
       prompt: QueuedPromptPreview;
     }
+  | { kind: "progress"; key: string; progress: UIProgressEntry }
   | { kind: "artifact"; key: string; artifact: UIArtifact }
   | { kind: "tool_call"; key: string; toolCall: UIToolCall };
 
@@ -83,6 +86,7 @@ type DisplayBlock =
 
 const StreamOutput: FC<StreamOutputProps> = ({
   messages,
+  progressEntries,
   toolCalls,
   transcript,
   artifacts,
@@ -107,6 +111,10 @@ const StreamOutput: FC<StreamOutputProps> = ({
     () => new Map(toolCalls.map((toolCall) => [toolCall.id, toolCall])),
     [toolCalls],
   );
+  const progressById = useMemo(
+    () => new Map(progressEntries.map((progress) => [progress.id, progress])),
+    [progressEntries],
+  );
   const artifactById = useMemo(
     () => new Map(artifacts.map((artifact) => [artifact.id, artifact])),
     [artifacts],
@@ -117,9 +125,10 @@ const StreamOutput: FC<StreamOutputProps> = ({
         transcript,
         messageById,
         toolCallById,
+        progressById,
         artifactById,
       ),
-    [artifactById, messageById, toolCallById, transcript],
+    [artifactById, messageById, progressById, toolCallById, transcript],
   );
   const displayBlocks = useMemo(() => {
     const items: DisplayBlock[] = transcriptBlocks.map((block) => ({
@@ -308,6 +317,15 @@ function renderTranscriptBlock(
     );
   }
 
+  if (block.kind === "progress") {
+    return (
+      <Box key={block.key} flexDirection="column">
+        {searchLabel}
+        <ProgressMessage progress={block.progress} />
+      </Box>
+    );
+  }
+
   if (block.kind === "tool_call") {
     return (
       <Box key={block.key} flexDirection="column">
@@ -390,6 +408,8 @@ function estimateDisplayBlockHeight(block: DisplayBlock | undefined): number {
   switch (block.block.kind) {
     case "artifact":
       return estimateArtifactHeight(block.block.artifact);
+    case "progress":
+      return 3;
     case "tool_call":
       return 4;
     case "queued_prompt":
@@ -426,6 +446,7 @@ function buildTranscriptBlocks(
   transcript: UITranscriptEntry[],
   messageById: Map<string, UIMessage>,
   toolCallById: Map<string, UIToolCall>,
+  progressById: Map<string, UIProgressEntry>,
   artifactById: Map<string, UIArtifact>,
 ): TranscriptBlock[] {
   const blocks: TranscriptBlock[] = [];
@@ -435,8 +456,10 @@ function buildTranscriptBlocks(
       continue;
     }
 
+    const refID = entry.refId ?? entry.id;
+
     if (entry.kind === "artifact") {
-      const artifact = artifactById.get(entry.id);
+      const artifact = artifactById.get(refID);
       if (!artifact) {
         continue;
       }
@@ -449,8 +472,22 @@ function buildTranscriptBlocks(
       continue;
     }
 
+    if (entry.kind === "progress") {
+      const progress = progressById.get(refID);
+      if (!progress) {
+        continue;
+      }
+
+      blocks.push({
+        kind: "progress",
+        key: `progress-${progress.id}`,
+        progress,
+      });
+      continue;
+    }
+
     if (entry.kind !== "tool_call") {
-      const message = messageById.get(entry.id);
+      const message = messageById.get(refID);
       if (!message) {
         continue;
       }
@@ -464,7 +501,7 @@ function buildTranscriptBlocks(
       continue;
     }
 
-    const toolCall = toolCallById.get(entry.id);
+    const toolCall = toolCallById.get(refID);
     if (!toolCall) {
       continue;
     }
@@ -477,6 +514,19 @@ function buildTranscriptBlocks(
   }
 
   return withMessageContinuations(blocks);
+}
+
+function ProgressMessage({ progress }: { progress: UIProgressEntry }) {
+  return (
+    <MessageRow markerColor="$primary" markerDim>
+      <Text color="$primary" dimColor>
+        <Text bold>Progress</Text>
+      </Text>
+      <Box width="100%" minWidth={0}>
+        <PreservedText text={progress.text} color="$muted" dimColor />
+      </Box>
+    </MessageRow>
+  );
 }
 
 function withMessageContinuations(
@@ -526,6 +576,8 @@ function blockSearchText(block: TranscriptBlock): string {
   switch (block.kind) {
     case "message":
       return messageSearchText(block.message);
+    case "progress":
+      return block.progress.text.toLowerCase();
     case "artifact":
       return [
         block.artifact.title,

@@ -14,6 +14,7 @@ const (
 	// Model output
 	EventTokenDelta    EventType = "token_delta"
 	EventThinkingDelta EventType = "thinking_delta"
+	EventProgress      EventType = "progress"
 	EventTurnComplete  EventType = "turn_complete"
 
 	// Tool lifecycle
@@ -95,6 +96,11 @@ type ClientMessage struct {
 
 type TokenDeltaPayload struct {
 	Text string `json:"text"`
+}
+
+type ProgressPayload struct {
+	ID      string `json:"id"`
+	Message string `json:"message"`
 }
 
 type TurnCompletePayload struct {
@@ -213,8 +219,9 @@ type ConversationHydratedToolCallPayload struct {
 }
 
 type ConversationHydratedTranscriptEntryPayload struct {
-	ID   string `json:"id"`
-	Kind string `json:"kind"`
+	ID    string `json:"id"`
+	Kind  string `json:"kind"`
+	RefID string `json:"ref_id,omitempty"`
 }
 
 type ConversationHydratedPayload struct {

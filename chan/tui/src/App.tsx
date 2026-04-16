@@ -583,6 +583,7 @@ const App: FC<AppProps> = ({ enginePath, model, mode }) => {
 
           <StreamOutput
             messages={uiState.messages}
+            progressEntries={uiState.progressEntries}
             toolCalls={uiState.toolCalls}
             transcript={uiState.transcript}
             artifacts={visibleArtifacts}
