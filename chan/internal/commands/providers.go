@@ -12,6 +12,11 @@ import (
 	"github.com/channyeintun/chan/internal/ipc"
 )
 
+const (
+	ansiReset = "\x1b[0m"
+	ansiBold  = "\x1b[1m"
+)
+
 type ProviderStatus struct {
 	ID           string
 	Label        string
@@ -33,13 +38,13 @@ type ProviderSnapshot struct {
 func FormatProviderSnapshot(snapshot ProviderSnapshot) string {
 	lines := make([]string, 0, len(snapshot.Providers)*2+4)
 	if snapshot.ActiveProvider != "" && snapshot.ActiveModel != "" {
-		lines = append(lines, fmt.Sprintf("Active selection: %s/%s", snapshot.ActiveProvider, snapshot.ActiveModel))
+		lines = append(lines, fmt.Sprintf("Active selection: %s/%s", colorProviderName(snapshot.ActiveProvider), snapshot.ActiveModel))
 	} else if snapshot.ActiveModel != "" {
 		lines = append(lines, fmt.Sprintf("Active selection: %s", snapshot.ActiveModel))
 	}
 
 	if firstUsable, ok := snapshot.FirstUsable(); ok {
-		lines = append(lines, fmt.Sprintf("First usable: %s/%s", firstUsable.ID, firstUsable.DefaultModel))
+		lines = append(lines, fmt.Sprintf("First usable: %s/%s", colorProviderName(firstUsable.ID), firstUsable.DefaultModel))
 	} else {
 		lines = append(lines, "First usable: none")
 	}
@@ -51,10 +56,11 @@ func FormatProviderSnapshot(snapshot ProviderSnapshot) string {
 			marker = "* "
 		}
 
+		providerName := colorProviderName(padRight(status.ID, 16))
 		line := fmt.Sprintf(
-			"%s%-16s %-24s default %s · source %s",
+			"%s%s %-24s default %s · source %s",
 			marker,
-			status.ID,
+			providerName,
 			ProviderStateLabel(status),
 			status.DefaultModel,
 			status.AuthSource,
@@ -69,6 +75,42 @@ func FormatProviderSnapshot(snapshot ProviderSnapshot) string {
 	}
 
 	return strings.Join(lines, "\n")
+}
+
+func colorProviderName(name string) string {
+	trimmed := normalizeProviderID(name)
+	color := "\x1b[36m"
+	switch trimmed {
+	case "github-copilot":
+		color = "\x1b[96m"
+	case "openai":
+		color = "\x1b[92m"
+	case "anthropic":
+		color = "\x1b[95m"
+	case "gemini":
+		color = "\x1b[93m"
+	case "deepseek":
+		color = "\x1b[94m"
+	case "mistral":
+		color = "\x1b[35m"
+	case "groq":
+		color = "\x1b[32m"
+	case "qwen":
+		color = "\x1b[96m"
+	case "glm":
+		color = "\x1b[94m"
+	case "ollama":
+		color = "\x1b[33m"
+	}
+	return ansiBold + color + name + ansiReset
+}
+
+func padRight(value string, width int) string {
+	trimmed := strings.TrimSpace(value)
+	if len(trimmed) >= width {
+		return trimmed
+	}
+	return trimmed + strings.Repeat(" ", width-len(trimmed))
 }
 
 func BuildModelSelectionOptions(snapshot ProviderSnapshot, currentSelection string) []ipc.ModelSelectionOptionPayload {

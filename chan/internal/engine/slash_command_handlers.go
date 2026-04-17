@@ -438,7 +438,9 @@ func handleProvidersSlashCommand(cmd *slashCommandContext) error {
 		return emitTextResponse(cmd.bridge, "usage: /providers")
 	}
 
-	snapshot := commandspkg.DiscoverProviderSnapshot(config.LoadForWorkingDir(cmd.state.CWD))
+	statusCfg := config.LoadForWorkingDir(cmd.state.CWD)
+	statusCfg.Model = cmd.state.ActiveModelID
+	snapshot := commandspkg.DiscoverProviderSnapshot(statusCfg)
 	return emitTextResponse(cmd.bridge, commandspkg.FormatProviderSnapshot(snapshot))
 }
 
