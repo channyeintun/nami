@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -621,11 +622,14 @@ func permissionTargetKind(call toolpkg.PendingCall) string {
 			return "file"
 		}
 		if len(targets) > 1 {
-			return "target"
+			return "files"
 		}
 	}
-	if filePath, ok := stringParamFromMap(call.Input.Params, "file_path"); ok && strings.TrimSpace(filePath) != "" {
-		return "file"
+	if fileTargets, _ := permissionFileTargets(call.Input.Params); len(fileTargets) > 0 {
+		if len(fileTargets) == 1 {
+			return "file"
+		}
+		return "files"
 	}
 	if url, ok := stringParamFromMap(call.Input.Params, "url"); ok && strings.TrimSpace(url) != "" {
 		return "url"
@@ -672,8 +676,8 @@ func summarizePermissionTarget(call toolpkg.PendingCall) string {
 			return summary
 		}
 	}
-	if filePath, ok := stringParamFromMap(call.Input.Params, "file_path"); ok && strings.TrimSpace(filePath) != "" {
-		return filePath
+	if _, summary := permissionFileTargets(call.Input.Params); summary != "" {
+		return summary
 	}
 	if url, ok := stringParamFromMap(call.Input.Params, "url"); ok && strings.TrimSpace(url) != "" {
 		return url
@@ -684,10 +688,148 @@ func summarizePermissionTarget(call toolpkg.PendingCall) string {
 	if query, ok := stringParamFromMap(call.Input.Params, "query"); ok && strings.TrimSpace(query) != "" {
 		return query
 	}
+	if summary := summarizePermissionParams(call.Input.Params); summary != "" {
+		return summary
+	}
+	if call.Tool.Permission() == toolpkg.PermissionWrite {
+		return call.Tool.Name()
+	}
 	if raw := strings.TrimSpace(call.Input.Raw); raw != "" {
 		return raw
 	}
 	return call.Tool.Name()
+}
+
+func permissionFileTargets(params map[string]any) ([]string, string) {
+	if filePath, ok := firstStringParamFromMap(params, "filePath", "file_path"); ok && strings.TrimSpace(filePath) != "" {
+		target := strings.TrimSpace(filePath)
+		return []string{target}, target
+	}
+
+	replacements, ok := params["replacements"].([]any)
+	if !ok || len(replacements) == 0 {
+		return nil, ""
+	}
+
+	seen := make(map[string]struct{}, len(replacements))
+	targets := make([]string, 0, len(replacements))
+	for _, raw := range replacements {
+		replacement, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		filePath, ok := firstStringParamFromMap(replacement, "filePath", "file_path")
+		if !ok || strings.TrimSpace(filePath) == "" {
+			continue
+		}
+		target := strings.TrimSpace(filePath)
+		if _, exists := seen[target]; exists {
+			continue
+		}
+		seen[target] = struct{}{}
+		targets = append(targets, target)
+	}
+	if len(targets) == 0 {
+		return nil, ""
+	}
+	if len(targets) == 1 {
+		return targets, targets[0]
+	}
+	previewTargets := permissionFileTargetPreview(targets, 3)
+	return targets, fmt.Sprintf("%d files: %s", len(targets), strings.Join(previewTargets, ", "))
+}
+
+func permissionFileTargetPreview(targets []string, limit int) []string {
+	if len(targets) == 0 {
+		return nil
+	}
+	previewTargets := targets
+	if limit > 0 && len(previewTargets) > limit {
+		previewTargets = previewTargets[:limit]
+	}
+	baseNames := make([]string, 0, len(previewTargets))
+	seen := make(map[string]struct{}, len(previewTargets))
+	for _, target := range previewTargets {
+		baseName := strings.TrimSpace(filepath.Base(target))
+		if baseName == "" || baseName == "." || baseName == string(filepath.Separator) {
+			return previewTargets
+		}
+		if _, exists := seen[baseName]; exists {
+			return previewTargets
+		}
+		seen[baseName] = struct{}{}
+		baseNames = append(baseNames, baseName)
+	}
+	return baseNames
+}
+
+func summarizePermissionParams(params map[string]any) string {
+	if len(params) == 0 {
+		return ""
+	}
+	keys := make([]string, 0, len(params))
+	for key := range params {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	parts := make([]string, 0, 3)
+	for _, key := range keys {
+		if shouldSkipPermissionParamSummary(key) {
+			continue
+		}
+		part, ok := summarizePermissionParamValue(key, params[key])
+		if !ok {
+			continue
+		}
+		parts = append(parts, part)
+		if len(parts) == 3 {
+			break
+		}
+	}
+	return strings.Join(parts, " | ")
+}
+
+func shouldSkipPermissionParamSummary(key string) bool {
+	switch key {
+	case "command", "content", "cwd", "explanation", "filePath", "file_path", "input", "newString", "new_string", "oldString", "old_string", "patch", "query", "replacements", "url", "pattern":
+		return true
+	default:
+		return false
+	}
+}
+
+func summarizePermissionParamValue(key string, value any) (string, bool) {
+	switch typed := value.(type) {
+	case string:
+		normalized := normalizePermissionSummaryValue(typed)
+		if normalized == "" {
+			return "", false
+		}
+		return key + "=" + normalized, true
+	case bool:
+		return fmt.Sprintf("%s=%t", key, typed), true
+	case float64:
+		return fmt.Sprintf("%s=%g", key, typed), true
+	case int:
+		return fmt.Sprintf("%s=%d", key, typed), true
+	case int64:
+		return fmt.Sprintf("%s=%d", key, typed), true
+	default:
+		return "", false
+	}
+}
+
+func normalizePermissionSummaryValue(value string) string {
+	trimmed := strings.TrimSpace(strings.Join(strings.Fields(value), " "))
+	if trimmed == "" {
+		return ""
+	}
+	const limit = 80
+	if len(trimmed) <= limit {
+		return trimmed
+	}
+	return trimmed[:limit-3] + "..."
 }
 
 func applyPatchPermissionTargets(call toolpkg.PendingCall) ([]string, string) {
@@ -737,6 +879,15 @@ func stringParamFromMap(params map[string]any, key string) (string, bool) {
 	}
 	stringValue, ok := value.(string)
 	return stringValue, ok
+}
+
+func firstStringParamFromMap(params map[string]any, keys ...string) (string, bool) {
+	for _, key := range keys {
+		if value, ok := stringParamFromMap(params, key); ok {
+			return value, true
+		}
+	}
+	return "", false
 }
 
 func decodeToolInput(call api.ToolCall) (toolpkg.ToolInput, error) {
