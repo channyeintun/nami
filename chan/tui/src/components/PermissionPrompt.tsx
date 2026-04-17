@@ -27,14 +27,11 @@ interface PermissionPromptProps {
 }
 
 interface DetailPreview {
-  lines: string[];
-  hiddenLineCount: number;
+  line: string;
   truncated: boolean;
 }
 
-const DETAIL_PREVIEW_MAX_LINES = 4;
 const DETAIL_PREVIEW_MAX_CHARS = 320;
-const DETAIL_PREVIEW_MAX_LINE_CHARS = 120;
 
 const OPTIONS: PermissionOption[] = [
   {
@@ -135,7 +132,10 @@ const PermissionPrompt: FC<PermissionPromptProps> = ({
 
   const riskColor = getRiskColor(risk);
   const selectedOption = OPTIONS[selectedIndex] ?? OPTIONS[0];
-  const detailValue = targetValue?.trim() || command;
+  const detailValue = useMemo(
+    () => resolveDetailValue(tool, command, targetValue),
+    [command, targetValue, tool],
+  );
   const question = useMemo(
     () => buildQuestion(tool, targetKind, detailValue),
     [detailValue, targetKind, tool],
@@ -144,8 +144,8 @@ const PermissionPrompt: FC<PermissionPromptProps> = ({
   const toolLabel = useMemo(() => formatToolLabel(tool), [tool]);
   const accessLabel = permissionLevel?.trim() || inferAccessLabel(tool);
   const detailPreview = useMemo(
-    () => buildDetailPreview(detailValue, targetKind, tool),
-    [detailValue, targetKind, tool],
+    () => buildDetailPreview(detailValue),
+    [detailValue],
   );
 
   return (
@@ -199,17 +199,10 @@ const PermissionPrompt: FC<PermissionPromptProps> = ({
       >
         <Text color="$muted">{detailLabel}</Text>
         <Box flexDirection="column" minWidth={0}>
-          {detailPreview.lines.map((line, index) => (
-            <Text
-              key={`${detailLabel.toLowerCase()}-${index}`}
-              wrap="truncate-end"
-            >
-              {line.length > 0 ? line : " "}
-            </Text>
-          ))}
+          <Text wrap="truncate-end">{detailPreview.line}</Text>
         </Box>
         {detailPreview.truncated ? (
-          <Text dimColor>{formatDetailPreviewHint(detailPreview.hiddenLineCount)}</Text>
+          <Text dimColor>Preview truncated to one line.</Text>
         ) : null}
       </Box>
       <Box
@@ -362,54 +355,38 @@ function inferAccessLabel(tool: string): string {
   return "ask";
 }
 
+function resolveDetailValue(
+  tool: string,
+  command: string,
+  targetValue: string | undefined,
+): string {
+  const normalizedCommand = normalizeDetailValue(command);
+  const normalizedTarget = normalizeDetailValue(targetValue ?? "");
+
+  if (tool === "bash") {
+    return normalizedCommand || normalizedTarget;
+  }
+
+  if (normalizedCommand.length > 0) {
+    return normalizedCommand;
+  }
+
+  return normalizedTarget;
+}
+
 function buildDetailPreview(
   value: string,
-  targetKind: string | undefined,
-  tool: string,
 ): DetailPreview {
-  if (targetKind === "command" || tool === "bash") {
-    const singleLine = value.replace(/\s+/g, " ").trim();
-    return {
-      lines: [truncateEnd(singleLine, DETAIL_PREVIEW_MAX_CHARS)],
-      hiddenLineCount: 0,
-      truncated: singleLine.length > DETAIL_PREVIEW_MAX_CHARS,
-    };
-  }
-
-  const sourceLines = value.replace(/\r\n/g, "\n").split("\n");
-  const previewLines: string[] = [];
-  let remainingChars = DETAIL_PREVIEW_MAX_CHARS;
-  let consumedSourceLines = 0;
-  let truncated = false;
-
-  for (const line of sourceLines) {
-    if (
-      previewLines.length >= DETAIL_PREVIEW_MAX_LINES ||
-      remainingChars <= 0
-    ) {
-      truncated = true;
-      break;
-    }
-
-    const lineBudget = Math.min(DETAIL_PREVIEW_MAX_LINE_CHARS, remainingChars);
-    if (line.length > lineBudget) {
-      truncated = true;
-    }
-
-    previewLines.push(truncateEnd(line, lineBudget));
-    remainingChars -= Math.min(line.length, lineBudget);
-    consumedSourceLines += 1;
-  }
-
-  if (consumedSourceLines < sourceLines.length) {
-    truncated = true;
-  }
+  const normalized = normalizeDetailValue(value);
 
   return {
-    lines: previewLines.length > 0 ? previewLines : [""],
-    hiddenLineCount: Math.max(0, sourceLines.length - consumedSourceLines),
-    truncated,
+    line: truncateEnd(normalized, DETAIL_PREVIEW_MAX_CHARS),
+    truncated: normalized.length > DETAIL_PREVIEW_MAX_CHARS,
   };
+}
+
+function normalizeDetailValue(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
 }
 
 function truncateEnd(value: string, limit: number): string {
