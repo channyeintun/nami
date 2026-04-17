@@ -83,99 +83,10 @@ const PermissionPrompt: FC<PermissionPromptProps> = ({
   onCancelTurn,
 }) => {
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const [feedback, setFeedback] = useState("");
-  const [feedbackCursorOffset, setFeedbackCursorOffset] = useState(0);
-  const [isEditingFeedback, setIsEditingFeedback] = useState(false);
 
   useInput((input, key) => {
-    const text = key.text ?? input;
-
     if (key.escape) {
       onCancelTurn();
-      return;
-    }
-
-    if (key.tab) {
-      setIsEditingFeedback((current) => !current);
-      return;
-    }
-
-    if (isEditingFeedback) {
-      if (key.return) {
-        const selected = OPTIONS[selectedIndex];
-        if (selected) {
-          onRespond(selected.decision, trimFeedback(feedback));
-        }
-        return;
-      }
-
-      if (key.leftArrow || (key.ctrl && input === "b")) {
-        setFeedbackCursorOffset((current) => Math.max(0, current - 1));
-        return;
-      }
-
-      if (key.rightArrow || (key.ctrl && input === "f")) {
-        setFeedbackCursorOffset((current) =>
-          Math.min(feedback.length, current + 1),
-        );
-        return;
-      }
-
-      if (key.home || (key.ctrl && input === "a")) {
-        setFeedbackCursorOffset(0);
-        return;
-      }
-
-      if (key.end || (key.ctrl && input === "e")) {
-        setFeedbackCursorOffset(feedback.length);
-        return;
-      }
-
-      if (key.backspace || (key.ctrl && input === "h")) {
-        if (feedbackCursorOffset === 0) {
-          return;
-        }
-        setFeedback((current) =>
-          replaceRange(
-            current,
-            feedbackCursorOffset - 1,
-            feedbackCursorOffset,
-            "",
-          ),
-        );
-        setFeedbackCursorOffset((current) => Math.max(0, current - 1));
-        return;
-      }
-
-      if (key.delete) {
-        setFeedback((current) =>
-          replaceRange(
-            current,
-            feedbackCursorOffset,
-            feedbackCursorOffset + 1,
-            "",
-          ),
-        );
-        return;
-      }
-
-      if (key.ctrl && input === "u") {
-        setFeedback("");
-        setFeedbackCursorOffset(0);
-        return;
-      }
-
-      if (text && !key.ctrl && !key.meta) {
-        setFeedback((current) =>
-          replaceRange(
-            current,
-            feedbackCursorOffset,
-            feedbackCursorOffset,
-            text,
-          ),
-        );
-        setFeedbackCursorOffset((current) => current + text.length);
-      }
       return;
     }
 
@@ -194,7 +105,7 @@ const PermissionPrompt: FC<PermissionPromptProps> = ({
     if (key.return) {
       const selected = OPTIONS[selectedIndex];
       if (selected) {
-        onRespond(selected.decision, trimFeedback(feedback));
+        onRespond(selected.decision);
       }
       return;
     }
@@ -208,7 +119,7 @@ const PermissionPrompt: FC<PermissionPromptProps> = ({
       (option) => option.shortcut.toLowerCase() === shortcut,
     );
     if (matched) {
-      onRespond(matched.decision, trimFeedback(feedback));
+      onRespond(matched.decision);
     }
   });
 
@@ -270,27 +181,8 @@ const PermissionPrompt: FC<PermissionPromptProps> = ({
       </Box>
       <Box
         marginTop={1}
-        paddingX={1}
-        borderStyle="round"
-        borderColor={isEditingFeedback ? "$focusborder" : "$border"}
         flexDirection="column"
       >
-        <Text color="$muted">Note (optional)</Text>
-        {feedback.length === 0 && !isEditingFeedback ? (
-          <Text color="$muted">
-            Add context for the agent before this decision is applied.
-          </Text>
-        ) : (
-          <Text>
-            {renderFeedbackValue(
-              feedback,
-              feedbackCursorOffset,
-              isEditingFeedback,
-            )}
-          </Text>
-        )}
-      </Box>
-      <Box marginTop={1} flexDirection="column">
         {OPTIONS.map((option, index) => {
           const isSelected = index === selectedIndex;
 
@@ -310,9 +202,7 @@ const PermissionPrompt: FC<PermissionPromptProps> = ({
       </Box>
       <Box marginTop={1} flexDirection="column">
         <Text dimColor>
-          Enter confirm · Up/Down change selection · Tab{" "}
-          {isEditingFeedback ? "return to actions" : "edit note"} · Esc cancel
-          turn
+          Enter confirm · Up/Down change selection · Esc cancel turn
         </Text>
         <Text dimColor>
           Selected:{" "}
@@ -332,7 +222,10 @@ function buildQuestion(
 ): string {
   if (targetKind === "file" && targetValue.trim()) {
     const fileName = path.basename(targetValue.trim());
-    if (tool === "file_edit") {
+    if (tool === "file_edit" || tool === "replace_string_in_file") {
+      return `Allow edits to ${fileName}?`;
+    }
+    if (tool === "multi_replace_string_in_file") {
       return `Allow edits to ${fileName}?`;
     }
     if (tool === "apply_patch") {
@@ -345,6 +238,26 @@ function buildQuestion(
       return `Allow overwrite of ${fileName}?`;
     }
     return `Allow access to ${fileName}?`;
+  }
+
+  if (targetKind === "files" && targetValue.trim()) {
+    if (
+      tool === "file_edit" ||
+      tool === "replace_string_in_file" ||
+      tool === "multi_replace_string_in_file"
+    ) {
+      return "Allow edits to these files?";
+    }
+    if (tool === "apply_patch") {
+      return "Allow patch updates to these files?";
+    }
+    if (tool === "create_file") {
+      return "Allow creation of these files?";
+    }
+    if (tool === "file_write") {
+      return "Allow overwrite of these files?";
+    }
+    return "Allow access to these files?";
   }
 
   if (tool === "bash") {
@@ -362,6 +275,8 @@ function buildDetailLabel(targetKind: string | undefined): string {
   switch (targetKind) {
     case "file":
       return "File";
+    case "files":
+      return "Files";
     case "url":
       return "URL";
     case "query":
@@ -387,6 +302,10 @@ function formatToolLabel(tool: string): string {
       return "File Write";
     case "file_edit":
       return "File Edit";
+    case "replace_string_in_file":
+      return "Replace String In File";
+    case "multi_replace_string_in_file":
+      return "Multi Replace String In File";
     default:
       return tool.replace(/_/g, " ");
   }
@@ -400,38 +319,11 @@ function inferAccessLabel(tool: string): string {
     tool === "apply_patch" ||
     tool === "create_file" ||
     tool === "file_write" ||
-    tool === "file_edit"
+    tool === "file_edit" ||
+    tool === "replace_string_in_file" ||
+    tool === "multi_replace_string_in_file"
   ) {
     return "write";
   }
   return "ask";
-}
-
-function renderFeedbackValue(
-  value: string,
-  cursorOffset: number,
-  isEditing: boolean,
-): string {
-  if (!isEditing) {
-    return value;
-  }
-
-  const clampedOffset = Math.max(0, Math.min(value.length, cursorOffset));
-  return value.slice(0, clampedOffset) + "█" + value.slice(clampedOffset);
-}
-
-function replaceRange(
-  value: string,
-  start: number,
-  end: number,
-  replacement: string,
-): string {
-  const safeStart = Math.max(0, Math.min(value.length, start));
-  const safeEnd = Math.max(safeStart, Math.min(value.length, end));
-  return value.slice(0, safeStart) + replacement + value.slice(safeEnd);
-}
-
-function trimFeedback(value: string): string | undefined {
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : undefined;
 }
