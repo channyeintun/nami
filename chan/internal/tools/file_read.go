@@ -38,7 +38,7 @@ func (t *FileReadTool) Name() string {
 }
 
 func (t *FileReadTool) Description() string {
-	return "Read the contents of a text file. Use filePath with an optional 1-based offset and limit. Reads are bounded by default; continue truncated reads with offset and limit instead of using legacy line-range parameters."
+	return "Read the contents of a text file. Use filePath with an optional 1-based offset and limit. For large files, use grep_search first to find anchors, then read a larger bounded window instead of many tiny slices. Reads are bounded by default; continue truncated reads with offset and limit, and avoid legacy line-range parameters or rereading the same unchanged slice."
 }
 
 func (t *FileReadTool) InputSchema() any {
@@ -67,6 +67,7 @@ func (t *FileReadTool) InputSchema() any {
 
 func (t *FileReadTool) Validate(input ToolInput) error {
 	if _, ok := firstParam(input.Params, "startLine", "endLine", "start_line", "end_line"); ok {
+		recordFileReadMetric(FileReadMetric{LegacyParamRejected: true})
 		return fmt.Errorf("read_file no longer accepts startLine/endLine; use offset and limit")
 	}
 	filePath, ok := firstStringParam(input.Params, "filePath", "file_path", "path")
@@ -127,6 +128,7 @@ func (t *FileReadTool) Execute(ctx context.Context, input ToolInput) (ToolOutput
 		if len(preview) > PreviewChars {
 			preview = preview[:PreviewChars]
 		}
+		recordFileReadMetric(FileReadMetric{RequestedOffset: offset, RequestedLimit: limit, BytesReturned: len(stub), UnchangedHit: true})
 		return ToolOutput{Output: stub, FilePath: filePath, Preview: preview}, nil
 	}
 
@@ -216,7 +218,9 @@ func (t *FileReadTool) Execute(ctx context.Context, input ToolInput) (ToolOutput
 		if readState := GetGlobalFileReadState(); readState != nil {
 			readState.Remember(filePath, offset, limit, info)
 		}
-		return ToolOutput{Output: fmt.Sprintf("%s: no content in requested range", filePath), FilePath: filePath}, nil
+		message := fmt.Sprintf("%s: no content in requested range", filePath)
+		recordFileReadMetric(FileReadMetric{RequestedOffset: offset, RequestedLimit: limit, BytesReturned: len(message)})
+		return ToolOutput{Output: message, FilePath: filePath}, nil
 	}
 
 	output := renderReadOutput(lines, partial, nextOffset, limit)
@@ -227,6 +231,7 @@ func (t *FileReadTool) Execute(ctx context.Context, input ToolInput) (ToolOutput
 	if readState := GetGlobalFileReadState(); readState != nil {
 		readState.Remember(filePath, offset, limit, info)
 	}
+	recordFileReadMetric(FileReadMetric{RequestedOffset: offset, RequestedLimit: limit, LinesReturned: len(lines), BytesReturned: len(output), Truncated: partial || lineClipped})
 
 	return ToolOutput{
 		Output:    output,

@@ -434,6 +434,13 @@ Choreograph, don't orchestrate: delegate bounded work to child agents with clear
 Use child agents proactively for non-trivial exploration or terminal-heavy work.
 run_in_background=true only when user explicitly wants async. agent_status/agent_stop only for background agents.
 
+Read policy:
+- For large files, use grep_search first to find anchors, then read_file for exact text.
+- read_file uses filePath with optional offset and limit. Default reads are bounded.
+- Prefer one useful window over many tiny slices.
+- When read_file is truncated, continue with the hinted offset and limit.
+- Do not use legacy startLine/endLine parameters.
+
 File-edit ladder:
 - replace_string_in_file: one literal replacement, one file
 - multi_replace_string_in_file: several replacements, one or few files

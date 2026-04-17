@@ -24,9 +24,14 @@
    - Notes: Added shared invalidation after successful create, write, edit, patch, delete, and rewind mutations.
 
 5. Tighten prompt guidance
-   - Status: in progress
-   - Notes: Update tool description and engine system prompt guidance for canonical read behavior.
+   - Status: completed
+   - Notes: Strengthened the tool description and engine prompt guidance for canonical bounded reads, and added lightweight session-scoped read metrics for tuning.
 
 6. Format and verify changes
-   - Status: pending
-   - Notes: Run formatting after each completed task and check for relevant errors.
+   - Status: completed
+   - Notes: Ran `gofmt` on all touched Go files, completed repeated `go build ./...` verification passes, and confirmed there are no relevant editor diagnostics.
+
+## Completion
+
+- All items from `patch-plan.md` are implemented.
+- No tests were added.

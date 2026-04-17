@@ -9,6 +9,7 @@ import (
 type FileReadState struct {
 	mu      sync.RWMutex
 	entries map[fileReadStateKey]fileReadStateEntry
+	metrics []FileReadMetric
 }
 
 type fileReadStateKey struct {
@@ -22,8 +23,20 @@ type fileReadStateEntry struct {
 	modTime time.Time
 }
 
+type FileReadMetric struct {
+	RequestedOffset     int
+	RequestedLimit      int
+	LinesReturned       int
+	BytesReturned       int
+	Truncated           bool
+	UnchangedHit        bool
+	LegacyParamRejected bool
+}
+
+const maxFileReadMetrics = 256
+
 func NewFileReadState() *FileReadState {
-	return &FileReadState{entries: make(map[fileReadStateKey]fileReadStateEntry)}
+	return &FileReadState{entries: make(map[fileReadStateKey]fileReadStateEntry), metrics: make([]FileReadMetric, 0, maxFileReadMetrics)}
 }
 
 func (s *FileReadState) SeenUnchanged(path string, offset, limit int, info os.FileInfo) bool {
@@ -63,6 +76,30 @@ func (s *FileReadState) Invalidate(path string) {
 	s.mu.Unlock()
 }
 
+func (s *FileReadState) RecordMetric(metric FileReadMetric) {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	if len(s.metrics) == maxFileReadMetrics {
+		copy(s.metrics, s.metrics[1:])
+		s.metrics = s.metrics[:maxFileReadMetrics-1]
+	}
+	s.metrics = append(s.metrics, metric)
+	s.mu.Unlock()
+}
+
+func (s *FileReadState) MetricsSnapshot() []FileReadMetric {
+	if s == nil {
+		return nil
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	metrics := make([]FileReadMetric, len(s.metrics))
+	copy(metrics, s.metrics)
+	return metrics
+}
+
 var globalFileReadState struct {
 	mu sync.RWMutex
 	s  *FileReadState
@@ -83,5 +120,11 @@ func GetGlobalFileReadState() *FileReadState {
 func invalidateFileReadState(path string) {
 	if state := GetGlobalFileReadState(); state != nil {
 		state.Invalidate(path)
+	}
+}
+
+func recordFileReadMetric(metric FileReadMetric) {
+	if state := GetGlobalFileReadState(); state != nil {
+		state.RecordMetric(metric)
 	}
 }
