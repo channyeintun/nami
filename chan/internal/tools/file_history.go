@@ -154,6 +154,7 @@ func (h *FileHistory) Rewind(snapshotID string) (FileRewindResult, error) {
 				result.Failed = append(result.Failed, fmt.Sprintf("%s: remove file: %v", backup.Path, err))
 				continue
 			}
+			invalidateFileReadState(backup.Path)
 			result.Restored++
 			continue
 		}
@@ -174,6 +175,7 @@ func (h *FileHistory) Rewind(snapshotID string) (FileRewindResult, error) {
 			result.Failed = append(result.Failed, fmt.Sprintf("%s: write restored file: %v", backup.Path, err))
 			continue
 		}
+		invalidateFileReadState(backup.Path)
 		result.Restored++
 	}
 

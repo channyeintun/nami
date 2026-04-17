@@ -79,3 +79,9 @@ func GetGlobalFileReadState() *FileReadState {
 	defer globalFileReadState.mu.RUnlock()
 	return globalFileReadState.s
 }
+
+func invalidateFileReadState(path string) {
+	if state := GetGlobalFileReadState(); state != nil {
+		state.Invalidate(path)
+	}
+}

@@ -20,11 +20,11 @@
    - Notes: Added session-scoped unchanged-slice suppression keyed by path, offset, limit, size, and modification time, and wired it into engine startup plus `read_file`.
 
 4. Invalidate cache on writes
-   - Status: in progress
-   - Notes: Invalidate read-state entries after successful file mutations.
+   - Status: completed
+   - Notes: Added shared invalidation after successful create, write, edit, patch, delete, and rewind mutations.
 
 5. Tighten prompt guidance
-   - Status: pending
+   - Status: in progress
    - Notes: Update tool description and engine system prompt guidance for canonical read behavior.
 
 6. Format and verify changes

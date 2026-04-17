@@ -198,6 +198,7 @@ func (t *FileEditTool) Execute(ctx context.Context, input ToolInput) (ToolOutput
 	if err := os.WriteFile(filePath, []byte(updatedContent), 0o644); err != nil {
 		return ToolOutput{}, fmt.Errorf("write file %q: %w", filePath, err)
 	}
+	invalidateFileReadState(filePath)
 
 	preview, insertions, deletions := buildFileDiffPreview(content, strings.ReplaceAll(updatedContent, "\r\n", "\n"))
 	diagnostics := runPostEditDiagnostics(ctx, []string{filePath})

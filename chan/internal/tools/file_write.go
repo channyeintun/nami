@@ -118,6 +118,7 @@ func (t *FileWriteTool) Execute(ctx context.Context, input ToolInput) (ToolOutpu
 	if err := os.WriteFile(filePath, []byte(content), 0o644); err != nil {
 		return ToolOutput{}, fmt.Errorf("write file %q: %w", filePath, err)
 	}
+	invalidateFileReadState(filePath)
 
 	preview, insertions, deletions := buildFileDiffPreview(oldContent, content)
 	diagnostics := runPostEditDiagnostics(ctx, []string{filePath})

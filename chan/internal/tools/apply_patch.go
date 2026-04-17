@@ -198,6 +198,7 @@ func (t *ApplyPatchTool) Execute(ctx context.Context, input ToolInput) (ToolOutp
 			if err := os.WriteFile(resolvedPath, []byte(content), 0o644); err != nil {
 				return ToolOutput{}, fmt.Errorf("write file %q: %w", resolvedPath, err)
 			}
+			invalidateFileReadState(resolvedPath)
 			preview, insertions, deletions := buildFileDiffPreview("", content)
 			changes = append(changes, applyPatchFileChange{action: operation.Action, path: resolvedPath, preview: preview, insertions: insertions, deletions: deletions})
 			totalInsertions += insertions
@@ -214,6 +215,7 @@ func (t *ApplyPatchTool) Execute(ctx context.Context, input ToolInput) (ToolOutp
 			if err := os.Remove(resolvedPath); err != nil {
 				return ToolOutput{}, fmt.Errorf("delete file %q: %w", resolvedPath, err)
 			}
+			invalidateFileReadState(resolvedPath)
 			preview, insertions, deletions := buildFileDiffPreview(string(oldBytes), "")
 			changes = append(changes, applyPatchFileChange{action: operation.Action, path: resolvedPath, preview: preview, insertions: insertions, deletions: deletions})
 			totalInsertions += insertions
@@ -230,6 +232,7 @@ func (t *ApplyPatchTool) Execute(ctx context.Context, input ToolInput) (ToolOutp
 			if err := os.WriteFile(resolvedPath, []byte(updatedContent), 0o644); err != nil {
 				return ToolOutput{}, fmt.Errorf("write file %q: %w", resolvedPath, err)
 			}
+			invalidateFileReadState(resolvedPath)
 			changes = append(changes, applyPatchFileChange{action: operation.Action, path: resolvedPath, preview: preview, insertions: insertions, deletions: deletions})
 			totalInsertions += insertions
 			totalDeletions += deletions
