@@ -624,16 +624,10 @@ func promptModelSelection(cmd *slashCommandContext, currentSelection string) (mo
 		activeModel = activeModelID
 	}
 
-	options := make([]ipc.ModelSelectionOptionPayload, 0, len(curatedModelSelectionPresets)+1)
-	for _, preset := range curatedModelSelectionPresets {
-		options = append(options, ipc.ModelSelectionOptionPayload{
-			Label:       preset.Label,
-			Model:       preset.Model,
-			Provider:    preset.Provider,
-			Description: preset.Description,
-			Active:      strings.EqualFold(strings.TrimSpace(preset.Model), strings.TrimSpace(activeModel)),
-		})
-	}
+	selectionCfg := config.LoadForWorkingDir(cmd.state.CWD)
+	selectionCfg.Model = currentSelection
+	snapshot := commandspkg.DiscoverProviderSnapshot(selectionCfg)
+	options := commandspkg.BuildModelSelectionOptions(snapshot, currentSelection)
 	options = append(options, ipc.ModelSelectionOptionPayload{
 		Label:       "Custom model",
 		Description: "Enter any model id",

@@ -237,7 +237,9 @@ const ModelSelectionPrompt: FC<ModelSelectionPromptProps> = ({
           Select Model
         </Text>
         <Box marginTop={compactLayout ? 0 : 1} flexDirection="column" minWidth={0}>
-          {!compactLayout ? <Text>Choose the active model for the session.</Text> : null}
+          {!compactLayout ? (
+            <Text>Choose the active model or a provider default for the session.</Text>
+          ) : null}
           <Text color="$muted">
             Current: {formatCurrentModel(selection.currentModel)}
           </Text>
@@ -401,9 +403,7 @@ function formatCompactModelLine(
   isSelected: boolean,
 ): string {
   const prefix = isSelected ? ">" : " ";
-  const label = option.isCustom
-    ? "Custom model"
-    : stripProviderPrefix(option.model) ?? option.label;
+  const label = option.isCustom ? "Custom model" : option.label;
   return `${prefix} ${label}${option.active ? " current" : ""}`;
 }
 

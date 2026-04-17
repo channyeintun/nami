@@ -76,10 +76,11 @@
    - Notes: Reworked `/connect` into a generic provider entry point with overview, help, and status modes; kept GitHub Copilot on device auth; added API-key and local-provider onboarding guidance; and made ready providers switch the active session immediately through the same command.
 
 6. Redesign model picker around provider state
-   - Status: in progress
+   - Status: completed
+   - Notes: The model picker now builds its options from provider discovery instead of a flat curated preset list, preserves a current custom selection when needed, pushes usable providers to the top, and surfaces provider readiness directly in the option labels and descriptions.
 
 7. Persist recent successful model selections
-   - Status: not started
+   - Status: in progress
 
 8. Final rebuild and install
    - Status: not started

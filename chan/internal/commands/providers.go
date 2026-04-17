@@ -9,6 +9,7 @@ import (
 
 	"github.com/channyeintun/chan/internal/api"
 	"github.com/channyeintun/chan/internal/config"
+	"github.com/channyeintun/chan/internal/ipc"
 )
 
 type ProviderStatus struct {
@@ -54,7 +55,7 @@ func FormatProviderSnapshot(snapshot ProviderSnapshot) string {
 			"%s%-16s %-24s default %s · source %s",
 			marker,
 			status.ID,
-			providerStateLabel(status),
+			ProviderStateLabel(status),
 			status.DefaultModel,
 			status.AuthSource,
 		)
@@ -68,6 +69,54 @@ func FormatProviderSnapshot(snapshot ProviderSnapshot) string {
 	}
 
 	return strings.Join(lines, "\n")
+}
+
+func BuildModelSelectionOptions(snapshot ProviderSnapshot, currentSelection string) []ipc.ModelSelectionOptionPayload {
+	currentProvider, currentModel := ResolveModelSelection(currentSelection)
+	currentRef := providerModelRef(currentProvider, currentModel)
+	options := make([]ipc.ModelSelectionOptionPayload, 0, len(snapshot.Providers)+1)
+	seen := make(map[string]struct{}, len(snapshot.Providers)+1)
+
+	if currentModel != "" && !matchesProviderDefault(snapshot, currentProvider, currentModel) {
+		label := "Current selection"
+		description := "Current session model"
+		if status, ok := snapshot.LookupProvider(currentProvider); ok {
+			label = fmt.Sprintf("Current · %s · %s", status.Label, ProviderStateLabel(status))
+			description = formatModelSelectionDescription(status)
+		}
+		options = append(options, ipc.ModelSelectionOptionPayload{
+			Label:       label,
+			Model:       currentModel,
+			Provider:    currentProvider,
+			Description: description,
+			Active:      true,
+		})
+		seen[currentRef] = struct{}{}
+	}
+
+	appendProviderOptions := func(match func(ProviderStatus) bool) {
+		for _, status := range snapshot.Providers {
+			if !match(status) {
+				continue
+			}
+			ref := providerModelRef(status.ID, status.DefaultModel)
+			if _, exists := seen[ref]; exists {
+				continue
+			}
+			options = append(options, ipc.ModelSelectionOptionPayload{
+				Label:       fmt.Sprintf("%s · %s", status.Label, ProviderStateLabel(status)),
+				Model:       status.DefaultModel,
+				Provider:    status.ID,
+				Description: formatModelSelectionDescription(status),
+				Active:      strings.EqualFold(ref, currentRef),
+			})
+		}
+	}
+
+	appendProviderOptions(func(status ProviderStatus) bool { return status.Usable })
+	appendProviderOptions(func(status ProviderStatus) bool { return !status.Usable })
+
+	return options
 }
 
 func DiscoverProviderSnapshot(cfg config.Config) ProviderSnapshot {
@@ -317,7 +366,7 @@ func normalizeProviderID(provider string) string {
 	return strings.ToLower(strings.TrimSpace(provider))
 }
 
-func providerStateLabel(status ProviderStatus) string {
+func ProviderStateLabel(status ProviderStatus) string {
 	switch {
 	case status.Usable:
 		return "usable"
@@ -326,4 +375,38 @@ func providerStateLabel(status ProviderStatus) string {
 	default:
 		return "needs setup"
 	}
+}
+
+func matchesProviderDefault(snapshot ProviderSnapshot, providerID string, model string) bool {
+	status, ok := snapshot.LookupProvider(providerID)
+	if !ok {
+		return false
+	}
+	return strings.EqualFold(strings.TrimSpace(model), strings.TrimSpace(status.DefaultModel))
+}
+
+func formatModelSelectionDescription(status ProviderStatus) string {
+	parts := make([]string, 0, 2)
+	if status.AuthSource != "" && status.AuthSource != "none" {
+		parts = append(parts, status.AuthSource)
+	}
+	if !status.Usable && status.SetupHint != "" {
+		parts = append(parts, status.SetupHint)
+	}
+	if len(parts) == 0 {
+		parts = append(parts, "default provider model")
+	}
+	return strings.Join(parts, " · ")
+}
+
+func providerModelRef(providerID string, model string) string {
+	providerID = normalizeProviderID(providerID)
+	model = strings.TrimSpace(model)
+	if providerID == "" {
+		return model
+	}
+	if model == "" {
+		return providerID
+	}
+	return providerID + "/" + model
 }
