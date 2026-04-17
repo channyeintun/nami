@@ -81,6 +81,30 @@ func (t *conversationTimeline) RecordToolStart(payload ipc.ToolStartPayload) {
 	})
 }
 
+func (t *conversationTimeline) RecordAssistantMessage(messageIndex int) {
+	if t == nil || messageIndex < 0 {
+		return
+	}
+	messageID := conversationTimelineMessageID(messageIndex)
+	t.appendTranscriptEntry(ipc.ConversationHydratedTranscriptEntryPayload{
+		ID:    messageID,
+		Kind:  "message",
+		RefID: messageID,
+	})
+}
+
+func (t *conversationTimeline) RecordUserMessage(messageIndex int) {
+	if t == nil || messageIndex < 0 {
+		return
+	}
+	messageID := conversationTimelineMessageID(messageIndex)
+	t.appendTranscriptEntry(ipc.ConversationHydratedTranscriptEntryPayload{
+		ID:    messageID,
+		Kind:  "message",
+		RefID: messageID,
+	})
+}
+
 func (t *conversationTimeline) SyncMessages(messages []api.Message) {
 	if t == nil {
 		return
@@ -115,16 +139,11 @@ func (t *conversationTimeline) SyncMessages(messages []api.Message) {
 				toolIDs = append(toolIDs, toolID)
 			}
 			if len(hydratedAssistantBlocks(message)) > 0 {
-				entry := ipc.ConversationHydratedTranscriptEntryPayload{
+				t.appendTranscriptEntry(ipc.ConversationHydratedTranscriptEntryPayload{
 					ID:    messageID,
 					Kind:  "message",
 					RefID: messageID,
-				}
-				if len(toolIDs) > 0 {
-					t.insertTranscriptEntryBeforeToolCalls(entry, toolIDs)
-				} else {
-					t.appendTranscriptEntry(entry)
-				}
+				})
 			}
 			for _, toolID := range toolIDs {
 				t.appendTranscriptEntry(ipc.ConversationHydratedTranscriptEntryPayload{
@@ -228,42 +247,6 @@ func (t *conversationTimeline) appendTranscriptEntry(
 	}
 	t.transcriptIndex[key] = struct{}{}
 	t.transcript = append(t.transcript, normalizedEntry)
-}
-
-func (t *conversationTimeline) insertTranscriptEntryBeforeToolCalls(
-	entry ipc.ConversationHydratedTranscriptEntryPayload,
-	toolIDs []string,
-) {
-	normalizedEntry, key, ok := normalizeTranscriptEntry(entry)
-	if !ok {
-		return
-	}
-	if _, exists := t.transcriptIndex[key]; exists {
-		return
-	}
-	toolIDSet := make(map[string]struct{}, len(toolIDs))
-	for _, toolID := range toolIDs {
-		trimmedToolID := strings.TrimSpace(toolID)
-		if trimmedToolID == "" {
-			continue
-		}
-		toolIDSet[trimmedToolID] = struct{}{}
-	}
-	insertIndex := len(t.transcript)
-	for index, existing := range t.transcript {
-		if strings.TrimSpace(existing.Kind) != "tool_call" {
-			continue
-		}
-		if _, ok := toolIDSet[transcriptEntryRefID(existing)]; !ok {
-			continue
-		}
-		insertIndex = index
-		break
-	}
-	t.transcript = append(t.transcript, ipc.ConversationHydratedTranscriptEntryPayload{})
-	copy(t.transcript[insertIndex+1:], t.transcript[insertIndex:])
-	t.transcript[insertIndex] = normalizedEntry
-	t.transcriptIndex[key] = struct{}{}
 }
 
 func normalizeTranscriptEntry(

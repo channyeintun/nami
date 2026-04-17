@@ -160,6 +160,9 @@ func (t *userTurnContext) appendUserMessage() error {
 		Content: t.payload.Text,
 		Images:  images,
 	})
+	if t.state.timeline != nil {
+		t.state.timeline.RecordUserMessage(len(t.state.messages) - 1)
+	}
 	return emitContextWindowUsage(t.deps.bridge, t.state.client, t.state.messages)
 }
 
@@ -279,6 +282,13 @@ func (t *userTurnContext) handleQueryEvent(event ipc.StreamEvent) error {
 			if err := emitTurnTimingCheckpoint(t.deps.bridge, t.turnMetrics, "first_token"); err != nil {
 				return err
 			}
+		}
+		if t.state.timeline != nil {
+			t.state.timeline.RecordAssistantMessage(len(t.state.messages))
+		}
+	case ipc.EventThinkingDelta:
+		if t.state.timeline != nil {
+			t.state.timeline.RecordAssistantMessage(len(t.state.messages))
 		}
 	case ipc.EventTurnComplete:
 		if t.markTurnMetric("turn_complete") {

@@ -723,28 +723,47 @@ export function useEvents(initialModel: string, initialMode: string) {
       }
       case "tool_start": {
         const p = event.payload as ToolStartPayload;
-        setUIState((s) => ({
-          ...s,
-          activeTurnStatus: "running_tools",
-          isStreaming: true,
-          statusLine: null,
-          error: null,
-          transcript: appendTranscriptEntry(s.transcript, {
-            id: p.tool_id,
-            kind: "tool_call",
-          }),
-          toolCalls: upsertToolCall(s.toolCalls, {
-            id: p.tool_id,
-            name: p.name,
-            input: sanitizeToolCallInput(p.name, p.input),
-            status: "running",
-            output: undefined,
-            error: undefined,
-            truncated: false,
-            progressBytes: undefined,
-            permissionRequestId: undefined,
-          }),
-        }));
+        resetQueuedAssistantBlocks();
+        setUIState((s) => {
+          const completedBlocks = completedAssistantBlocks(
+            s.liveAssistantBlocks,
+          );
+          const streamedMessage =
+            completedBlocks.length > 0
+              ? createAssistantMessage(completedBlocks, {
+                  id: s.liveAssistantMessageId ?? undefined,
+                  model: s.model,
+                })
+              : null;
+
+          return {
+            ...s,
+            messages: streamedMessage
+              ? [...s.messages, streamedMessage]
+              : s.messages,
+            activeTurnStatus: "running_tools",
+            isStreaming: true,
+            statusLine: null,
+            error: null,
+            liveAssistantMessageId: null,
+            liveAssistantBlocks: [],
+            transcript: appendTranscriptEntry(s.transcript, {
+              id: p.tool_id,
+              kind: "tool_call",
+            }),
+            toolCalls: upsertToolCall(s.toolCalls, {
+              id: p.tool_id,
+              name: p.name,
+              input: sanitizeToolCallInput(p.name, p.input),
+              status: "running",
+              output: undefined,
+              error: undefined,
+              truncated: false,
+              progressBytes: undefined,
+              permissionRequestId: undefined,
+            }),
+          };
+        });
         break;
       }
       case "tool_progress": {
