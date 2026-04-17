@@ -24,6 +24,7 @@ const ModelSelectionPrompt: FC<ModelSelectionPromptProps> = ({
   onSelect,
   onCancel,
 }) => {
+  const [terminalRows, setTerminalRows] = useState(process.stdout.rows ?? 24);
   const focusManager = useFocusManager();
   const initialIndex = useMemo(() => {
     const activeIndex = selection.options.findIndex((option) => option.active);
@@ -59,6 +60,21 @@ const ModelSelectionPrompt: FC<ModelSelectionPromptProps> = ({
       focusManager.blur();
     }
   }, [customMode, focusManager]);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setTerminalRows(process.stdout.rows ?? 24);
+    };
+
+    handleResize();
+    process.stdout.on("resize", handleResize);
+
+    return () => {
+      process.stdout.off("resize", handleResize);
+    };
+  }, []);
+
+  const compactLayout = terminalRows < 22;
 
   const updateSelectedIndex = (
     updater: number | ((current: number) => number),
@@ -214,14 +230,14 @@ const ModelSelectionPrompt: FC<ModelSelectionPromptProps> = ({
       borderColor="$inputborder"
       overflow="hidden"
       paddingX={2}
-      paddingY={1}
+      paddingY={compactLayout ? 0 : 1}
     >
       <Box flexDirection="column" flexShrink={0} minWidth={0}>
         <Text bold color="$primary">
           Select Model
         </Text>
-        <Box marginTop={1} flexDirection="column" minWidth={0}>
-          <Text>Choose the active model for the session.</Text>
+        <Box marginTop={compactLayout ? 0 : 1} flexDirection="column" minWidth={0}>
+          {!compactLayout ? <Text>Choose the active model for the session.</Text> : null}
           <Text color="$muted">
             Current: {formatCurrentModel(selection.currentModel)}
           </Text>
@@ -232,30 +248,31 @@ const ModelSelectionPrompt: FC<ModelSelectionPromptProps> = ({
         options={selection.options}
         selectedIndex={selectedIndex}
         active={!customMode}
+        compact={compactLayout && !customMode}
         onCursor={updateSelectedIndex}
         onSelectIndex={handleListSelect}
       />
-      <Box
-        marginTop={1}
-        paddingX={1}
-        paddingY={1}
-        backgroundColor="$surface-bg"
-        borderStyle="round"
-        borderColor={customMode ? "$focusborder" : "$inputborder"}
-        flexDirection="column"
-        flexShrink={0}
-      >
-        <Text color={customMode ? "$primary" : "$muted"}>Custom model</Text>
-        <Text color="$muted">
-          {customMode
-            ? "Enter a model id only. Provider prefixes are not accepted."
-            : "Choose Custom model and press Enter to edit."}
-        </Text>
-        <Text>
-          {customMode ? renderEditableValue(customValue, cursorOffset) : " "}
-        </Text>
-      </Box>
-      <Box marginTop={1} flexDirection="column" flexShrink={0}>
+      {customMode ? (
+        <Box
+          marginTop={compactLayout ? 0 : 1}
+          paddingX={1}
+          paddingY={1}
+          backgroundColor="$surface-bg"
+          borderStyle="round"
+          borderColor="$focusborder"
+          flexDirection="column"
+          flexShrink={0}
+        >
+          <Text color="$primary">Custom model</Text>
+          <Text color="$muted">
+            {compactLayout
+              ? "Model id only. No provider prefix."
+              : "Enter a model id only. Provider prefixes are not accepted."}
+          </Text>
+          <Text>{renderEditableValue(customValue, cursorOffset)}</Text>
+        </Box>
+      ) : null}
+      <Box marginTop={compactLayout ? 0 : 1} flexDirection="column" flexShrink={0}>
         <Text color="$fg">
           {customMode ? (
             <>
@@ -274,10 +291,14 @@ const ModelSelectionPrompt: FC<ModelSelectionPromptProps> = ({
                 Enter
               </Text>{" "}
               choose ·{" "}
-              <Text color="$primary" bold>
-                Up/Down
-              </Text>{" "}
-              change selection ·{" "}
+              {compactLayout ? null : (
+                <>
+                  <Text color="$primary" bold>
+                    Up/Down
+                  </Text>{" "}
+                  change selection ·{" "}
+                </>
+              )}
               <Text color="$primary" bold>
                 Esc
               </Text>{" "}
@@ -300,6 +321,7 @@ interface ModelSelectionListProps {
   options: UIModelSelectionOption[];
   selectedIndex: number;
   active: boolean;
+  compact: boolean;
   onCursor: (index: number | ((current: number) => number)) => void;
   onSelectIndex: (index: number) => void;
 }
@@ -308,6 +330,7 @@ const ModelSelectionList: FC<ModelSelectionListProps> = ({
   options,
   selectedIndex,
   active,
+  compact,
   onCursor,
   onSelectIndex,
 }) => {
@@ -332,7 +355,7 @@ const ModelSelectionList: FC<ModelSelectionListProps> = ({
         onCursor={(index) => onCursor(index)}
         onSelect={onSelectIndex}
         active={active}
-        estimateHeight={2}
+        estimateHeight={compact ? 1 : 2}
         overflowIndicator
         getKey={(option, index) => `${option.label}-${index}`}
         renderItem={(option, index, meta) => {
@@ -344,22 +367,20 @@ const ModelSelectionList: FC<ModelSelectionListProps> = ({
               flexDirection="column"
               backgroundColor={isSelected ? "$selectionbg" : undefined}
               paddingX={1}
-              marginBottom={1}
+              marginBottom={compact ? 0 : 1}
               minWidth={0}
             >
               <Text color={isSelected ? "$selection" : "$fg"} bold={isSelected}>
-                {isSelected ? "›" : " "} {option.label}
-                {option.active ? (
-                  <Text color={isSelected ? "$selection" : "$success"}>
-                    {" "}
-                    current
-                  </Text>
-                ) : null}
+                {compact
+                  ? formatCompactModelLine(option, isSelected)
+                  : `${isSelected ? "›" : " "} ${option.label}`}
               </Text>
-              <Text color={isSelected ? "$selection" : "$muted"}>
-                {formatModelLine(option)}
-                {option.description ? `  ·  ${option.description}` : ""}
-              </Text>
+              {!compact ? (
+                <Text color={isSelected ? "$selection" : "$muted"}>
+                  {formatModelLine(option)}
+                  {option.description ? `  ·  ${option.description}` : ""}
+                </Text>
+              ) : null}
             </Box>
           );
         }}
@@ -370,9 +391,20 @@ const ModelSelectionList: FC<ModelSelectionListProps> = ({
 
 function formatModelLine(option: UIModelSelectionOption): string {
   if (option.isCustom) {
-    return "Type your own model selection";
+    return "Press Enter to type your own model";
   }
   return stripProviderPrefix(option.model) ?? "Unknown model";
+}
+
+function formatCompactModelLine(
+  option: UIModelSelectionOption,
+  isSelected: boolean,
+): string {
+  const prefix = isSelected ? ">" : " ";
+  const label = option.isCustom
+    ? "Custom model"
+    : stripProviderPrefix(option.model) ?? option.label;
+  return `${prefix} ${label}${option.active ? " current" : ""}`;
 }
 
 function formatCurrentModel(model: string | null): string {

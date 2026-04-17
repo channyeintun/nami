@@ -431,11 +431,21 @@ const App: FC<AppProps> = ({ enginePath, model, mode }) => {
     uiState.pendingModelSelection !== null ||
     uiState.pendingRewindSelection !== null ||
     uiState.pendingResumeSelection !== null;
+  const keepPromptVisibleWithOverlay =
+    uiState.pendingResumeSelection !== null ||
+    uiState.pendingModelSelection !== null ||
+    uiState.pendingRewindSelection !== null;
+  const showPromptArea =
+    uiState.pendingPermission === null &&
+    uiState.pendingArtifactReview === null;
   const promptBlockedReason = getPromptBlockedReason({
     isEngineReady,
     engineError: engine.error,
     transcriptSearchActive,
     isStreaming: uiState.isStreaming,
+    pendingModelSelection: uiState.pendingModelSelection !== null,
+    pendingRewindSelection: uiState.pendingRewindSelection !== null,
+    pendingResumeSelection: uiState.pendingResumeSelection !== null,
   });
   const promptActivityLabel = uiState.isStreaming
     ? activeTurnStatusLabel(
@@ -633,30 +643,6 @@ const App: FC<AppProps> = ({ enginePath, model, mode }) => {
             onCancelTurn={handleCancel}
           />
         </Box>
-      ) : uiState.pendingResumeSelection ? (
-        <CenteredViewportOverlay>
-          <ResumeSelectionPrompt
-            selection={uiState.pendingResumeSelection}
-            onSelect={handleResumeSelection}
-            onCancel={() => handleResumeSelection()}
-          />
-        </CenteredViewportOverlay>
-      ) : uiState.pendingRewindSelection ? (
-        <CenteredViewportOverlay>
-          <RewindSelectionPrompt
-            selection={uiState.pendingRewindSelection}
-            onSelect={handleRewindSelection}
-            onCancel={() => handleRewindSelection()}
-          />
-        </CenteredViewportOverlay>
-      ) : uiState.pendingModelSelection ? (
-        <CenteredViewportOverlay>
-          <ModelSelectionPrompt
-            selection={uiState.pendingModelSelection}
-            onSelect={handleModelSelection}
-            onCancel={() => handleModelSelection()}
-          />
-        </CenteredViewportOverlay>
       ) : uiState.pendingArtifactReview ? (
         <Box flexDirection="column" flexShrink={0} minHeight={0} marginTop={1}>
           <ArtifactReviewPrompt
@@ -664,14 +650,14 @@ const App: FC<AppProps> = ({ enginePath, model, mode }) => {
             onRespond={handleArtifactReviewResponse}
           />
         </Box>
-      ) : (
+      ) : showPromptArea ? (
         <Box
           flexDirection="column"
           flexShrink={0}
           maxHeight="45%"
           overflow="scroll"
         >
-          {transcriptSearchActive ? (
+          {transcriptSearchActive && !keepPromptVisibleWithOverlay ? (
             <TranscriptSearchPrompt
               query={transcriptSearchQuery}
               matchCount={transcriptSearchMatchCount}
@@ -730,6 +716,34 @@ const App: FC<AppProps> = ({ enginePath, model, mode }) => {
             artifactsShortcutLabel={ARTIFACTS_TOGGLE_SHORTCUT_LABEL}
           />
         </Box>
+      ) : null}
+
+      {uiState.pendingResumeSelection ? (
+        <CenteredViewportOverlay>
+          <ResumeSelectionPrompt
+            selection={uiState.pendingResumeSelection}
+            onSelect={handleResumeSelection}
+            onCancel={() => handleResumeSelection()}
+          />
+        </CenteredViewportOverlay>
+      ) : uiState.pendingRewindSelection ? (
+        <CenteredViewportOverlay>
+          <RewindSelectionPrompt
+            selection={uiState.pendingRewindSelection}
+            onSelect={handleRewindSelection}
+            onCancel={() => handleRewindSelection()}
+          />
+        </CenteredViewportOverlay>
+      ) : uiState.pendingModelSelection ? (
+        <CenteredViewportOverlay>
+          <ModelSelectionPrompt
+            selection={uiState.pendingModelSelection}
+            onSelect={handleModelSelection}
+            onCancel={() => handleModelSelection()}
+          />
+        </CenteredViewportOverlay>
+      ) : (
+        null
       )}
 
       <SafeToastContainer toasts={toasts} />
@@ -923,11 +937,17 @@ function mergeQueuedPromptText(currentText: string, nextText: string): string {
 function getPromptBlockedReason({
   isEngineReady,
   engineError,
+  pendingModelSelection,
+  pendingRewindSelection,
+  pendingResumeSelection,
   transcriptSearchActive,
   isStreaming,
 }: {
   isEngineReady: boolean;
   engineError: string | null;
+  pendingModelSelection: boolean;
+  pendingRewindSelection: boolean;
+  pendingResumeSelection: boolean;
   transcriptSearchActive: boolean;
   isStreaming: boolean;
 }): string | null {
@@ -936,6 +956,15 @@ function getPromptBlockedReason({
   }
   if (!isEngineReady) {
     return "booting";
+  }
+  if (pendingResumeSelection) {
+    return "resume selection open";
+  }
+  if (pendingModelSelection) {
+    return "model selection open";
+  }
+  if (pendingRewindSelection) {
+    return "rewind selection open";
   }
   if (transcriptSearchActive) {
     return "search open";
