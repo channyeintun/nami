@@ -59,6 +59,7 @@ interface AppProps {
   enginePath: string;
   model: string;
   mode: string;
+  autoMode: boolean;
 }
 
 interface QueuedPrompt {
@@ -85,7 +86,7 @@ function toUserInputImagePayload(
   };
 }
 
-const App: FC<AppProps> = ({ enginePath, model, mode }) => {
+const App: FC<AppProps> = ({ enginePath, model, mode, autoMode }) => {
   const prompt = usePromptHistory();
   const [promptImages, setPromptImages] = useState<UserInputImagePayload[]>([]);
   const [pasteWarning, setPasteWarning] = useState<string | null>(null);
@@ -175,6 +176,7 @@ const App: FC<AppProps> = ({ enginePath, model, mode }) => {
   const engine = useEngine(enginePath, {
     model,
     mode,
+    autoMode,
     onEvent: handleEngineEvent,
   });
   const visibleArtifacts = showArtifacts

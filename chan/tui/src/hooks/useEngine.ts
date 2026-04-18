@@ -28,6 +28,7 @@ interface EngineState {
 interface EngineOptions {
   model?: string;
   mode?: string;
+  autoMode?: boolean;
   onEvent?: (event: StreamEvent) => void;
 }
 
@@ -50,6 +51,9 @@ export function useEngine(enginePath: string, options: EngineOptions = {}) {
     }
     if (options.mode) {
       args.push("--mode", options.mode);
+    }
+    if (options.autoMode) {
+      args.push("--auto-mode");
     }
 
     const proc = spawn(enginePath, args, {

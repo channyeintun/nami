@@ -10,6 +10,7 @@ installClipboardBridge();
 const enginePath = process.env["CHAN_ENGINE_PATH"] ?? "chan-engine";
 const model = process.env["CHAN_MODEL"] ?? "github-copilot/gpt-5.4";
 const mode = process.env["CHAN_MODE"] ?? "plan";
+const autoMode = process.env["CHAN_AUTO_MODE"] === "true";
 const theme = createTheme()
   .preset("sonokai")
   .color("background", "#2C2E34")
@@ -24,7 +25,7 @@ const caps = detectTerminalCaps();
 const app = createApp(() => () => ({}));
 const handle = await app.run(
   <ThemeProvider theme={theme}>
-    <App enginePath={enginePath} model={model} mode={mode} />
+    <App enginePath={enginePath} model={model} mode={mode} autoMode={autoMode} />
   </ThemeProvider>,
   {
     caps,

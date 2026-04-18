@@ -39,12 +39,15 @@ for (let i = 0; i < args.length; i++) {
     process.env["CHAN_MODEL"] = args[++i];
   } else if (args[i] === "--mode" && args[i + 1]) {
     process.env["CHAN_MODE"] = args[++i];
+  } else if (args[i] === "--auto-mode") {
+    process.env["CHAN_AUTO_MODE"] = "true";
   } else if (args[i] === "--help" || args[i] === "-h") {
     console.log(`Usage: chan [options]
 
 Options:
   --model, -m <provider/model>  Model to use (default: github-copilot/gpt-5.4)
   --mode <plan|fast>            Execution mode (default: plan)
+  --auto-mode                   Auto-approve non-destructive tool calls
   --help, -h                    Show this help`);
     process.exit(0);
   }

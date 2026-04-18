@@ -28,6 +28,7 @@ const enginePath =
 
 let model = "github-copilot/gpt-5.4";
 let mode = "plan";
+let autoMode = false;
 const theme = createTheme()
   .preset("sonokai")
   .color("background", "#2C2E34")
@@ -45,12 +46,15 @@ for (let i = 0; i < args.length; i++) {
     model = args[++i]!;
   } else if (args[i] === "--mode" && args[i + 1]) {
     mode = args[++i]!;
+  } else if (args[i] === "--auto-mode") {
+    autoMode = true;
   } else if (args[i] === "--help" || args[i] === "-h") {
     console.log(`Usage: chan [options]
 
 Options:
   --model, -m <provider/model>  Model to use (default: github-copilot/gpt-5.4)
   --mode <plan|fast>            Execution mode (default: plan)
+  --auto-mode                   Auto-approve non-destructive tool calls
   --help, -h                    Show this help`);
     process.exit(0);
   }
@@ -59,7 +63,7 @@ Options:
 const app = createApp(() => () => ({}));
 const handle = await app.run(
   <ThemeProvider theme={theme}>
-    <App enginePath={enginePath} model={model} mode={mode} />
+    <App enginePath={enginePath} model={model} mode={mode} autoMode={autoMode} />
   </ThemeProvider>,
   {
     caps,
