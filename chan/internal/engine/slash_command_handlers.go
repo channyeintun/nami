@@ -1331,10 +1331,3 @@ func handleSessionsSlashCommand(cmd *slashCommandContext) error {
 	return emitTextResponse(cmd.bridge, commandspkg.FormatSessionList(sessions, cmd.state.SessionID))
 }
 
-func handleDiffSlashCommand(cmd *slashCommandContext) error {
-	diffOutput := commandspkg.GitDiff(cmd.args)
-	if strings.TrimSpace(diffOutput) == "" {
-		diffOutput = "No changes detected."
-	}
-	return emitTextResponse(cmd.bridge, diffOutput)
-}

@@ -207,7 +207,6 @@ Notes:
 | `/clear`              | Clear the conversation and start fresh         |
 | `/status`             | Show current session and MCP server status     |
 | `/sessions`           | List recent sessions                           |
-| `/diff [args]`        | Show git diff                                  |
 | `/debug [subcommand]` | Enable debug logging or inspect its path       |
 | `/help`               | Show slash-command help                        |
 

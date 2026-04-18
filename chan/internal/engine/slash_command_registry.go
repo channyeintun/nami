@@ -54,15 +54,6 @@ func slashCommandSpecs() []slashCommandSpec {
 		},
 		{
 			Descriptor: commandspkg.Descriptor{
-				Name:           "diff",
-				Description:    "Show git diff (for example /diff --staged)",
-				Usage:          "/diff [args]",
-				TakesArguments: true,
-			},
-			Handler: slashCommandHandlerFunc(handleDiffSlashCommand),
-		},
-		{
-			Descriptor: commandspkg.Descriptor{
 				Name:           "fast",
 				Description:    "Switch to fast mode (direct execution)",
 				Usage:          "/fast",

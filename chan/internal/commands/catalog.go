@@ -254,22 +254,6 @@ func FormatSessionList(sessions []session.Metadata, currentID string) string {
 	return strings.TrimSpace(b.String())
 }
 
-func GitDiff(args string) string {
-	parts := []string{"diff", "--stat"}
-	if strings.TrimSpace(args) != "" {
-		parts = strings.Fields("diff " + args)
-	}
-	cmd := exec.Command("git", parts...)
-	out, err := cmd.Output()
-	if err != nil {
-		return fmt.Sprintf("git diff error: %v", err)
-	}
-	result := strings.TrimSpace(string(out))
-	if len(result) > 5000 {
-		result = result[:5000] + "\n[truncated]"
-	}
-	return result
-}
 
 func visibleDescriptors(catalog []Descriptor) []Descriptor {
 	visible := make([]Descriptor, 0, len(catalog))
