@@ -19,7 +19,7 @@ Chan combines a terminal UI, a Go-based execution engine, first-class artifacts,
 
 Chan is built on three core pillars:
 
-1. **TUI (Silvery)** — interactive terminal UX with streaming output, grouped tool transcripts, progress, background task visibility, and artifact panels.
+1. **TUI (Silvery)** — interactive terminal UX with streaming output, tool transcripts, progress, background task visibility, and artifact panels.
 2. **Go Engine** — high-performance backend for the agent loop, tool execution, provider integration, session persistence, and permission gating.
 3. **Artifacts** — durable structured outputs that can be reviewed, revised, and resumed across turns.
 
