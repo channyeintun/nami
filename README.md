@@ -165,6 +165,7 @@ chan --model openai/gpt-4o
 chan --model ollama/gemma3
 chan --model ollama/gemma4:e4b
 chan --mode fast
+chan --auto-mode
 chan --help
 ```
 
@@ -242,6 +243,8 @@ When Chan wants to run a command or change files, it can ask for approval.
 | `a` | Always allow this exact command                                       |
 | `s` | Allow future non-destructive, non-sensitive requests for this session |
 
+Use the `--auto-mode` flag at startup to automatically enable "Allow Safe" for the entire session.
+
 Destructive commands and sensitive edits such as `.env`, lockfiles, `.git`, or workspace settings still require explicit approval.
 
 ## Tooling
@@ -306,6 +309,7 @@ Environment variables override config:
 | `CHAN_BASE_URL`        | Custom API base URL                              |
 | `CHAN_DEBUG`           | Enable runtime debug logging                     |
 | `CHAN_PERMISSION_MODE` | `default`, `autoApprove`, or `bypassPermissions` |
+| `CHAN_AUTO_MODE`      | Set to `true` to auto-approve non-destructive tools |
 
 If you use GitHub Copilot, config may also persist Copilot credentials and a `subagent_model`.
 

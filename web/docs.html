@@ -407,6 +407,11 @@ install -m 755 chan-engine "$HOME/.local/bin/chan-engine"</code><button class="c
                   ># Direct execution (skip planning)</span
                 ><br /><span class="text-brand">$</span> chan --mode fast
               </div>
+              <div>
+                <span class="text-gray-500"
+                  ># Auto-approve non-destructive tools</span
+                ><br /><span class="text-brand">$</span> chan --auto-mode
+              </div>
             </div>
           </section>
 
@@ -634,6 +639,11 @@ install -m 755 chan-engine "$HOME/.local/bin/chan-engine"</code><button class="c
                 </tbody>
               </table>
             </div>
+            <p class="text-xs text-gray-400 mb-8 leading-relaxed">
+              Use the <code class="text-brand">--auto-mode</code> flag at
+              startup to automatically enable "Allow Safe" for the entire
+              session.
+            </p>
             <p
               class="text-xs text-brand/80 font-bold uppercase tracking-widest"
             >
@@ -1063,6 +1073,14 @@ install -m 755 chan-engine "$HOME/.local/bin/chan-engine"</code><button class="c
                     </td>
                     <td class="p-4 border-t border-[#1a1a1a]">
                       Enable runtime diagnostic log
+                    </td>
+                  </tr>
+                  <tr>
+                    <td class="p-4 border-t border-[#1a1a1a]">
+                      <code>CHAN_AUTO_MODE</code>
+                    </td>
+                    <td class="p-4 border-t border-[#1a1a1a]">
+                      Auto-approve non-destructive tool calls
                     </td>
                   </tr>
                 </tbody>
