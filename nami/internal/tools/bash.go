@@ -30,35 +30,9 @@ type localShell struct {
 	path   string
 }
 
-var bashReadOnlyPrograms = map[string]struct{}{
-	"cat":   {},
-	"df":    {},
-	"du":    {},
-	"echo":  {},
-	"file":  {},
-	"find":  {},
-	"grep":  {},
-	"head":  {},
-	"ls":    {},
-	"pwd":   {},
-	"rg":    {},
-	"stat":  {},
-	"tail":  {},
-	"type":  {},
-	"wc":    {},
-	"which": {},
-}
+var bashReadOnlyPrograms = map[string]struct{}{}
 
-var bashReadOnlyGitSubcommands = map[string]struct{}{
-	"blame":     {},
-	"branch":    {},
-	"diff":      {},
-	"log":       {},
-	"rev-parse": {},
-	"show":      {},
-	"status":    {},
-	"tag":       {},
-}
+var bashReadOnlyGitSubcommands = map[string]struct{}{}
 
 // BashTool executes shell commands through the preferred local shell with basic security validation.
 type BashTool struct{}
@@ -73,13 +47,17 @@ func (t *BashTool) Name() string {
 }
 
 func (t *BashTool) Description() string {
-	return "Execute a shell command in the local workspace."
+	return "Execute a shell command in the local workspace. Provide a short description when possible so permission prompts can show intent clearly."
 }
 
 func (t *BashTool) InputSchema() any {
 	return map[string]any{
 		"type": "object",
 		"properties": map[string]any{
+			"description": map[string]any{
+				"type":        "string",
+				"description": "Optional short explanation of what the command is meant to do.",
+			},
 			"command": map[string]any{
 				"type":        "string",
 				"description": "The shell command to execute.",
@@ -111,10 +89,26 @@ func (t *BashTool) Concurrency(input ToolInput) ConcurrencyDecision {
 		return ConcurrencySerial
 	}
 	command, _ := stringParam(input.Params, "command")
-	if isParallelReadOnlyBashCommand(command) {
+	if bashsecurity.IsReadOnlyBashCommand(command) {
 		return ConcurrencyParallel
 	}
 	return ConcurrencySerial
+}
+
+func (t *BashTool) PermissionTarget(input ToolInput) PermissionTarget {
+	command, _ := stringParam(input.Params, "command")
+	description, _ := stringParam(input.Params, "description")
+	workingDir, _ := stringParam(input.Params, "cwd")
+	value := strings.TrimSpace(command)
+	trimmedDescription := strings.TrimSpace(description)
+	if trimmedDescription != "" {
+		if value == "" {
+			value = trimmedDescription
+		} else {
+			value = trimmedDescription + " :: " + value
+		}
+	}
+	return PermissionTarget{Kind: "command", Value: value, WorkingDir: strings.TrimSpace(workingDir)}
 }
 
 func (t *BashTool) Validate(input ToolInput) error {
@@ -411,199 +405,4 @@ func validateBashSecurity(command string) string {
 
 func checkDestructive(command string) string {
 	return bashsecurity.CheckDestructive(command)
-}
-
-func isParallelReadOnlyBashCommand(command string) bool {
-	segments, ok := splitBashCommandSegments(command)
-	if !ok || len(segments) == 0 {
-		return false
-	}
-	for _, segment := range segments {
-		if !isReadOnlyBashSegment(segment) {
-			return false
-		}
-	}
-	return true
-}
-
-func splitBashCommandSegments(command string) ([]string, bool) {
-	command = strings.TrimSpace(command)
-	if command == "" {
-		return nil, false
-	}
-
-	segments := make([]string, 0, 4)
-	var current strings.Builder
-	inSingle := false
-	inDouble := false
-	escaped := false
-
-	flush := func() {
-		segment := strings.TrimSpace(current.String())
-		if segment != "" {
-			segments = append(segments, segment)
-		}
-		current.Reset()
-	}
-
-	for index := 0; index < len(command); index++ {
-		char := command[index]
-
-		if escaped {
-			current.WriteByte(char)
-			escaped = false
-			continue
-		}
-
-		switch char {
-		case '\\':
-			escaped = true
-			current.WriteByte(char)
-			continue
-		case '\'':
-			if !inDouble {
-				inSingle = !inSingle
-			}
-			current.WriteByte(char)
-			continue
-		case '"':
-			if !inSingle {
-				inDouble = !inDouble
-			}
-			current.WriteByte(char)
-			continue
-		}
-
-		if inSingle || inDouble {
-			current.WriteByte(char)
-			continue
-		}
-
-		switch char {
-		case ';', '\n':
-			flush()
-			continue
-		case '&':
-			if index+1 < len(command) && command[index+1] == '&' {
-				flush()
-				index++
-				continue
-			}
-			return nil, false
-		case '|':
-			flush()
-			if index+1 < len(command) && command[index+1] == '|' {
-				index++
-			}
-			continue
-		case '>', '<', '(', ')', '{', '}', '`':
-			return nil, false
-		case '$':
-			if index+1 < len(command) && command[index+1] == '(' {
-				return nil, false
-			}
-		}
-
-		current.WriteByte(char)
-	}
-
-	if escaped || inSingle || inDouble {
-		return nil, false
-	}
-	flush()
-	return segments, len(segments) > 0
-}
-
-func isReadOnlyBashSegment(segment string) bool {
-	words := bashShellWords(segment)
-	if len(words) == 0 {
-		return false
-	}
-
-	wordIndex := 0
-	for wordIndex < len(words) && isShellEnvAssignment(words[wordIndex]) {
-		wordIndex++
-	}
-	if wordIndex >= len(words) {
-		return false
-	}
-
-	program := words[wordIndex]
-	if program == "git" {
-		if wordIndex+1 >= len(words) {
-			return false
-		}
-		_, ok := bashReadOnlyGitSubcommands[words[wordIndex+1]]
-		return ok
-	}
-
-	_, ok := bashReadOnlyPrograms[program]
-	return ok
-}
-
-func bashShellWords(command string) []string {
-	words := make([]string, 0, 8)
-	var current strings.Builder
-	inSingle := false
-	inDouble := false
-	escaped := false
-
-	flush := func() {
-		if current.Len() == 0 {
-			return
-		}
-		words = append(words, current.String())
-		current.Reset()
-	}
-
-	for index := 0; index < len(command); index++ {
-		char := command[index]
-		if escaped {
-			current.WriteByte(char)
-			escaped = false
-			continue
-		}
-		switch char {
-		case '\\':
-			escaped = true
-		case '\'':
-			if inDouble {
-				current.WriteByte(char)
-			} else {
-				inSingle = !inSingle
-			}
-		case '"':
-			if inSingle {
-				current.WriteByte(char)
-			} else {
-				inDouble = !inDouble
-			}
-		case ' ', '\t', '\n':
-			if inSingle || inDouble {
-				current.WriteByte(char)
-			} else {
-				flush()
-			}
-		default:
-			current.WriteByte(char)
-		}
-	}
-	flush()
-	return words
-}
-
-func isShellEnvAssignment(word string) bool {
-	if word == "" {
-		return false
-	}
-	equalsIndex := strings.IndexByte(word, '=')
-	if equalsIndex <= 0 {
-		return false
-	}
-	for _, char := range word[:equalsIndex] {
-		if !(char == '_' || char >= 'A' && char <= 'Z' || char >= 'a' && char <= 'z' || char >= '0' && char <= '9') {
-			return false
-		}
-	}
-	return true
 }

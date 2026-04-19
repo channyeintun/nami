@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/channyeintun/nami/internal/bashsecurity"
 	"github.com/channyeintun/nami/internal/tools"
 )
 
@@ -106,6 +107,10 @@ func (c *Context) Check(toolName string, input tools.ToolInput, permLevel tools.
 		}
 	}
 
+	if toolName == "bash" && isReadOnlyBashRequest(input) {
+		return DecisionAllow
+	}
+
 	// Default: auto-approve reads, ask for writes/executes
 	switch permLevel {
 	case tools.PermissionReadOnly:
@@ -127,7 +132,16 @@ func AssessRisk(toolName string, input tools.ToolInput, permLevel tools.Permissi
 			command, _ = params.(string)
 		}
 		if warning := CheckDestructive(command); warning != "" {
-			return RiskAssessment{Level: "destructive", Reason: warning}
+			return RiskAssessment{Level: "destructive", Reason: warning, DisallowPersistentAllow: true}
+		}
+		if isReadOnlyBashRequest(input) {
+			return RiskAssessment{Level: "read", Reason: "read-only shell command"}
+		}
+		if firstBoolParam(input.Params, "background") {
+			return RiskAssessment{Level: "execute", Reason: "background shell command continues running after this turn"}
+		}
+		if bashsecurity.ValidateBashSecurity(command) != "" {
+			return RiskAssessment{Level: "high", Reason: "shell command uses restricted shell features"}
 		}
 		return RiskAssessment{Level: "execute"}
 	}
@@ -252,6 +266,31 @@ func firstStringParam(params map[string]any, keys ...string) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+func firstBoolParam(params map[string]any, keys ...string) bool {
+	for _, key := range keys {
+		value, ok := params[key]
+		if !ok {
+			continue
+		}
+		boolValue, ok := value.(bool)
+		if ok {
+			return boolValue
+		}
+	}
+	return false
+}
+
+func isReadOnlyBashRequest(input tools.ToolInput) bool {
+	if firstBoolParam(input.Params, "background") {
+		return false
+	}
+	command, ok := firstStringParam(input.Params, "command")
+	if !ok {
+		return false
+	}
+	return IsBashReadOnly(command)
 }
 
 func isReadOnlySubagentLaunch(toolName string, input tools.ToolInput) bool {

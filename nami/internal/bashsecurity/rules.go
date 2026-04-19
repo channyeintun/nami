@@ -2,7 +2,10 @@
 // internal/tools and internal/permissions without creating an import cycle.
 package bashsecurity
 
-import "regexp"
+import (
+	"regexp"
+	"strings"
+)
 
 // DangerousZshCommands matches ZSH-specific builtins that should always be blocked.
 var DangerousZshCommands = regexp.MustCompile(
@@ -43,6 +46,36 @@ var DestructivePatterns = []DestructivePattern{
 	{regexp.MustCompile(`\bterraform\s+destroy\b`), "terraform destroy"},
 }
 
+var readOnlyPrograms = map[string]struct{}{
+	"cat":   {},
+	"df":    {},
+	"du":    {},
+	"echo":  {},
+	"file":  {},
+	"find":  {},
+	"grep":  {},
+	"head":  {},
+	"ls":    {},
+	"pwd":   {},
+	"rg":    {},
+	"stat":  {},
+	"tail":  {},
+	"type":  {},
+	"wc":    {},
+	"which": {},
+}
+
+var readOnlyGitSubcommands = map[string]struct{}{
+	"blame":     {},
+	"branch":    {},
+	"diff":      {},
+	"log":       {},
+	"rev-parse": {},
+	"show":      {},
+	"status":    {},
+	"tag":       {},
+}
+
 // ValidateBashSecurity returns a non-empty error description if the command is
 // blocked for security reasons, or empty string if it is safe to execute.
 func ValidateBashSecurity(command string) string {
@@ -70,4 +103,199 @@ func CheckDestructive(command string) string {
 		}
 	}
 	return ""
+}
+
+func IsReadOnlyBashCommand(command string) bool {
+	segments, ok := splitCommandSegments(command)
+	if !ok || len(segments) == 0 {
+		return false
+	}
+	for _, segment := range segments {
+		if !isReadOnlySegment(segment) {
+			return false
+		}
+	}
+	return true
+}
+
+func splitCommandSegments(command string) ([]string, bool) {
+	command = strings.TrimSpace(command)
+	if command == "" {
+		return nil, false
+	}
+
+	segments := make([]string, 0, 4)
+	var current strings.Builder
+	inSingle := false
+	inDouble := false
+	escaped := false
+
+	flush := func() {
+		segment := strings.TrimSpace(current.String())
+		if segment != "" {
+			segments = append(segments, segment)
+		}
+		current.Reset()
+	}
+
+	for index := 0; index < len(command); index++ {
+		char := command[index]
+
+		if escaped {
+			current.WriteByte(char)
+			escaped = false
+			continue
+		}
+
+		switch char {
+		case '\\':
+			escaped = true
+			current.WriteByte(char)
+			continue
+		case '\'':
+			if !inDouble {
+				inSingle = !inSingle
+			}
+			current.WriteByte(char)
+			continue
+		case '"':
+			if !inSingle {
+				inDouble = !inDouble
+			}
+			current.WriteByte(char)
+			continue
+		}
+
+		if inSingle || inDouble {
+			current.WriteByte(char)
+			continue
+		}
+
+		switch char {
+		case ';', '\n':
+			flush()
+			continue
+		case '&':
+			if index+1 < len(command) && command[index+1] == '&' {
+				flush()
+				index++
+				continue
+			}
+			return nil, false
+		case '|':
+			flush()
+			if index+1 < len(command) && command[index+1] == '|' {
+				index++
+			}
+			continue
+		case '>', '<', '(', ')', '{', '}', '`':
+			return nil, false
+		case '$':
+			if index+1 < len(command) && command[index+1] == '(' {
+				return nil, false
+			}
+		}
+
+		current.WriteByte(char)
+	}
+
+	if escaped || inSingle || inDouble {
+		return nil, false
+	}
+	flush()
+	return segments, len(segments) > 0
+}
+
+func isReadOnlySegment(segment string) bool {
+	words := shellWords(segment)
+	if len(words) == 0 {
+		return false
+	}
+
+	wordIndex := 0
+	for wordIndex < len(words) && isShellEnvAssignment(words[wordIndex]) {
+		wordIndex++
+	}
+	if wordIndex >= len(words) {
+		return false
+	}
+
+	program := words[wordIndex]
+	if program == "git" {
+		if wordIndex+1 >= len(words) {
+			return false
+		}
+		_, ok := readOnlyGitSubcommands[words[wordIndex+1]]
+		return ok
+	}
+
+	_, ok := readOnlyPrograms[program]
+	return ok
+}
+
+func shellWords(command string) []string {
+	words := make([]string, 0, 8)
+	var current strings.Builder
+	inSingle := false
+	inDouble := false
+	escaped := false
+
+	flush := func() {
+		if current.Len() == 0 {
+			return
+		}
+		words = append(words, current.String())
+		current.Reset()
+	}
+
+	for index := 0; index < len(command); index++ {
+		char := command[index]
+		if escaped {
+			current.WriteByte(char)
+			escaped = false
+			continue
+		}
+		switch char {
+		case '\\':
+			escaped = true
+		case '\'':
+			if inDouble {
+				current.WriteByte(char)
+			} else {
+				inSingle = !inSingle
+			}
+		case '"':
+			if inSingle {
+				current.WriteByte(char)
+			} else {
+				inDouble = !inDouble
+			}
+		case ' ', '\t', '\n':
+			if inSingle || inDouble {
+				current.WriteByte(char)
+			} else {
+				flush()
+			}
+		default:
+			current.WriteByte(char)
+		}
+	}
+	flush()
+	return words
+}
+
+func isShellEnvAssignment(word string) bool {
+	if word == "" {
+		return false
+	}
+	equalsIndex := strings.IndexByte(word, '=')
+	if equalsIndex <= 0 {
+		return false
+	}
+	for _, char := range word[:equalsIndex] {
+		if !(char == '_' || char >= 'A' && char <= 'Z' || char >= 'a' && char <= 'z' || char >= '0' && char <= '9') {
+			return false
+		}
+	}
+	return true
 }
