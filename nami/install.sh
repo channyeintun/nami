@@ -32,9 +32,6 @@ case "$OS" in
 esac
 
 PLATFORM="${OS}-${ARCH}"
-WRAPPER_ASSET="${BINARY_NAME}-${PLATFORM}"
-LAUNCHER_JS_ASSET="${BINARY_NAME}-js-${PLATFORM}.js"
-ENGINE_ASSET="${ENGINE_NAME}-${PLATFORM}"
 ARCHIVE="${BINARY_NAME}-${PLATFORM}.tar.gz"
 
 if [ -z "$INSTALL_DIR" ]; then
@@ -53,9 +50,6 @@ fi
 
 echo "Detected platform: ${PLATFORM}"
 
-WRAPPER_URL="https://github.com/${REPO}/releases/latest/download/${WRAPPER_ASSET}"
-LAUNCHER_JS_URL="https://github.com/${REPO}/releases/latest/download/${LAUNCHER_JS_ASSET}"
-ENGINE_URL="https://github.com/${REPO}/releases/latest/download/${ENGINE_ASSET}"
 ARCHIVE_URL="https://github.com/${REPO}/releases/latest/download/${ARCHIVE}"
 
 TMPDIR=$(mktemp -d)
@@ -113,43 +107,37 @@ install_binary() {
   fi
 }
 
-echo "Trying direct release binaries..."
-if download_asset "$WRAPPER_URL" "$TMPDIR/$WRAPPER_ASSET" && \
-  download_asset "$LAUNCHER_JS_URL" "$TMPDIR/$LAUNCHER_JS_ASSET" && \
-  download_asset "$ENGINE_URL" "$TMPDIR/$ENGINE_ASSET"; then
-  WRAPPER_SOURCE="$TMPDIR/$WRAPPER_ASSET"
-  LAUNCHER_JS_SOURCE="$TMPDIR/$LAUNCHER_JS_ASSET"
-  ENGINE_SOURCE="$TMPDIR/$ENGINE_ASSET"
+echo "Downloading release archive ${ARCHIVE}..."
+if download_asset "$ARCHIVE_URL" "$TMPDIR/$ARCHIVE"; then
+  tar -xzf "$TMPDIR/$ARCHIVE" -C "$TMPDIR"
+  WRAPPER_SOURCE="$TMPDIR/${BINARY_NAME}-${PLATFORM}/${BINARY_NAME}"
+  LAUNCHER_JS_SOURCE="$TMPDIR/${BINARY_NAME}-${PLATFORM}/${LAUNCHER_JS_NAME}"
+  ENGINE_SOURCE="$TMPDIR/${BINARY_NAME}-${PLATFORM}/${ENGINE_NAME}"
 else
-  rm -f "$TMPDIR/$WRAPPER_ASSET" "$TMPDIR/$LAUNCHER_JS_ASSET" "$TMPDIR/$ENGINE_ASSET"
-  echo "Direct release binaries not found; trying legacy archive ${ARCHIVE}..."
-  if download_asset "$ARCHIVE_URL" "$TMPDIR/$ARCHIVE"; then
-    tar -xzf "$TMPDIR/$ARCHIVE" -C "$TMPDIR"
-    WRAPPER_SOURCE="$TMPDIR/${BINARY_NAME}-${PLATFORM}/${BINARY_NAME}"
-    LAUNCHER_JS_SOURCE="$TMPDIR/${BINARY_NAME}-${PLATFORM}/${LAUNCHER_JS_NAME}"
-    ENGINE_SOURCE="$TMPDIR/${BINARY_NAME}-${PLATFORM}/${ENGINE_NAME}"
-  else
+  echo ""
+  echo "Install failed: no release archive found for ${PLATFORM}."
+  echo ""
+  echo "Expected release asset:"
+  echo "  ${ARCHIVE}"
+  echo ""
+  echo "This usually means the latest GitHub release has not been published for your platform yet."
+  echo ""
+  echo "If you already have a local build, install manually instead:"
+  echo "  mkdir -p \"\$HOME/.local/bin\""
+  echo "  install -m 755 nami \"\$HOME/.local/bin/nami\""
+  echo "  install -m 755 nami.js \"\$HOME/.local/bin/nami.js\""
+  echo "  install -m 755 nami-engine \"\$HOME/.local/bin/nami-engine\""
+  echo "  export PATH=\"\$HOME/.local/bin:\$PATH\""
+  exit 1
+fi
+
+for required in "$WRAPPER_SOURCE" "$LAUNCHER_JS_SOURCE" "$ENGINE_SOURCE"; do
+  if [ ! -f "$required" ]; then
     echo ""
-    echo "Install failed: no release assets found for ${PLATFORM}."
-    echo ""
-    echo "Expected one of these release asset sets:"
-    echo "  ${WRAPPER_ASSET}"
-    echo "  ${LAUNCHER_JS_ASSET}"
-    echo "  ${ENGINE_ASSET}"
-    echo "or:"
-    echo "  ${ARCHIVE}"
-    echo ""
-    echo "This usually means the latest GitHub release has not been published for your platform yet."
-    echo ""
-    echo "If you already have a local build, install manually instead:"
-    echo "  mkdir -p \"\$HOME/.local/bin\""
-    echo "  install -m 755 nami \"\$HOME/.local/bin/nami\""
-    echo "  install -m 755 nami.js \"\$HOME/.local/bin/nami.js\""
-    echo "  install -m 755 nami-engine \"\$HOME/.local/bin/nami-engine\""
-    echo "  export PATH=\"\$HOME/.local/bin:\$PATH\""
+    echo "Install failed: release archive is missing required file: $required"
     exit 1
   fi
-fi
+done
 
 ensure_supported_runtime_available
 

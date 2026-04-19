@@ -4,6 +4,12 @@ set -e
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 LAUNCHER_PATH="$SCRIPT_DIR/nami.js"
 
+if [ ! -f "$LAUNCHER_PATH" ]; then
+	echo "nami is partially installed: missing launcher bundle at $LAUNCHER_PATH" >&2
+	echo "Reinstall nami or copy nami.js next to the nami wrapper." >&2
+	exit 1
+fi
+
 if command -v node >/dev/null 2>&1; then
 	exec node "$LAUNCHER_PATH" "$@"
 fi

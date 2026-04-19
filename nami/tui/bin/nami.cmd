@@ -4,6 +4,12 @@ set "SCRIPT_DIR=%~dp0"
 set "LOCAL_NODE_PATH=%SCRIPT_DIR%..\runtime\node\node.exe"
 set "LAUNCHER_PATH=%~dp0nami.js"
 
+if not exist "%LAUNCHER_PATH%" (
+	>&2 echo nami is partially installed: missing launcher bundle at %LAUNCHER_PATH%
+	>&2 echo Reinstall nami or copy nami.js next to the nami wrapper.
+	exit /b 1
+)
+
 if exist "%LOCAL_NODE_PATH%" (
 	"%LOCAL_NODE_PATH%" "%LAUNCHER_PATH%" %*
 	exit /b %ERRORLEVEL%
