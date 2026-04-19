@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -19,6 +20,7 @@ const fileReadDefaultLimitLines = 2000
 const fileReadMaxLimitLines = 2000
 const fileReadMaxOutputBytes = 50 * 1024
 const fileReadMaxRenderedLineChars = 2000
+const fileReadNotebookPreviewLines = 80
 
 // FileReadTool reads file contents from disk with bounded line-based pagination.
 type FileReadTool struct{}
@@ -38,7 +40,7 @@ func (t *FileReadTool) Name() string {
 }
 
 func (t *FileReadTool) Description() string {
-	return "Read the contents of a text file. Use filePath with an optional 1-based offset and limit. For large files, use grep_search first to find anchors, then read a larger bounded window instead of many tiny slices. Reads are bounded by default; continue truncated reads with offset and limit, and avoid rereading the same unchanged slice."
+	return "Read the contents of a file. Text files use 1-based line offset and limit. Jupyter notebooks are rendered as cell-aware content using 1-based cell offset and limit. For large files, use grep_search first to find anchors, then read a larger bounded window instead of many tiny slices. Reads are bounded by default; continue truncated reads with offset and limit, and avoid rereading the same unchanged slice."
 }
 
 func (t *FileReadTool) InputSchema() any {
@@ -138,6 +140,10 @@ func (t *FileReadTool) Execute(ctx context.Context, input ToolInput) (ToolOutput
 		}
 		recordFileReadMetric(FileReadMetric{RequestedOffset: offset, RequestedLimit: limit, BytesReturned: len(stub), UnchangedHit: true})
 		return ToolOutput{Output: stub, FilePath: filePath, Preview: preview}, nil
+	}
+
+	if isNotebookFile(filePath) {
+		return executeNotebookRead(ctx, filePath, offset, limit)
 	}
 
 	file, err := os.Open(filePath)
@@ -245,6 +251,167 @@ func (t *FileReadTool) Execute(ctx context.Context, input ToolInput) (ToolOutput
 	}, nil
 }
 
+type notebookFile struct {
+	Cells []notebookCell `json:"cells"`
+}
+
+type notebookCell struct {
+	CellType       string `json:"cell_type"`
+	Source         any    `json:"source"`
+	ExecutionCount any    `json:"execution_count"`
+	Metadata       struct {
+		Language string `json:"language"`
+	} `json:"metadata"`
+}
+
+func executeNotebookRead(ctx context.Context, filePath string, offset, limit int) (ToolOutput, error) {
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return ToolOutput{}, fmt.Errorf("read notebook %q: %w", filePath, err)
+	}
+	var notebook notebookFile
+	if err := json.Unmarshal(data, &notebook); err != nil {
+		return ToolOutput{}, fmt.Errorf("parse notebook %q: %w", filePath, err)
+	}
+	if len(notebook.Cells) == 0 {
+		message := fmt.Sprintf("%s: notebook has no cells", filePath)
+		return ToolOutput{Output: message, FilePath: filePath, ReadOffset: offset, ReadLimit: limit, Preview: message}, nil
+	}
+
+	startIndex := max(0, offset-1)
+	if startIndex >= len(notebook.Cells) {
+		message := fmt.Sprintf("%s: no notebook cells in requested range", filePath)
+		return ToolOutput{Output: message, FilePath: filePath, ReadOffset: offset, ReadLimit: limit, Preview: message}, nil
+	}
+	endIndex := min(len(notebook.Cells), startIndex+limit)
+	partial := endIndex < len(notebook.Cells)
+	nextOffset := endIndex + 1
+
+	sections := make([]string, 0, endIndex-startIndex+1)
+	sections = append(sections, fmt.Sprintf("Notebook cells %d-%d of %d", startIndex+1, endIndex, len(notebook.Cells)))
+	currentBytes := len(sections[0])
+	lastIncluded := startIndex
+
+	for index := startIndex; index < endIndex; index++ {
+		select {
+		case <-ctx.Done():
+			return ToolOutput{}, ctx.Err()
+		default:
+		}
+		section := renderNotebookCell(index+1, notebook.Cells[index])
+		candidateBytes := currentBytes + 2 + len(section)
+		if candidateBytes > fileReadMaxOutputBytes {
+			partial = true
+			nextOffset = index + 1
+			break
+		}
+		sections = append(sections, section)
+		currentBytes = candidateBytes
+		lastIncluded = index + 1
+	}
+
+	output := strings.Join(sections, "\n\n")
+	if partial {
+		if lastIncluded < startIndex+1 {
+			nextOffset = startIndex + 1
+		} else if nextOffset <= lastIncluded {
+			nextOffset = lastIncluded + 1
+		}
+		hint := fmt.Sprintf("[Partial notebook read. Continue with offset=%d limit=%d.]", nextOffset, limit)
+		if len(output)+2+len(hint) <= fileReadMaxOutputBytes {
+			output += "\n\n" + hint
+		}
+	}
+	preview := output
+	if len(preview) > PreviewChars {
+		preview = preview[:PreviewChars]
+	}
+	return ToolOutput{
+		Output:     output,
+		Truncated:  partial,
+		FilePath:   filePath,
+		ReadOffset: offset,
+		ReadLimit:  limit,
+		Preview:    preview,
+	}, nil
+}
+
+func renderNotebookCell(cellNumber int, cell notebookCell) string {
+	header := fmt.Sprintf("[Cell %d] %s", cellNumber, normalizeNotebookCellType(cell.CellType))
+	if language := notebookCellLanguage(cell); language != "" {
+		header += fmt.Sprintf(" language=%s", language)
+	}
+	if execution := notebookExecutionCount(cell.ExecutionCount); execution != "" {
+		header += fmt.Sprintf(" execution=%s", execution)
+	}
+	source := renderNotebookCellSource(cell.Source)
+	if source == "" {
+		return header + "\n[empty]"
+	}
+	lines := strings.Split(source, "\n")
+	clipped := false
+	if len(lines) > fileReadNotebookPreviewLines {
+		lines = lines[:fileReadNotebookPreviewLines]
+		clipped = true
+	}
+	for index, line := range lines {
+		lines[index], _ = clipRenderedLine(line)
+	}
+	body := strings.Join(lines, "\n")
+	if clipped {
+		body += "\n[cell output truncated]"
+	}
+	return header + "\n" + body
+}
+
+func normalizeNotebookCellType(cellType string) string {
+	cellType = strings.TrimSpace(strings.ToLower(cellType))
+	if cellType == "" {
+		return "unknown"
+	}
+	return cellType
+}
+
+func notebookCellLanguage(cell notebookCell) string {
+	if language := strings.TrimSpace(cell.Metadata.Language); language != "" {
+		return language
+	}
+	if strings.EqualFold(strings.TrimSpace(cell.CellType), "markdown") {
+		return "markdown"
+	}
+	return ""
+}
+
+func notebookExecutionCount(value any) string {
+	switch v := value.(type) {
+	case float64:
+		return strconv.Itoa(int(v))
+	case int:
+		return strconv.Itoa(v)
+	case int64:
+		return strconv.FormatInt(v, 10)
+	case string:
+		return strings.TrimSpace(v)
+	default:
+		return ""
+	}
+}
+
+func renderNotebookCellSource(source any) string {
+	switch value := source.(type) {
+	case string:
+		return strings.TrimSpace(strings.ReplaceAll(value, "\r\n", "\n"))
+	case []any:
+		parts := make([]string, 0, len(value))
+		for _, item := range value {
+			parts = append(parts, fmt.Sprint(item))
+		}
+		return strings.TrimSpace(strings.ReplaceAll(strings.Join(parts, ""), "\r\n", "\n"))
+	default:
+		return strings.TrimSpace(fmt.Sprint(value))
+	}
+}
+
 func validateFileReadParams(params map[string]any) error {
 	allowed := map[string]struct{}{
 		"filePath":  {},
@@ -266,6 +433,9 @@ func isLikelyBinaryFile(filePath string, sample []byte) bool {
 	if len(sample) == 0 {
 		return false
 	}
+	if isNotebookFile(filePath) {
+		return false
+	}
 	switch strings.ToLower(filepath.Ext(filePath)) {
 	case ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".ico", ".tif", ".tiff", ".pdf", ".zip", ".gz", ".tar", ".jar", ".exe", ".dll", ".so", ".dylib", ".woff", ".woff2", ".ttf", ".otf":
 		return true
@@ -283,6 +453,10 @@ func isLikelyBinaryFile(filePath string, sample []byte) bool {
 		}
 	}
 	return controlBytes > len(sample)/10
+}
+
+func isNotebookFile(filePath string) bool {
+	return strings.EqualFold(filepath.Ext(strings.TrimSpace(filePath)), ".ipynb")
 }
 
 func fileReadRange(params map[string]any) (int, int, error) {
