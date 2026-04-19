@@ -25,6 +25,6 @@ Current follow-up focus: complete
 - [x] Task 2: replace release launcher bundle with portable JS launcher plus platform shims
 - [x] Task 3: update installers and release packaging for node, bun, or deno runtimes
 - [x] Task 4: update README and docs for the runtime-neutral release story
-- [ ] Task 5: run final formatting and verification for the launcher migration
+- [x] Task 5: run final formatting and verification for the launcher migration
 
-Current launcher focus: Task 5
+Current launcher focus: complete
