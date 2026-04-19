@@ -147,24 +147,26 @@
               Prerequisites
             </h1>
             <ul class="space-y-4 text-sm text-gray-300">
-              <li class="flex items-center gap-3">
+              <li class="flex items-start gap-3">
                 <i data-lucide="check-circle" class="w-4 h-4 text-brand"></i>
-                macOS, Linux, or Windows 11
+                <span>macOS, Linux, or Windows 11</span>
               </li>
-              <li class="flex items-center gap-3">
+              <li class="flex items-start gap-3">
                 <i data-lucide="check-circle" class="w-4 h-4 text-brand"></i>
-                One supported runtime to run the launcher:
-                <code>node</code>, <code>bun</code>, or <code>deno</code>. The
-                Windows installer can bootstrap Node.js automatically if none
-                is already available.
+                <span>
+                  One supported runtime to run the launcher:
+                  <code>node</code>, <code>bun</code>, or <code>deno</code>.
+                  The Windows installer can bootstrap Node.js automatically if
+                  none is already available.
+                </span>
               </li>
-              <li class="flex items-center gap-3">
+              <li class="flex items-start gap-3">
                 <i data-lucide="check-circle" class="w-4 h-4 text-brand"></i>
-                One configured model provider (API Key or local Ollama)
+                <span>One configured model provider (API Key or local Ollama)</span>
               </li>
-              <li class="flex items-center gap-3">
-                <i data-lucide="check-circle" class="w-4 h-4 text-brand"></i> Go
-                1.26+ (Required only for Source Build)
+              <li class="flex items-start gap-3">
+                <i data-lucide="check-circle" class="w-4 h-4 text-brand"></i>
+                <span>Go 1.26+ (Required only for Source Build)</span>
               </li>
             </ul>
           </section>
@@ -189,12 +191,14 @@
                 <div
                   class="bg-subtle p-6 border border-[#1a1a1a] rounded-md font-mono text-sm relative group overflow-x-auto mb-3"
                 >
-                  <span class="text-brand mr-3">$</span
-                  ><code class="inline-command"
-                    >curl -fsSL
-                    https://raw.githubusercontent.com/channyeintun/nami/main/nami/install.sh
-                    | sh</code
-                  >
+                  <div class="command-line">
+                    <span class="command-prompt text-brand">$</span>
+                    <code class="inline-command"
+                      >curl -fsSL
+                      https://raw.githubusercontent.com/channyeintun/nami/main/nami/install.sh
+                      | sh</code
+                    >
+                  </div>
                   <button
                     class="copy-button absolute top-6 right-6 text-gray-700 hover:text-white transition"
                   >
@@ -216,12 +220,14 @@
                 <div
                   class="bg-subtle p-6 border border-[#1a1a1a] rounded-md font-mono text-sm relative group overflow-x-auto mb-3"
                 >
-                  <span class="text-brand mr-3">PS&gt;</span
-                  ><code class="inline-command"
-                    >Set-ExecutionPolicy -Scope Process Bypass -Force; irm
-                    https://raw.githubusercontent.com/channyeintun/nami/main/nami/install.ps1
-                    | iex</code
-                  >
+                  <div class="command-line">
+                    <span class="command-prompt text-brand">PS&gt;</span>
+                    <code class="inline-command"
+                      >Set-ExecutionPolicy -Scope Process Bypass -Force; irm
+                      https://raw.githubusercontent.com/channyeintun/nami/main/nami/install.ps1
+                      | iex</code
+                    >
+                  </div>
                   <button
                     class="copy-button absolute top-6 right-6 text-gray-700 hover:text-white transition"
                   >

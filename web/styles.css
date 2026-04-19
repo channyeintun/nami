@@ -230,8 +230,9 @@ main {
 }
 
 code {
-  word-break: break-all;
-  white-space: pre-wrap;
+  white-space: normal;
+  word-break: normal;
+  overflow-wrap: anywhere;
 }
 
 pre code {
@@ -243,6 +244,18 @@ pre code {
   display: inline-block;
   white-space: nowrap;
   word-break: normal;
+}
+
+.command-line {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  min-width: max-content;
+  white-space: nowrap;
+}
+
+.command-prompt {
+  flex-shrink: 0;
 }
 
 .code-block::before {
