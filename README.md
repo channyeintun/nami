@@ -8,7 +8,7 @@ Nami combines a terminal UI, a Go-based execution engine, first-class artifacts,
 
 ## Why Nami
 
-- **Agentic terminal workflow** — chat with your codebase, run tools, edit files, and inspect diffs in one place.
+- **Agentic terminal workflow** — chat with your codebase, run tools, and edit files in one place.
 - **Two operating modes** — use **plan** mode for review-first workflows or **fast** mode for direct execution.
 - **First-class artifacts** — implementation plans, task lists, walkthroughs, diff previews, and search reports persist as reviewable outputs.
 - **Bounded child agents** — delegate exploration, code search, or terminal-heavy work to specialized subagents.
