@@ -4,7 +4,7 @@
 
 - [x] Task 1: Add structured clarification runtime and `ask_user_question` tool
 - [x] Task 2: Add generic `lsp` tool
-- [ ] Task 3: Add `list_mcp_resources`
+- [x] Task 3: Add `list_mcp_resources`
 - [ ] Task 4: Add `read_mcp_resource`
 
 ## Phase 2
@@ -25,4 +25,5 @@
 
 - Completed: Task 1
 - Completed: Task 2
-- In progress: Task 3
+- Completed: Task 3
+- In progress: Task 4

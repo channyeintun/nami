@@ -58,6 +58,7 @@ func RunStdioEngine(ctx context.Context, cfg config.Config) error {
 	})
 	defer toolpkg.SetBackgroundCommandNotifier(nil)
 	defer toolpkg.SetAskUserQuestionRuntime(nil)
+	defer toolpkg.SetGlobalMCPManager(nil)
 	registry := toolpkg.NewRegistry()
 	startupSelection := resolveStartupProviderSelection(cfg)
 	provider := normalizeProvider(startupSelection.Provider)
@@ -139,6 +140,7 @@ func RunStdioEngine(ctx context.Context, cfg config.Config) error {
 		titleGenerated:  false,
 	}
 	mcpManager := mcppkg.NewManager(cwd, cfg.MCP)
+	toolpkg.SetGlobalMCPManager(mcpManager)
 	mcpManager.Start(ctx)
 	defer func() {
 		if err := mcpManager.Close(); err != nil && debuglog.Enabled {

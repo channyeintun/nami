@@ -35,6 +35,7 @@ func NewRegistry() *Registry {
 	r.Register(NewGoReferencesTool())
 	r.Register(NewAskUserQuestionTool())
 	r.Register(NewLSPTool())
+	r.Register(NewListMCPResourcesTool())
 	r.Register(NewReadProjectStructureTool())
 	r.Register(NewProjectOverviewTool())
 	r.Register(NewDependencyOverviewTool())

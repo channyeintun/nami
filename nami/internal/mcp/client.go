@@ -102,6 +102,7 @@ func (r CallResult) Render() (string, error) {
 type Session interface {
 	ID() string
 	ServerInfo() ServerInfo
+	HasResourcesCapability() bool
 	ListTools(context.Context) ([]ToolDescriptor, error)
 	ListPrompts(context.Context) ([]PromptDescriptor, error)
 	ListResources(context.Context) ([]ResourceDescriptor, error)
@@ -141,6 +142,14 @@ func (s *sdkClientSession) ServerInfo() ServerInfo {
 		return ServerInfo{}
 	}
 	return s.info
+}
+
+func (s *sdkClientSession) HasResourcesCapability() bool {
+	if s == nil || s.session == nil {
+		return false
+	}
+	initialize := s.session.InitializeResult()
+	return initialize != nil && initialize.Capabilities != nil && initialize.Capabilities.Resources != nil
 }
 
 func (s *sdkClientSession) ListTools(ctx context.Context) ([]ToolDescriptor, error) {

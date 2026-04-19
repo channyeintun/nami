@@ -44,6 +44,16 @@ type DiscoveredTool struct {
 	ProjectPath string
 }
 
+type ResourceInventory struct {
+	ServerName        string
+	Connected         bool
+	ResourcesCapable  bool
+	Resources         []ResourceDescriptor
+	ResourceTemplates []ResourceTemplateDescriptor
+	Warnings          []string
+	Error             string
+}
+
 type Manager struct {
 	mu          sync.RWMutex
 	definitions map[string]ServerDefinition
@@ -57,6 +67,7 @@ type serverRuntime struct {
 	definition        ServerDefinition
 	session           Session
 	server            ServerInfo
+	resourcesCapable  bool
 	toolByName        map[string]ToolDescriptor
 	toolNames         []string
 	prompts           []PromptDescriptor
@@ -223,6 +234,52 @@ func (m *Manager) Statuses() []ServerStatus {
 	return statuses
 }
 
+func (m *Manager) ResourceInventories(serverName string, includeTemplates bool) ([]ResourceInventory, error) {
+	if m == nil {
+		return nil, fmt.Errorf("mcp manager is unavailable")
+	}
+
+	filter := strings.TrimSpace(serverName)
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	if filter != "" {
+		if _, ok := m.statuses[filter]; !ok {
+			return nil, fmt.Errorf("unknown mcp server %q", filter)
+		}
+	}
+
+	inventories := make([]ResourceInventory, 0, len(m.order))
+	for _, name := range m.order {
+		if filter != "" && name != filter {
+			continue
+		}
+		status, ok := m.statuses[name]
+		if !ok {
+			continue
+		}
+		inventory := ResourceInventory{
+			ServerName: name,
+			Connected:  status.Connected,
+			Warnings:   append([]string(nil), status.Warnings...),
+			Error:      status.Error,
+		}
+		if runtime := m.runtimes[name]; runtime != nil {
+			inventory.ResourcesCapable = runtime.resourcesCapable
+			inventory.Resources = append([]ResourceDescriptor(nil), runtime.resources...)
+			if includeTemplates {
+				inventory.ResourceTemplates = append([]ResourceTemplateDescriptor(nil), runtime.resourceTemplates...)
+			}
+		}
+		inventories = append(inventories, inventory)
+	}
+
+	if len(inventories) == 0 {
+		return nil, fmt.Errorf("no MCP servers matched")
+	}
+	return inventories, nil
+}
+
 func (m *Manager) startServer(ctx context.Context, definition ServerDefinition) {
 	connectCtx, cancel := context.WithTimeout(ctx, definition.ConnectTimeout)
 	defer cancel()
@@ -253,6 +310,7 @@ func (m *Manager) startServer(ctx context.Context, definition ServerDefinition) 
 		definition:        definition,
 		session:           session,
 		server:            session.ServerInfo(),
+		resourcesCapable:  session.HasResourcesCapability(),
 		toolByName:        make(map[string]ToolDescriptor, len(filteredTools)),
 		toolNames:         make([]string, 0, len(filteredTools)),
 		prompts:           prompts,
