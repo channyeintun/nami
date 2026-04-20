@@ -26,7 +26,6 @@ import type {
   NoticePayload,
   ModelSelectionOptionPayload,
   ModelSelectionRequestedPayload,
-  MemoryRecalledPayload,
   ModeChangedPayload,
   ModelChangedPayload,
   PermissionRequestPayload,
@@ -36,14 +35,12 @@ import type {
   RewindSelectionTurnPayload,
   ResumeSelectionRequestedPayload,
   ResumeSelectionSessionPayload,
-  RetrievalUsedPayload,
   ReadyPayload,
   SessionRewoundPayload,
   SessionRestoredPayload,
   SlashCommandDescriptorPayload,
   SessionUpdatedPayload,
   StreamEvent,
-  TurnTimingPayload,
   TurnCompletePayload,
   TokenDeltaPayload,
   ToolErrorPayload,
@@ -273,23 +270,6 @@ export interface UISlashCommand {
   takesArguments: boolean;
 }
 
-export interface UIMemoryRecallEntry {
-  title: string;
-  noteType?: string;
-  source?: string;
-  indexPath?: string;
-  notePath?: string;
-  line?: string;
-}
-
-export interface UIRetrievalUsage {
-  snippetCount: number;
-  tokensUsed: number;
-  anchorCount: number;
-  edgesExpanded: number;
-  skipped: boolean;
-}
-
 export interface UIRateLimitWindow {
   usedPercentage: number;
   resetsAt: number;
@@ -338,11 +318,6 @@ export interface EngineUIState {
     childAgentInputTokens: number;
     childAgentOutputTokens: number;
   };
-  memoryRecall: {
-    source: string | null;
-    entries: UIMemoryRecallEntry[];
-  };
-  retrieval: UIRetrievalUsage | null;
   rateLimits: UIRateLimits;
   artifacts: UIArtifact[];
   focusedArtifactId: string | null;
@@ -361,12 +336,6 @@ export interface EngineUIState {
     tokensBefore: number;
     tokensAfter?: number;
   } | null;
-  turnTiming: {
-    firstTokenMs: number | null;
-    firstToolResultMs: number | null;
-    firstArtifactFocusMs: number | null;
-    totalMs: number | null;
-  };
   allowedPermissionFileTypes: string[];
   statusLine: string | null;
   pendingPermission: PermissionRequestPayload | null;
@@ -409,11 +378,6 @@ const initialState = (model: string, mode: string): EngineUIState => ({
   maxOutputTokens: null,
   currentContextUsage: null,
   cost: emptyCostState(),
-  memoryRecall: {
-    source: null,
-    entries: [],
-  },
-  retrieval: null,
   rateLimits: { fiveHour: null, sevenDay: null },
   artifacts: [],
   focusedArtifactId: null,
@@ -427,12 +391,6 @@ const initialState = (model: string, mode: string): EngineUIState => ({
   backgroundAgents: [],
   backgroundCommands: [],
   compact: null,
-  turnTiming: {
-    firstTokenMs: null,
-    firstToolResultMs: null,
-    firstArtifactFocusMs: null,
-    totalMs: null,
-  },
   allowedPermissionFileTypes: [],
   statusLine: null,
   pendingPermission: null,
@@ -707,10 +665,7 @@ export function useEvents(initialModel: string, initialMode: string) {
               submittingArtifactReviewRequestId: null,
               isStreaming: false,
               compact: null,
-              statusLine: buildTurnCompleteStatusLine(
-                "cancelled",
-                s.turnTiming,
-              ),
+              statusLine: buildTurnCompleteStatusLine("cancelled"),
             };
           }
 
@@ -734,10 +689,7 @@ export function useEvents(initialModel: string, initialMode: string) {
             submittingArtifactReviewRequestId: null,
             isStreaming: false,
             compact: null,
-            statusLine: buildTurnCompleteStatusLine(
-              p.stop_reason,
-              s.turnTiming,
-            ),
+            statusLine: buildTurnCompleteStatusLine(p.stop_reason),
           };
         });
         if (p.stop_reason !== "cancelled") {
@@ -746,18 +698,6 @@ export function useEvents(initialModel: string, initialMode: string) {
         break;
       }
       case "turn_timing": {
-        const p = event.payload as TurnTimingPayload;
-        setUIState((s) => {
-          const turnTiming = applyTurnTimingUpdate(s.turnTiming, p);
-          return {
-            ...s,
-            turnTiming,
-            statusLine:
-              s.isStreaming || s.activeTurnStatus !== "idle"
-                ? buildTurnTimingStatusLine(p, turnTiming)
-                : s.statusLine,
-          };
-        });
         break;
       }
       case "tool_start": {
@@ -1146,55 +1086,9 @@ export function useEvents(initialModel: string, initialMode: string) {
         break;
       }
       case "memory_recalled": {
-        const p = event.payload as MemoryRecalledPayload;
-        setUIState((s) => ({
-          ...s,
-          memoryRecall: {
-            source:
-              typeof p.source === "string" && p.source.trim() ? p.source : null,
-            entries: Array.isArray(p.entries)
-              ? p.entries
-                  .filter(
-                    (entry) =>
-                      typeof entry?.title === "string" && entry.title.trim(),
-                  )
-                  .map((entry) => ({
-                    title: entry.title.trim(),
-                    noteType: stringOrUndefined(entry.note_type),
-                    source: stringOrUndefined(entry.source),
-                    indexPath: stringOrUndefined(entry.index_path),
-                    notePath: stringOrUndefined(entry.note_path),
-                    line: stringOrUndefined(entry.line),
-                  }))
-              : [],
-          },
-        }));
         break;
       }
       case "retrieval_used": {
-        const p = event.payload as RetrievalUsedPayload;
-        setUIState((s) => ({
-          ...s,
-          retrieval: {
-            snippetCount:
-              typeof p.snippet_count === "number" && p.snippet_count > 0
-                ? p.snippet_count
-                : 0,
-            tokensUsed:
-              typeof p.tokens_used === "number" && p.tokens_used > 0
-                ? p.tokens_used
-                : 0,
-            anchorCount:
-              typeof p.anchor_count === "number" && p.anchor_count > 0
-                ? p.anchor_count
-                : 0,
-            edgesExpanded:
-              typeof p.edges_expanded === "number" && p.edges_expanded > 0
-                ? p.edges_expanded
-                : 0,
-            skipped: p.skipped === true,
-          },
-        }));
         break;
       }
       case "attempt_log_surfaced": {
@@ -1495,11 +1389,6 @@ export function useEvents(initialModel: string, initialMode: string) {
           activeTurnStatus: "idle",
           showPlanPanel: false,
           sessionId: p.session_id,
-          memoryRecall: {
-            source: null,
-            entries: [],
-          },
-          retrieval: null,
           artifacts: [],
           focusedArtifactId: null,
           pendingArtifactReview: null,
@@ -1513,12 +1402,6 @@ export function useEvents(initialModel: string, initialMode: string) {
           backgroundAgents: [],
           backgroundCommands: [],
           compact: null,
-          turnTiming: {
-            firstTokenMs: null,
-            firstToolResultMs: null,
-            firstArtifactFocusMs: null,
-            totalMs: null,
-          },
           isStreaming: false,
           error: null,
           statusLine:
@@ -1570,11 +1453,6 @@ export function useEvents(initialModel: string, initialMode: string) {
               sessionTitle: normalizedTitle,
               currentContextUsage: 0,
               cost: emptyCostState(),
-              memoryRecall: {
-                source: null,
-                entries: [],
-              },
-              retrieval: null,
               artifacts: [],
               focusedArtifactId: null,
               pendingArtifactReview: null,
@@ -1587,12 +1465,6 @@ export function useEvents(initialModel: string, initialMode: string) {
               backgroundAgents: [],
               backgroundCommands: [],
               compact: null,
-              turnTiming: {
-                firstTokenMs: null,
-                firstToolResultMs: null,
-                firstArtifactFocusMs: null,
-                totalMs: null,
-              },
               statusLine: `Started new session ${p.session_id}`,
               pendingPermission: null,
               error: null,
@@ -1659,16 +1531,6 @@ export function useEvents(initialModel: string, initialMode: string) {
       pendingResumeSelection: null,
       pendingAskUserQuestion: null,
       submittingArtifactReviewRequestId: null,
-      turnTiming: {
-        firstTokenMs: null,
-        firstToolResultMs: null,
-        firstArtifactFocusMs: null,
-        totalMs: null,
-      },
-      memoryRecall: {
-        source: null,
-        entries: [],
-      },
       statusLine: null,
       error: null,
     }));
@@ -1750,17 +1612,6 @@ export function useEvents(initialModel: string, initialMode: string) {
       liveAssistantBlocks: [],
       liveAssistantMessageId: null,
       activeTurnStatus: "working",
-      turnTiming: {
-        firstTokenMs: null,
-        firstToolResultMs: null,
-        firstArtifactFocusMs: null,
-        totalMs: null,
-      },
-      memoryRecall: {
-        source: null,
-        entries: [],
-      },
-      retrieval: null,
       error: null,
       statusLine: null,
       isStreaming: true,
@@ -2401,65 +2252,8 @@ function normalizeSlashCommands(
     }));
 }
 
-function applyTurnTimingUpdate(
-  timing: EngineUIState["turnTiming"],
-  payload: TurnTimingPayload,
-): EngineUIState["turnTiming"] {
-  switch (payload.checkpoint) {
-    case "first_token":
-      return { ...timing, firstTokenMs: payload.elapsed_ms };
-    case "first_tool_result":
-      return { ...timing, firstToolResultMs: payload.elapsed_ms };
-    case "first_artifact_focus":
-      return { ...timing, firstArtifactFocusMs: payload.elapsed_ms };
-    case "turn_complete":
-    case "cancelled":
-      return { ...timing, totalMs: payload.elapsed_ms };
-    default:
-      return timing;
-  }
-}
-
-function buildTurnTimingStatusLine(
-  payload: TurnTimingPayload,
-  timing: EngineUIState["turnTiming"],
-): string | null {
-  switch (payload.checkpoint) {
-    case "first_token":
-      return `First token in ${formatLatencyMs(payload.elapsed_ms)}`;
-    case "first_tool_result":
-      return `First tool result in ${formatLatencyMs(payload.elapsed_ms)}`;
-    case "first_artifact_focus":
-      return `Artifact focused in ${formatLatencyMs(payload.elapsed_ms)}`;
-    case "turn_complete":
-    case "cancelled":
-      return buildTurnCompleteStatusLine(
-        payload.checkpoint === "cancelled" ? "cancelled" : "end_turn",
-        timing,
-      );
-    default:
-      return null;
-  }
-}
-
-function buildTurnCompleteStatusLine(
-  stopReason: string,
-  timing: EngineUIState["turnTiming"],
-): string {
-  const parts = [`Turn complete (${stopReason})`];
-  if (timing.firstTokenMs !== null) {
-    parts.push(`first token ${formatLatencyMs(timing.firstTokenMs)}`);
-  }
-  if (timing.firstToolResultMs !== null) {
-    parts.push(`first tool ${formatLatencyMs(timing.firstToolResultMs)}`);
-  }
-  if (timing.firstArtifactFocusMs !== null) {
-    parts.push(`artifact ${formatLatencyMs(timing.firstArtifactFocusMs)}`);
-  }
-  if (timing.totalMs !== null) {
-    parts.push(`total ${formatLatencyMs(timing.totalMs)}`);
-  }
-  return parts.join(" · ");
+function buildTurnCompleteStatusLine(stopReason: string): string {
+  return `Turn complete (${stopReason})`;
 }
 
 function buildArtifactFocusStatusLine(
@@ -2498,16 +2292,6 @@ function artifactKindLabel(kind: string): string {
     default:
       return kind.replace(/-/g, " ");
   }
-}
-
-function formatLatencyMs(value: number): string {
-  if (!Number.isFinite(value) || value < 0) {
-    return "0ms";
-  }
-  if (value < 1000) {
-    return `${Math.round(value)}ms`;
-  }
-  return `${(value / 1000).toFixed(value >= 10_000 ? 0 : 1)}s`;
 }
 
 interface AgentToolInput {

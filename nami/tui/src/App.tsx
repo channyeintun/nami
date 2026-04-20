@@ -926,21 +926,7 @@ const App: FC<AppProps> = ({ enginePath, model, mode, autoMode }) => {
               </Box>
             )}
             <PromptFooter
-              mode={uiState.mode}
-              model={uiState.model}
-              maxContextWindow={uiState.maxContextWindow}
-              maxOutputTokens={uiState.maxOutputTokens}
-              currentContextUsage={uiState.currentContextUsage}
               isLoading={uiState.isStreaming}
-              disabled={isPromptDisabled}
-              promptValue={prompt.value}
-              totalCostUsd={uiState.cost.totalUsd}
-              inputTokens={uiState.cost.inputTokens}
-              outputTokens={uiState.cost.outputTokens}
-              memoryRecall={uiState.memoryRecall}
-              retrieval={uiState.retrieval}
-              turnTiming={uiState.turnTiming}
-              cursorOffset={prompt.cursorOffset}
               blockedReason={promptBlockedReason}
               queuedPromptCount={queuedPrompts.length}
               showExpandedHint={showFooterHints}

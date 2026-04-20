@@ -1,38 +1,8 @@
 import React, { type FC, useEffect, useMemo, useState } from "react";
 import { Box, Text } from "silvery";
-import {
-  calculateTokenWarningState,
-  formatTokenCount,
-} from "../utils/modelContext.js";
-import type {
-  UIMemoryRecallEntry,
-  UIRetrievalUsage,
-} from "../hooks/useEvents.js";
 
 interface PromptFooterProps {
-  mode: string;
-  model: string;
-  maxContextWindow?: number | null;
-  maxOutputTokens?: number | null;
-  currentContextUsage?: number | null;
   isLoading: boolean;
-  disabled?: boolean;
-  promptValue: string;
-  totalCostUsd: number;
-  inputTokens: number;
-  outputTokens: number;
-  memoryRecall: {
-    source: string | null;
-    entries: UIMemoryRecallEntry[];
-  };
-  retrieval: UIRetrievalUsage | null;
-  turnTiming: {
-    firstTokenMs: number | null;
-    firstToolResultMs: number | null;
-    firstArtifactFocusMs: number | null;
-    totalMs: number | null;
-  };
-  cursorOffset?: number;
   blockedReason?: string | null;
   queuedPromptCount?: number;
   showExpandedHint?: boolean;
@@ -43,21 +13,7 @@ interface PromptFooterProps {
 }
 
 const PromptFooter: FC<PromptFooterProps> = ({
-  mode,
-  model,
-  maxContextWindow,
-  maxOutputTokens,
-  currentContextUsage,
   isLoading,
-  disabled,
-  promptValue,
-  totalCostUsd,
-  inputTokens,
-  outputTokens,
-  memoryRecall,
-  retrieval,
-  turnTiming,
-  cursorOffset = 0,
   blockedReason,
   queuedPromptCount = 0,
   showExpandedHint = false,
@@ -84,39 +40,10 @@ const PromptFooter: FC<PromptFooterProps> = ({
   }, []);
 
   const footerLayout = terminalColumns < 120 ? "column" : "row";
-  const promptTextColumns = useMemo(
-    () => getPromptTextColumns(terminalColumns),
-    [terminalColumns],
-  );
-  const wrappedLineCount = useMemo(
-    () => getWrappedLineSegments(promptValue, promptTextColumns).length,
-    [promptTextColumns, promptValue],
-  );
-  const tokenUsage = currentContextUsage ?? inputTokens + outputTokens;
-  const tokenWarning = useMemo(
-    () =>
-      calculateTokenWarningState(
-        tokenUsage,
-        model,
-        maxContextWindow,
-        maxOutputTokens,
-      ),
-    [maxContextWindow, maxOutputTokens, model, tokenUsage],
-  );
-  const showWrappedIndicator = promptValue.length > 0 && wrappedLineCount > 1;
-  const promptMetrics = useMemo(
-    () => buildPromptMetrics(promptValue, cursorOffset),
-    [cursorOffset, promptValue],
-  );
-  const activityLabel = isLoading ? "running" : disabled ? "blocked" : "ready";
-  const activityDetails = useMemo(
-    () => buildActivityDetails(blockedReason, showArtifacts),
-    [blockedReason, showArtifacts],
-  );
   const hint = useMemo(
     () =>
       buildInputHint(
-        disabled,
+        isLoading,
         terminalColumns,
         artifactsShortcutLabel,
         reasoningShortcutLabel,
@@ -126,86 +53,42 @@ const PromptFooter: FC<PromptFooterProps> = ({
       ),
     [
       artifactsShortcutLabel,
-      reasoningShortcutLabel,
       backgroundTasksShortcutLabel,
-      disabled,
+      isLoading,
       queuedPromptCount,
+      reasoningShortcutLabel,
       showExpandedHint,
       terminalColumns,
     ],
   );
-  const costWarningText = useMemo(
-    () => buildCostWarningText(totalCostUsd),
-    [totalCostUsd],
+  const statusDetails = useMemo(
+    () => buildStatusDetails(blockedReason, showArtifacts),
+    [blockedReason, showArtifacts],
   );
-  const memoryRecallText = useMemo(
-    () => buildMemoryRecallText(memoryRecall),
-    [memoryRecall],
-  );
-  const retrievalText = useMemo(
-    () => buildRetrievalText(retrieval),
-    [retrieval],
-  );
-  const latencyText = useMemo(() => buildLatencyText(turnTiming), [turnTiming]);
-  const warningText = tokenWarning.isWarning
-    ? `Compact soon (~${tokenWarning.percentLeft}% until threshold) · ${formatTokenCount(tokenUsage)}/${formatTokenCount(tokenWarning.effectiveContextWindow)} used · Run /compact before the next long turn`
-    : null;
 
   return (
     <Box flexDirection="column" userSelect="none">
-      {costWarningText ? (
-        <Box paddingX={2} paddingTop={1}>
-          <Text color="$warning">{costWarningText}</Text>
-        </Box>
-      ) : null}
-      {warningText ? (
-        <Box paddingX={2} paddingTop={costWarningText ? 0 : 1}>
-          <Text color={tokenWarning.isError ? "$error" : "$warning"}>
-            {warningText}
-          </Text>
-        </Box>
-      ) : null}
-      {retrievalText ? (
-        <Box paddingX={2} paddingTop={warningText || costWarningText ? 0 : 1}>
-          <Text dimColor>{retrievalText}</Text>
-        </Box>
-      ) : null}
-      {memoryRecallText ? (
-        <Box
-          paddingX={2}
-          paddingTop={warningText || costWarningText || retrievalText ? 0 : 1}
-        >
-          <Text dimColor>{memoryRecallText}</Text>
-        </Box>
-      ) : null}
       <Box
         paddingX={2}
-        paddingTop={
-          warningText || costWarningText || retrievalText || memoryRecallText
-            ? 0
-            : 1
-        }
+        paddingTop={1}
         flexDirection={footerLayout}
         justifyContent="space-between"
         minWidth={0}
       >
-        <Box flexDirection="row" minWidth={0} flexGrow={1}>
-          {renderModeBadge(mode)}
-          <Text dimColor>
-            {"  "}
-            <Text>{activityLabel}</Text>
-            {activityDetails ? `  ${activityDetails}` : ""}
-            {latencyText ? `  ${latencyText}` : ""}
-            {showWrappedIndicator ? `  wrapped:${wrappedLineCount}` : ""}
-            {promptMetrics ? `  ${promptMetrics}` : ""}
-          </Text>
-        </Box>
         <Text
           dimColor
           wrap={footerLayout === "row" ? "truncate-end" : undefined}
         >
           {hint}
         </Text>
+        {statusDetails ? (
+          <Text
+            dimColor
+            wrap={footerLayout === "row" ? "truncate-start" : undefined}
+          >
+            {statusDetails}
+          </Text>
+        ) : null}
       </Box>
     </Box>
   );
@@ -213,99 +96,7 @@ const PromptFooter: FC<PromptFooterProps> = ({
 
 export default PromptFooter;
 
-function formatModeLabel(mode: string): string {
-  return mode === "plan" ? "PLAN" : mode.toUpperCase();
-}
-
-function renderModeBadge(mode: string) {
-  return (
-    <Text
-      color={modeLabelColor(mode)}
-      bold
-    >{`[${formatModeLabel(mode)}]`}</Text>
-  );
-}
-
-function modeLabelColor(mode: string): "$primary" | "$accent" | undefined {
-  if (mode === "plan") {
-    return "$primary";
-  }
-  if (mode === "fast") {
-    return "$accent";
-  }
-  return undefined;
-}
-
-function getPromptTextColumns(terminalColumns: number): number {
-  return Math.max(8, terminalColumns - 7);
-}
-
-function getWrappedLineSegments(value: string, columns: number): string[] {
-  const wrapWidth = Math.max(1, columns - 1);
-  const logicalLines = value.split("\n");
-  const segments: string[] = [];
-
-  for (const line of logicalLines) {
-    if (line.length === 0) {
-      segments.push("");
-      continue;
-    }
-
-    for (let offset = 0; offset < line.length; offset += wrapWidth) {
-      segments.push(line.slice(offset, offset + wrapWidth));
-    }
-  }
-
-  return segments;
-}
-
-function buildCostWarningText(totalCostUsd: number): string | null {
-  const threshold = getCostWarningThresholdUsd();
-  if (threshold <= 0 || totalCostUsd < threshold) {
-    return null;
-  }
-
-  return `Session cost passed $${threshold.toFixed(2)} · current spend $${totalCostUsd.toFixed(4)} · Review API usage before the next long turn`;
-}
-
-function buildLatencyText(
-  turnTiming: PromptFooterProps["turnTiming"],
-): string | null {
-  const parts: string[] = [];
-  if (turnTiming.firstTokenMs !== null) {
-    parts.push(`token:${formatLatencyMs(turnTiming.firstTokenMs)}`);
-  }
-  if (turnTiming.firstToolResultMs !== null) {
-    parts.push(`tool:${formatLatencyMs(turnTiming.firstToolResultMs)}`);
-  }
-  if (turnTiming.firstArtifactFocusMs !== null) {
-    parts.push(`artifact:${formatLatencyMs(turnTiming.firstArtifactFocusMs)}`);
-  }
-  if (turnTiming.totalMs !== null) {
-    parts.push(`total:${formatLatencyMs(turnTiming.totalMs)}`);
-  }
-  return parts.length > 0 ? parts.join("  ") : null;
-}
-
-function buildPromptMetrics(
-  promptValue: string,
-  cursorOffset: number,
-): string | null {
-  if (promptValue.length === 0) {
-    return null;
-  }
-
-  const clampedCursor = Math.max(0, Math.min(cursorOffset, promptValue.length));
-  const beforeCursor = promptValue.slice(0, clampedCursor);
-  const lines = beforeCursor.split("\n");
-  const line = lines.length;
-  const column = (lines[lines.length - 1] ?? "").length + 1;
-  const lineCount = promptValue.split("\n").length;
-
-  return `${promptValue.length}ch ${lineCount}ln L${line}:C${column}`;
-}
-
-function buildActivityDetails(
+function buildStatusDetails(
   blockedReason: string | null | undefined,
   showArtifacts: boolean,
 ): string | null {
@@ -316,20 +107,24 @@ function buildActivityDetails(
   if (!showArtifacts) {
     parts.push("artifacts hidden");
   }
-  return parts.length > 0 ? parts.join("  ") : null;
+  return parts.length > 0 ? parts.join(" | ") : null;
 }
 
 function buildInputHint(
-  disabled: boolean | undefined,
+  isLoading: boolean,
   terminalColumns: number,
   artifactsShortcutLabel: string,
   reasoningShortcutLabel: string,
   backgroundTasksShortcutLabel: string,
   queuedPromptCount: number,
   showExpandedHint: boolean,
-) {
+): string {
+  if (isLoading) {
+    return "esc to interrupt";
+  }
+
   if (!showExpandedHint) {
-    return "(?)";
+    return "? for shortcuts";
   }
 
   const pasteHint =
@@ -344,136 +139,12 @@ function buildInputHint(
   const reasoningHint = ` | ${reasoningShortcutLabel} reason`;
 
   if (terminalColumns < 72) {
-    return disabled
-      ? `Busy${pasteHint} | ${artifactsShortcutLabel} arts${tasksHint}${reasoningHint}${queueHint} | Esc cancel`
-      : `Enter send${pasteHint} | ${artifactsShortcutLabel} arts${tasksHint}${reasoningHint}${queueHint} | Esc cancel`;
+    return `Enter send${pasteHint} | ${artifactsShortcutLabel} arts${tasksHint}${reasoningHint}${queueHint}`;
   }
 
   if (terminalColumns < 96) {
-    return disabled
-      ? `Busy${pasteHint} | ${artifactsShortcutLabel} artifacts${tasksHint}${reasoningHint}${queueHint} | Esc cancel`
-      : `Enter send${pasteHint} | ${artifactsShortcutLabel} artifacts${tasksHint}${reasoningHint}${queueHint} | Ctrl+G search | Esc cancel`;
+    return `Enter send${pasteHint} | ${artifactsShortcutLabel} artifacts${tasksHint}${reasoningHint}${queueHint} | Ctrl+G search`;
   }
 
-  if (disabled) {
-    return `Engine busy${pasteHint} | ${artifactsShortcutLabel} artifacts${tasksHint}${reasoningHint}${queueHint} | Esc cancel`;
-  }
-  return `Enter send${pasteHint} | Ctrl+O newline | Ctrl+G transcript search | ${artifactsShortcutLabel} artifacts${tasksHint}${reasoningHint}${queueHint} | Tab mode | Esc cancel`;
-}
-
-function buildMemoryRecallText(
-  memoryRecall: PromptFooterProps["memoryRecall"],
-): string | null {
-  if (
-    !Array.isArray(memoryRecall.entries) ||
-    memoryRecall.entries.length === 0
-  ) {
-    return null;
-  }
-
-  const labels = memoryRecall.entries
-    .map((entry) => entry.title.trim())
-    .filter(
-      (title, index, items) =>
-        title.length > 0 && items.indexOf(title) === index,
-    );
-  if (labels.length === 0) {
-    return null;
-  }
-
-  const visible = labels.slice(0, 2);
-  const parts = [`Memory recall: ${visible.join(", ")}`];
-  if (labels.length > visible.length) {
-    parts.push(`+${labels.length - visible.length} more`);
-  }
-  if (memoryRecall.source) {
-    parts.push(`via ${memoryRecall.source}`);
-  }
-  return parts.join(" · ");
-}
-
-function buildRetrievalText(
-  retrieval: PromptFooterProps["retrieval"],
-): string | null {
-  if (!retrieval) {
-    return null;
-  }
-  if (retrieval.skipped) {
-    return "Live retrieval: skipped under pressure";
-  }
-  if (retrieval.snippetCount <= 0) {
-    return null;
-  }
-
-  const parts = [
-    `Live retrieval: ${retrieval.snippetCount} ${retrieval.snippetCount === 1 ? "snippet" : "snippets"}`,
-  ];
-  if (retrieval.anchorCount > 0) {
-    parts.push(
-      `${retrieval.anchorCount} ${retrieval.anchorCount === 1 ? "anchor" : "anchors"}`,
-    );
-  }
-  if (retrieval.edgesExpanded > 0) {
-    parts.push(
-      `${retrieval.edgesExpanded} ${retrieval.edgesExpanded === 1 ? "edge" : "edges"}`,
-    );
-  }
-  if (retrieval.tokensUsed > 0) {
-    parts.push(`~${formatTokenCount(retrieval.tokensUsed)} tokens`);
-  }
-  return parts.join(" · ");
-}
-
-function formatLatencyMs(value: number): string {
-  if (!Number.isFinite(value) || value < 0) {
-    return "0ms";
-  }
-  if (value < 1000) {
-    return `${Math.round(value)}ms`;
-  }
-
-  const totalSeconds = Math.round(value / 1000);
-  if (totalSeconds < 60) {
-    return `${totalSeconds}s`;
-  }
-
-  const totalMinutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  if (totalMinutes < 60) {
-    return seconds === 0 ? `${totalMinutes}m` : `${totalMinutes}m ${seconds}s`;
-  }
-
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
-  return minutes === 0 ? `${hours}h` : `${hours}h ${minutes}m`;
-}
-
-function getCostWarningThresholdUsd(): number {
-  if (isEnvTruthy(process.env.NAMI_DISABLE_COST_WARNINGS)) {
-    return 0;
-  }
-
-  const raw = process.env.NAMI_COST_WARNING_THRESHOLD_USD?.trim();
-  if (!raw) {
-    return 5;
-  }
-
-  const parsed = Number(raw);
-  return Number.isFinite(parsed) ? parsed : 5;
-}
-
-function isEnvTruthy(value: string | undefined): boolean {
-  if (!value) {
-    return false;
-  }
-
-  switch (value.trim().toLowerCase()) {
-    case "1":
-    case "true":
-    case "yes":
-    case "on":
-      return true;
-    default:
-      return false;
-  }
+  return `Enter send${pasteHint} | Ctrl+O newline | Ctrl+G transcript search | ${artifactsShortcutLabel} artifacts${tasksHint}${reasoningHint}${queueHint} | Tab mode`;
 }
