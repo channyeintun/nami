@@ -261,7 +261,6 @@ func orderedProviderIDs() []string {
 		"groq",
 		"qwen",
 		"glm",
-		"tiny-nami",
 		"ollama",
 	}
 	ordered := make([]string, 0, len(api.Presets))
@@ -294,8 +293,6 @@ func populateProviderStatus(status *ProviderStatus, cfg config.Config, activePro
 	switch status.ID {
 	case "github-copilot":
 		populateGitHubCopilotStatus(status, cfg, activeProvider)
-	case "tiny-nami":
-		populateTinyNamiStatus(status, cfg, activeProvider)
 	case "ollama":
 		populateOllamaStatus(status, cfg, activeProvider)
 	default:
@@ -366,16 +363,6 @@ func populateOllamaStatus(status *ProviderStatus, cfg config.Config, activeProvi
 	status.SetupHint = "Ensure Ollama is running on http://localhost:11434."
 }
 
-func populateTinyNamiStatus(status *ProviderStatus, cfg config.Config, activeProvider string) {
-	status.Configured = true
-	status.Usable = true
-	status.AuthSource = "local api"
-	if activeProvider == status.ID && strings.TrimSpace(cfg.BaseURL) != "" {
-		status.AuthSource = "config:base_url"
-	}
-	status.SetupHint = "Start the Tiny Nami provider on http://localhost:8080."
-}
-
 func providerDisplayLabel(providerID string) string {
 	switch providerID {
 	case "github-copilot":
@@ -396,8 +383,6 @@ func providerDisplayLabel(providerID string) string {
 		return "Mistral"
 	case "groq":
 		return "Groq"
-	case "tiny-nami":
-		return "Tiny Nami"
 	case "ollama":
 		return "Ollama"
 	default:
@@ -409,8 +394,6 @@ func providerSetupHint(providerID string, envKey string) string {
 	switch providerID {
 	case "github-copilot":
 		return "Run /connect github-copilot."
-	case "tiny-nami":
-		return "Start the Tiny Nami provider on http://localhost:8080."
 	case "ollama":
 		return "Ensure Ollama is running on http://localhost:11434."
 	default:

@@ -141,12 +141,6 @@ func connectMethodsForProvider(providerID string, envKey string) []ConnectAuthMe
 			Label:       "Device login",
 			Description: "Open the GitHub device flow in the browser and store refreshed Copilot credentials.",
 		}}
-	case "tiny-nami":
-		return []ConnectAuthMethod{{
-			Type:        "local",
-			Label:       "Local provider app",
-			Description: "Start the Tiny Nami provider server on http://localhost:8080.",
-		}}
 	case "ollama":
 		return []ConnectAuthMethod{{
 			Type:        "local",

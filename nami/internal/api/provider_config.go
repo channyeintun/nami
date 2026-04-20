@@ -141,14 +141,4 @@ var Presets = map[string]ProviderPreset{
 			MaxOutputTokens:  4096,
 		},
 	},
-	"tiny-nami": {
-		Name:         "tiny-nami",
-		ClientType:   OpenAICompatAPI,
-		BaseURL:      "http://localhost:8080/v1",
-		DefaultModel: "default",
-		Capabilities: ModelCapabilities{
-			MaxContextWindow: 128000,
-			MaxOutputTokens:  8192,
-		},
-	},
 }

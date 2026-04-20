@@ -79,7 +79,7 @@ func NewOpenAICompatClient(provider, model, apiKey, baseURL string) (*OpenAIComp
 	if apiKey == "" {
 		apiKey = os.Getenv(preset.EnvKeyVar)
 	}
-	if apiKey == "" && provider != "github-copilot" && strings.TrimSpace(preset.EnvKeyVar) != "" {
+	if apiKey == "" && provider != "github-copilot" {
 		return nil, &APIError{Type: ErrAuth, Message: fmt.Sprintf("missing API key for provider %q", provider)}
 	}
 
@@ -111,10 +111,8 @@ func (c *OpenAICompatClient) Warmup(ctx context.Context) error {
 	}
 	baseURL := c.resolveBaseURL(apiKey)
 	headers := map[string]string{
-		"accept": "application/json",
-	}
-	if apiKey != "" {
-		headers["authorization"] = "Bearer " + apiKey
+		"accept":        "application/json",
+		"authorization": "Bearer " + apiKey,
 	}
 	if c.provider == "github-copilot" {
 		for key, value := range GitHubCopilotStaticHeaders() {
@@ -175,9 +173,7 @@ func (c *OpenAICompatClient) openStream(ctx context.Context, payload openAICompa
 		}
 		req.Header.Set("content-type", "application/json")
 		req.Header.Set("accept", "text/event-stream")
-		if apiKey != "" {
-			req.Header.Set("authorization", "Bearer "+apiKey)
-		}
+		req.Header.Set("authorization", "Bearer "+apiKey)
 		for key, value := range extraHeaders {
 			req.Header.Set(key, value)
 		}
