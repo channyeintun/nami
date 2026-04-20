@@ -3,7 +3,7 @@ import React, { type FC } from "react";
 import { Box, Text } from "silvery";
 import {
   formatTokenCount,
-  getEffectiveContextWindow,
+  inferContextWindow,
 } from "../utils/modelContext.js";
 import { stripProviderPrefix } from "../utils/formatModel.js";
 import type {
@@ -79,12 +79,11 @@ const StatusBar: FC<StatusBarProps> = ({
       : null;
   const modelLabel = formatModelLabel(model);
   const reasoningLabel = formatReasoningEffortLabel(reasoningEffort);
-  const contextWindow = getEffectiveContextWindow(
-    model,
-    maxContextWindow,
-    maxOutputTokens,
-  );
-  const contextTokens = currentContextUsage ?? inputTokens + outputTokens;
+  const contextWindow =
+    typeof maxContextWindow === "number" && maxContextWindow > 0
+      ? maxContextWindow
+      : inferContextWindow(model);
+  const contextTokens = currentContextUsage ?? 0;
   const contextPercent = Math.min(
     999,
     contextWindow > 0 ? Math.round((contextTokens / contextWindow) * 100) : 0,
