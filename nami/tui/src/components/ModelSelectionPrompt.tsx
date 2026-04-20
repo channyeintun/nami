@@ -26,10 +26,17 @@ const ModelSelectionPrompt: FC<ModelSelectionPromptProps> = ({
 }) => {
   const [terminalRows, setTerminalRows] = useState(process.stdout.rows ?? 24);
   const focusManager = useFocusManager();
+  const [searchValue, setSearchValue] = useState("");
+  const [searchCursorOffset, setSearchCursorOffset] = useState(0);
+  const [searchCursorVisible, setSearchCursorVisible] = useState(true);
+  const filteredOptions = useMemo(
+    () => filterModelSelectionOptions(selection.options, searchValue),
+    [searchValue, selection.options],
+  );
   const initialIndex = useMemo(() => {
-    const activeIndex = selection.options.findIndex((option) => option.active);
+    const activeIndex = filteredOptions.findIndex((option) => option.active);
     return activeIndex >= 0 ? activeIndex : 0;
-  }, [selection.options]);
+  }, [filteredOptions]);
   const [selectedIndex, setSelectedIndex] = useState(initialIndex);
   const [customMode, setCustomMode] = useState(false);
   const [customValue, setCustomValue] = useState("");
@@ -38,22 +45,33 @@ const ModelSelectionPrompt: FC<ModelSelectionPromptProps> = ({
   const customModeRef = useRef(false);
   const customValueRef = useRef("");
   const cursorOffsetRef = useRef(0);
+  const searchValueRef = useRef("");
+  const searchCursorOffsetRef = useRef(0);
 
   selectedIndexRef.current = selectedIndex;
   customModeRef.current = customMode;
   customValueRef.current = customValue;
   cursorOffsetRef.current = cursorOffset;
+  searchValueRef.current = searchValue;
+  searchCursorOffsetRef.current = searchCursorOffset;
 
   useEffect(() => {
+    selectedIndexRef.current = initialIndex;
     setSelectedIndex(initialIndex);
+  }, [initialIndex]);
+
+  useEffect(() => {
     setCustomMode(false);
     setCustomValue("");
     setCursorOffset(0);
-    selectedIndexRef.current = initialIndex;
+    setSearchValue("");
+    setSearchCursorOffset(0);
     customModeRef.current = false;
     customValueRef.current = "";
     cursorOffsetRef.current = 0;
-  }, [initialIndex, selection.requestId]);
+    searchValueRef.current = "";
+    searchCursorOffsetRef.current = 0;
+  }, [selection.requestId]);
 
   useEffect(() => {
     if (customMode) {
@@ -71,6 +89,16 @@ const ModelSelectionPrompt: FC<ModelSelectionPromptProps> = ({
 
     return () => {
       process.stdout.off("resize", handleResize);
+    };
+  }, []);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setSearchCursorVisible((current) => !current);
+    }, 530);
+
+    return () => {
+      clearInterval(timer);
     };
   }, []);
 
@@ -110,6 +138,26 @@ const ModelSelectionPrompt: FC<ModelSelectionPromptProps> = ({
         : updater;
     cursorOffsetRef.current = next;
     setCursorOffset(next);
+  };
+
+  const updateSearchValue = (
+    updater: string | ((current: string) => string),
+  ) => {
+    const next =
+      typeof updater === "function" ? updater(searchValueRef.current) : updater;
+    searchValueRef.current = next;
+    setSearchValue(next);
+  };
+
+  const updateSearchCursorOffset = (
+    updater: number | ((current: number) => number),
+  ) => {
+    const next =
+      typeof updater === "function"
+        ? updater(searchCursorOffsetRef.current)
+        : updater;
+    searchCursorOffsetRef.current = next;
+    setSearchCursorOffset(next);
   };
 
   useInput((input, key) => {
@@ -196,14 +244,77 @@ const ModelSelectionPrompt: FC<ModelSelectionPromptProps> = ({
       return;
     }
 
-    const shortcut = input?.toLowerCase();
-    if (shortcut === "q") {
-      onCancel();
+    if (key.leftArrow || (key.ctrl && input === "b")) {
+      updateSearchCursorOffset((current) => Math.max(0, current - 1));
+      return;
+    }
+    if (key.rightArrow || (key.ctrl && input === "f")) {
+      updateSearchCursorOffset((current) =>
+        Math.min(searchValueRef.current.length, current + 1),
+      );
+      return;
+    }
+    if (key.home || (key.ctrl && input === "a")) {
+      updateSearchCursorOffset(0);
+      return;
+    }
+    if (key.end || (key.ctrl && input === "e")) {
+      updateSearchCursorOffset(searchValueRef.current.length);
+      return;
+    }
+    if (key.backspace || (key.ctrl && input === "h")) {
+      if (searchCursorOffsetRef.current === 0) {
+        return;
+      }
+      updateSearchValue((current) =>
+        replaceRange(
+          current,
+          searchCursorOffsetRef.current - 1,
+          searchCursorOffsetRef.current,
+          "",
+        ),
+      );
+      updateSearchCursorOffset((current) => Math.max(0, current - 1));
+      return;
+    }
+    if (key.delete) {
+      updateSearchValue((current) =>
+        replaceRange(
+          current,
+          searchCursorOffsetRef.current,
+          searchCursorOffsetRef.current + 1,
+          "",
+        ),
+      );
+      return;
+    }
+    if (key.ctrl && input === "u") {
+      updateSearchValue("");
+      updateSearchCursorOffset(0);
+      return;
+    }
+    if (
+      text &&
+      !key.ctrl &&
+      !key.meta &&
+      !key.return &&
+      !key.upArrow &&
+      !key.downArrow
+    ) {
+      updateSearchValue((current) =>
+        replaceRange(
+          current,
+          searchCursorOffsetRef.current,
+          searchCursorOffsetRef.current,
+          text,
+        ),
+      );
+      updateSearchCursorOffset((current) => current + text.length);
     }
   });
 
   const handleListSelect = (index: number) => {
-    const selectedOption = selection.options[index];
+    const selectedOption = filteredOptions[index];
     if (!selectedOption) {
       return;
     }
@@ -234,26 +345,57 @@ const ModelSelectionPrompt: FC<ModelSelectionPromptProps> = ({
     >
       <Box flexDirection="column" flexShrink={0} minWidth={0}>
         <Text bold color="$primary">
-          Select Model
+          {selection.title ?? "Select Model"}
         </Text>
         <Box marginTop={compactLayout ? 0 : 1} flexDirection="column" minWidth={0}>
-          {!compactLayout ? (
-            <Text>Choose the active model, a curated preset, or a provider default for the session.</Text>
+          {!compactLayout && (selection.description ?? DEFAULT_MODEL_SELECTION_DESCRIPTION) ? (
+            <Text>
+              {selection.description ?? DEFAULT_MODEL_SELECTION_DESCRIPTION}
+            </Text>
           ) : null}
-          <Text color="$muted">
-            Current: {formatCurrentModel(selection.currentModel)}
-          </Text>
+          {selection.currentModel ? (
+            <Text color="$muted">
+              Current: {formatCurrentModel(selection.currentModel)}
+            </Text>
+          ) : null}
         </Box>
       </Box>
 
-      <ModelSelectionList
-        options={selection.options}
-        selectedIndex={selectedIndex}
-        active={!customMode}
-        compact={compactLayout && !customMode}
-        onCursor={updateSelectedIndex}
-        onSelectIndex={handleListSelect}
-      />
+      <Box
+        marginTop={compactLayout ? 0 : 1}
+        flexDirection="column"
+        flexShrink={0}
+      >
+        <Text color={searchValue.length > 0 ? "$fg" : "$muted"}>
+          {renderSearchValue(
+            searchValue,
+            searchCursorOffset,
+            searchCursorVisible,
+          )}
+        </Text>
+      </Box>
+
+      {filteredOptions.length > 0 ? (
+        <ModelSelectionList
+          options={filteredOptions}
+          selectedIndex={selectedIndex}
+          active={!customMode}
+          compact={compactLayout && !customMode}
+          onCursor={updateSelectedIndex}
+          onSelectIndex={handleListSelect}
+        />
+      ) : (
+        <Box
+          marginTop={1}
+          flexDirection="column"
+          flexGrow={1}
+          flexShrink={1}
+          justifyContent="center"
+          minHeight={0}
+        >
+          <Text color="$muted">No options match the current filter.</Text>
+        </Box>
+      )}
       {customMode ? (
         <Box
           marginTop={compactLayout ? 0 : 1}
@@ -304,10 +446,6 @@ const ModelSelectionPrompt: FC<ModelSelectionPromptProps> = ({
               <Text color="$primary" bold>
                 Esc
               </Text>{" "}
-              or{" "}
-              <Text color="$primary" bold>
-                Q
-              </Text>{" "}
               cancel
             </>
           )}
@@ -318,6 +456,9 @@ const ModelSelectionPrompt: FC<ModelSelectionPromptProps> = ({
 };
 
 export default ModelSelectionPrompt;
+
+const DEFAULT_MODEL_SELECTION_DESCRIPTION =
+  "Choose the active model, a curated preset, or a provider default for the session.";
 
 interface ModelSelectionListProps {
   options: UIModelSelectionOption[];
@@ -411,9 +552,50 @@ function formatCurrentModel(model: string | null): string {
   return stripProviderPrefix(model) ?? "unknown model";
 }
 
-function renderEditableValue(value: string, cursorOffset: number): string {
+function filterModelSelectionOptions(
+  options: UIModelSelectionOption[],
+  query: string,
+): UIModelSelectionOption[] {
+  const normalizedQuery = query.trim().toLowerCase();
+  if (!normalizedQuery) {
+    return options;
+  }
+
+  return options.filter((option) => {
+    const haystack = [
+      option.label,
+      option.model,
+      option.provider,
+      option.description,
+      option.isCustom ? "custom model" : null,
+    ]
+      .filter((value): value is string => typeof value === "string")
+      .join(" ")
+      .toLowerCase();
+
+    return haystack.includes(normalizedQuery);
+  });
+}
+
+function renderEditableValue(
+  value: string,
+  cursorOffset: number,
+  cursorVisible = true,
+): string {
   const clampedOffset = Math.max(0, Math.min(value.length, cursorOffset));
-  return value.slice(0, clampedOffset) + "█" + value.slice(clampedOffset);
+  const cursor = cursorVisible ? "█" : " ";
+  return value.slice(0, clampedOffset) + cursor + value.slice(clampedOffset);
+}
+
+function renderSearchValue(
+  value: string,
+  cursorOffset: number,
+  cursorVisible: boolean,
+): string {
+  if (value.length === 0) {
+    return `Search${cursorVisible ? "█" : " "}`;
+  }
+  return renderEditableValue(value, cursorOffset, cursorVisible);
 }
 
 function replaceRange(

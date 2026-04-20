@@ -232,6 +232,8 @@ export interface ModelSelectionOptionPayload {
 export interface ModelSelectionRequestedPayload {
   request_id: string;
   current_model?: string;
+  title?: string;
+  description?: string;
   options: ModelSelectionOptionPayload[];
 }
 

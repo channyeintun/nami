@@ -307,6 +307,8 @@ type ModelSelectionOptionPayload struct {
 type ModelSelectionRequestedPayload struct {
 	RequestID    string                        `json:"request_id"`
 	CurrentModel string                        `json:"current_model,omitempty"`
+	Title        string                        `json:"title,omitempty"`
+	Description  string                        `json:"description,omitempty"`
 	Options      []ModelSelectionOptionPayload `json:"options"`
 }
 

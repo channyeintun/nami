@@ -295,6 +295,20 @@ var connectProviderRegistry = map[string]connectProviderFunc{
 }
 
 func handleConnectSlashCommand(cmd *slashCommandContext) error {
+	if strings.TrimSpace(cmd.args) == "" {
+		currentCfg := config.LoadForWorkingDir(cmd.state.CWD)
+		currentCfg.Model = cmd.state.ActiveModelID
+		snapshot := commandspkg.DiscoverProviderSnapshot(currentCfg)
+		providerID, err := promptConnectProviderSelection(cmd, snapshot)
+		if err != nil {
+			return err
+		}
+		if providerID == "" {
+			return emitTextResponse(cmd.bridge, "Connect cancelled.")
+		}
+		cmd.args = providerID
+	}
+
 	request, err := commandspkg.ParseConnectArgs(cmd.args)
 	if err != nil {
 		return emitTextResponse(cmd.bridge, err.Error())
@@ -392,6 +406,53 @@ func connectStaticProvider(cmd *slashCommandContext, providerID string, extraArg
 			return fmt.Sprintf("%s is ready via %s. Set main model to %s.", spec.Label, status.AuthSource, activeModelID)
 		},
 	}, nil
+}
+
+func promptConnectProviderSelection(cmd *slashCommandContext, snapshot commandspkg.ProviderSnapshot) (string, error) {
+	currentProvider, _ := config.ParseModel(strings.TrimSpace(cmd.state.ActiveModelID))
+	currentProvider = normalizeProvider(currentProvider)
+	selected, err := promptSelection(
+		cmd,
+		currentProvider,
+		buildConnectProviderSelectionOptions(snapshot, currentProvider),
+		"Connect Provider",
+		"Choose a provider to connect for this session. Providers that still need setup stay visible so you can inspect or retry them.",
+	)
+	if err != nil {
+		return "", err
+	}
+	providerID := normalizeProvider(strings.TrimSpace(selected.Provider))
+	if providerID == "" {
+		providerID = normalizeProvider(strings.TrimSpace(selected.Model))
+	}
+	return providerID, nil
+}
+
+func buildConnectProviderSelectionOptions(snapshot commandspkg.ProviderSnapshot, currentProvider string) []ipc.ModelSelectionOptionPayload {
+	options := make([]ipc.ModelSelectionOptionPayload, 0, len(commandspkg.ConnectProviderCatalog()))
+	for _, spec := range commandspkg.ConnectProviderCatalog() {
+		status, _ := snapshot.LookupProvider(spec.ID)
+		descriptionParts := []string{
+			fmt.Sprintf("Default model: %s/%s", spec.ID, spec.DefaultModel),
+			commandspkg.ProviderStateLabel(status),
+		}
+		if authSource := strings.TrimSpace(status.AuthSource); authSource != "" {
+			descriptionParts = append(descriptionParts, fmt.Sprintf("Auth: %s", authSource))
+		}
+		if issue := strings.TrimSpace(status.LastError); issue != "" {
+			descriptionParts = append(descriptionParts, issue)
+		} else if hint := strings.TrimSpace(status.SetupHint); hint != "" {
+			descriptionParts = append(descriptionParts, hint)
+		}
+		options = append(options, ipc.ModelSelectionOptionPayload{
+			Label:       spec.Label,
+			Model:       spec.DefaultModel,
+			Provider:    spec.ID,
+			Description: strings.Join(descriptionParts, " · "),
+			Active:      spec.ID == currentProvider,
+		})
+	}
+	return options
 }
 
 func connectGitHubCopilot(cmd *slashCommandContext, enterpriseInput string) (*connectResult, error) {
@@ -718,11 +779,28 @@ func promptModelSelection(cmd *slashCommandContext, currentSelection string) (mo
 		Description: "Enter a model id or provider/model",
 		IsCustom:    true,
 	})
+	return promptSelection(
+		cmd,
+		activeModel,
+		options,
+		"Select Model",
+		"Choose the active model, a curated preset, or a provider default for the session.",
+	)
+}
 
+func promptSelection(
+	cmd *slashCommandContext,
+	currentSelection string,
+	options []ipc.ModelSelectionOptionPayload,
+	title string,
+	description string,
+) (modelSelectionChoice, error) {
 	requestID := fmt.Sprintf("model-%d", time.Now().UnixNano())
 	if err := cmd.bridge.Emit(ipc.EventModelSelectionRequested, ipc.ModelSelectionRequestedPayload{
 		RequestID:    requestID,
-		CurrentModel: activeModel,
+		CurrentModel: strings.TrimSpace(currentSelection),
+		Title:        strings.TrimSpace(title),
+		Description:  strings.TrimSpace(description),
 		Options:      options,
 	}); err != nil {
 		return modelSelectionChoice{}, err
@@ -1330,4 +1408,3 @@ func handleSessionsSlashCommand(cmd *slashCommandContext) error {
 	}
 	return emitTextResponse(cmd.bridge, commandspkg.FormatSessionList(sessions, cmd.state.SessionID))
 }
-

@@ -138,6 +138,8 @@ export interface UIModelSelectionOption {
 export interface UIModelSelection {
   requestId: string;
   currentModel: string | null;
+  title?: string;
+  description?: string;
   options: UIModelSelectionOption[];
 }
 
@@ -1002,6 +1004,14 @@ export function useEvents(initialModel: string, initialMode: string) {
       }
       case "model_selection_requested": {
         const p = event.payload as ModelSelectionRequestedPayload;
+        const title =
+          typeof p.title === "string" && p.title.trim().length > 0
+            ? p.title.trim()
+            : undefined;
+        const description =
+          typeof p.description === "string" && p.description.trim().length > 0
+            ? p.description.trim()
+            : undefined;
         setUIState((s) => ({
           ...s,
           pendingModelSelection: {
@@ -1011,9 +1021,11 @@ export function useEvents(initialModel: string, initialMode: string) {
               p.current_model.trim().length > 0
                 ? p.current_model.trim()
                 : null,
+            title,
+            description,
             options: normalizeModelSelectionOptions(p.options),
           },
-          statusLine: "Select a model.",
+          statusLine: title ?? "Select a model.",
           error: null,
         }));
         break;
