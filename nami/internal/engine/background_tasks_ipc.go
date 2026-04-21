@@ -180,6 +180,7 @@ func backgroundAgentDetailPayloadFromResult(
 			InvocationID:      result.Metadata.InvocationID,
 			AgentID:           result.Metadata.AgentID,
 			Description:       result.Metadata.Description,
+			Role:              result.Metadata.Role,
 			SubagentType:      result.Metadata.SubagentType,
 			WorkspaceStrategy: result.Metadata.WorkspaceStrategy,
 			WorkspacePath:     result.Metadata.WorkspacePath,

@@ -42,6 +42,7 @@ import type {
   BackgroundCommandDetailPayload,
   BackgroundCommandUpdatedPayload,
   PermissionResponseDecision,
+  SwarmDashboardSnapshotPayload,
   StreamEvent,
   UserInputImagePayload,
 } from "./protocol/types.js";
@@ -110,6 +111,8 @@ const App: FC<AppProps> = ({ enginePath, model, mode, autoMode }) => {
   const [backgroundTaskDetails, setBackgroundTaskDetails] = useState<
     Record<string, BackgroundTaskDetailRecord>
   >({});
+  const [swarmDashboardSnapshot, setSwarmDashboardSnapshot] =
+    useState<SwarmDashboardSnapshotPayload | null>(null);
   const [showFooterHints, setShowFooterHints] = useState(false);
   const previousStreamingRef = useRef(false);
   const footerHintTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
@@ -163,6 +166,11 @@ const App: FC<AppProps> = ({ enginePath, model, mode, autoMode }) => {
         }
       }
 
+        if (event.type === "swarm_dashboard_snapshot") {
+      	const payload = event.payload as SwarmDashboardSnapshotPayload | undefined;
+      	setSwarmDashboardSnapshot(payload ?? { handoffs: [] });
+      	}
+
       handleEvent(event);
 
       const taskNotification = buildBackgroundCommandTaskNotification(event);
@@ -214,6 +222,19 @@ const App: FC<AppProps> = ({ enginePath, model, mode, autoMode }) => {
       dismissAll();
     }
   }, [dismissAll, uiState.isStreaming]);
+
+  useEffect(() => {
+    if (!showBackgroundTasks) {
+      return;
+    }
+
+    engine.sendSwarmDashboardInspect();
+    const timer = setInterval(() => {
+      engine.sendSwarmDashboardInspect();
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [engine, showBackgroundTasks]);
 
   useEffect(() => {
     if (
@@ -975,6 +996,7 @@ const App: FC<AppProps> = ({ enginePath, model, mode, autoMode }) => {
               commands={uiState.backgroundCommands}
               agents={uiState.backgroundAgents}
               details={backgroundTaskDetails}
+              swarmDashboard={swarmDashboardSnapshot}
               onClose={handleBackgroundTasksClose}
               onInspectTask={handleBackgroundTaskInspect}
               onStopTask={handleBackgroundTaskStop}

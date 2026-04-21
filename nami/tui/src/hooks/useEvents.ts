@@ -229,7 +229,13 @@ export interface UIBackgroundAgent {
   agentId: string;
   invocationId: string;
   description: string;
+  role?: string;
   subagentType: string;
+  workspaceStrategy?: string;
+  workspacePath?: string;
+  repositoryRoot?: string;
+  worktreeBranch?: string;
+  worktreeCreated?: boolean;
   status: string;
   summary: string;
   lifecycleState?: string;
@@ -1254,7 +1260,13 @@ export function useEvents(initialModel: string, initialMode: string) {
             agentId: p.agent_id,
             invocationId: metadata.invocationId,
             description: metadata.description,
+            role: metadata.role,
             subagentType: metadata.subagentType,
+            workspaceStrategy: metadata.workspaceStrategy,
+            workspacePath: metadata.workspacePath,
+            repositoryRoot: metadata.repositoryRoot,
+            worktreeBranch: metadata.worktreeBranch,
+            worktreeCreated: metadata.worktreeCreated,
             status: normalizeBackgroundAgentStatus(p.status),
             summary: summarizeBackgroundAgent(
               p.status,
@@ -2297,6 +2309,8 @@ function artifactKindLabel(kind: string): string {
 interface AgentToolInput {
   description?: string;
   prompt?: string;
+  role?: string;
+  workspace_strategy?: string;
   subagent_type?: string;
   agent_id?: string;
   run_in_background?: boolean;
@@ -2534,7 +2548,9 @@ function parseBackgroundAgentResult(
   const metadata = normalizeChildAgentMetadata(result.metadata, {
     invocationId: result.invocation_id || result.session_id,
     description: input?.description,
+    role: input?.role,
     subagentType: result.subagent_type || input?.subagent_type,
+    workspaceStrategy: input?.workspace_strategy,
     sessionId: result.session_id,
     transcriptPath: result.transcript_path,
     resultPath: result.output_file,
@@ -2545,7 +2561,13 @@ function parseBackgroundAgentResult(
     agentId,
     invocationId: metadata.invocationId,
     description: metadata.description,
+    role: metadata.role,
     subagentType: metadata.subagentType,
+    workspaceStrategy: metadata.workspaceStrategy,
+    workspacePath: metadata.workspacePath,
+    repositoryRoot: metadata.repositoryRoot,
+    worktreeBranch: metadata.worktreeBranch,
+    worktreeCreated: metadata.worktreeCreated,
     status,
     summary: summarizeBackgroundAgent(
       status,
@@ -2768,7 +2790,15 @@ function upsertBackgroundAgent(
         ...nextAgent,
         invocationId: nextAgent.invocationId || existing.invocationId,
         description: nextAgent.description || existing.description,
+        role: nextAgent.role ?? existing.role,
         subagentType: nextAgent.subagentType || existing.subagentType,
+        workspaceStrategy:
+          nextAgent.workspaceStrategy ?? existing.workspaceStrategy,
+        workspacePath: nextAgent.workspacePath ?? existing.workspacePath,
+        repositoryRoot: nextAgent.repositoryRoot ?? existing.repositoryRoot,
+        worktreeBranch: nextAgent.worktreeBranch ?? existing.worktreeBranch,
+        worktreeCreated:
+          nextAgent.worktreeCreated ?? existing.worktreeCreated,
         summary: nextAgent.summary || existing.summary,
         lifecycleState: nextAgent.lifecycleState || existing.lifecycleState,
         statusMessage: nextAgent.statusMessage || existing.statusMessage,
@@ -2808,7 +2838,9 @@ function normalizeChildAgentMetadata(
   fallback?: {
     invocationId?: string;
     description?: string;
+    role?: string;
     subagentType?: string;
+    workspaceStrategy?: string;
     sessionId?: string;
     transcriptPath?: string;
     resultPath?: string;
@@ -2816,7 +2848,13 @@ function normalizeChildAgentMetadata(
 ): {
   invocationId: string;
   description: string;
+  role?: string;
   subagentType: string;
+  workspaceStrategy?: string;
+  workspacePath?: string;
+  repositoryRoot?: string;
+  worktreeBranch?: string;
+  worktreeCreated?: boolean;
   lifecycleState?: string;
   statusMessage?: string;
   stopBlockReason?: string;
@@ -2831,9 +2869,17 @@ function normalizeChildAgentMetadata(
       metadata?.invocation_id || fallback?.invocationId || fallback?.sessionId,
     ),
     description: stringOrEmpty(metadata?.description || fallback?.description),
+    role: stringOrUndefined(metadata?.role || fallback?.role),
     subagentType: stringOrEmpty(
       metadata?.subagent_type || fallback?.subagentType,
     ),
+    workspaceStrategy: stringOrUndefined(
+      metadata?.workspace_strategy || fallback?.workspaceStrategy,
+    ),
+    workspacePath: stringOrUndefined(metadata?.workspace_path),
+    repositoryRoot: stringOrUndefined(metadata?.repository_root),
+    worktreeBranch: stringOrUndefined(metadata?.worktree_branch),
+    worktreeCreated: metadata?.worktree_created === true,
     lifecycleState: stringOrUndefined(metadata?.lifecycle_state),
     statusMessage: stringOrUndefined(metadata?.status_message),
     stopBlockReason: stringOrUndefined(metadata?.stop_block_reason),

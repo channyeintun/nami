@@ -387,6 +387,11 @@ func RunStdioEngine(ctx context.Context, cfg config.Config) error {
 				return err
 			}
 			continue
+		case ipc.MsgSwarmDashboardInspect:
+			if err := handleSwarmDashboardInspectMessage(ctx, bridge, sessionStore, loopState.sessionID); err != nil {
+				return err
+			}
+			continue
 		case ipc.MsgModeToggle:
 			if loopState.mode == agent.ModePlan {
 				loopState.mode = agent.ModeFast

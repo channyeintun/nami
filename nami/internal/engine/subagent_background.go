@@ -24,6 +24,7 @@ type backgroundAgent struct {
 	id           string
 	invocationID string
 	description  string
+	role         string
 	subagentType string
 	result       toolpkg.AgentRunResult
 	running      bool
@@ -155,7 +156,7 @@ func cancelBackgroundAgent(agentID string) {
 		}
 		if strings.TrimSpace(bg.result.Status) == "" || bg.result.Status == "running" || bg.result.Status == "async_launched" {
 			bg.result.Status = "cancelling"
-			bg.result = withChildMetadata(bg.result, bg.description)
+			bg.result = withChildMetadata(bg.result, bg.description, bg.role)
 		}
 	}
 	cancel := bg.cancel
@@ -206,7 +207,7 @@ func emitBackgroundAgentUpdated(bridge *ipc.Bridge, bg *backgroundAgent, result 
 		TotalCostUSD:   displayResult.TotalCostUSD,
 		InputTokens:    displayResult.InputTokens,
 		OutputTokens:   displayResult.OutputTokens,
-		Metadata:       toIPCChildAgentMetadata(buildChildMetadata(displayResult, bg.description)),
+		Metadata:       toIPCChildAgentMetadata(buildChildMetadata(displayResult, bg.description, bg.role)),
 	})
 }
 
@@ -219,6 +220,7 @@ func toIPCChildAgentMetadata(metadata *toolpkg.ChildAgentMetadata) *ipc.ChildAge
 		InvocationID:      metadata.InvocationID,
 		AgentID:           metadata.AgentID,
 		Description:       metadata.Description,
+		Role:              metadata.Role,
 		SubagentType:      metadata.SubagentType,
 		WorkspaceStrategy: metadata.WorkspaceStrategy,
 		WorkspacePath:     metadata.WorkspacePath,
@@ -249,6 +251,7 @@ func launchBackgroundAgent(
 	parentCtx context.Context,
 	bridge *ipc.Bridge,
 	description string,
+	role string,
 	subagentType string,
 	invocationID string,
 	sessionStore *session.Store,
@@ -263,6 +266,7 @@ func launchBackgroundAgent(
 		id:           agentID,
 		invocationID: invocationID,
 		description:  description,
+		role:         role,
 		subagentType: subagentType,
 		done:         make(chan struct{}),
 		cancel:       cancel,
@@ -278,7 +282,7 @@ func launchBackgroundAgent(
 			OutputFile:     resultFile,
 		},
 	}
-	bg.result = withChildMetadata(bg.result, description)
+	bg.result = withChildMetadata(bg.result, description, role)
 	registerBackgroundAgent(bg)
 	emitBackgroundAgentUpdated(bridge, bg, bg.result)
 
@@ -295,14 +299,14 @@ func launchBackgroundAgent(
 			if err == context.Canceled {
 				bg.result.Status = "cancelled"
 				bg.result.Error = "background child agent cancelled"
-				bg.result = withChildMetadata(bg.result, bg.description)
+				bg.result = withChildMetadata(bg.result, bg.description, bg.role)
 				writeBackgroundAgentResultFile(bg.result)
 				emitBackgroundAgentUpdated(bridge, bg, bg.result)
 				return
 			}
 			bg.result.Status = "failed"
 			bg.result.Error = err.Error()
-			bg.result = withChildMetadata(bg.result, bg.description)
+			bg.result = withChildMetadata(bg.result, bg.description, bg.role)
 			writeBackgroundAgentResultFile(bg.result)
 			emitBackgroundAgentUpdated(bridge, bg, bg.result)
 			return
@@ -311,7 +315,7 @@ func launchBackgroundAgent(
 			result.Status = "completed"
 		}
 		result.AgentID = agentID
-		bg.result = withChildMetadata(result, bg.description)
+		bg.result = withChildMetadata(result, bg.description, bg.role)
 		writeBackgroundAgentResultFile(bg.result)
 		emitBackgroundAgentUpdated(bridge, bg, bg.result)
 	}()
@@ -364,7 +368,7 @@ func updateBackgroundAgentRunningState(bridge *ipc.Bridge, bg *backgroundAgent, 
 	if result.OutputFile == "" {
 		result.OutputFile = bg.result.OutputFile
 	}
-	bg.result = withChildMetadata(result, bg.description)
+	bg.result = withChildMetadata(result, bg.description, "")
 	current := bg.result
 	bg.mu.Unlock()
 	emitBackgroundAgentUpdated(bridge, bg, current)
@@ -413,7 +417,7 @@ func stopBackgroundAgent(ctx context.Context, bridge *ipc.Bridge, req toolpkg.Ag
 	}
 	if bg.running {
 		bg.result.Status = "cancelling"
-		bg.result = withChildMetadata(bg.result, bg.description)
+		bg.result = withChildMetadata(bg.result, bg.description, "")
 		shouldEmit = true
 	}
 	current := bg.result

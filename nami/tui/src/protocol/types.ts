@@ -33,6 +33,7 @@ export type EventType =
   | "artifact_review_requested"
   | "artifact_review_resolved"
   | "background_tasks_requested"
+  | "swarm_dashboard_snapshot"
   | "background_command_detail"
   | "background_agent_detail"
   | "background_command_updated"
@@ -65,7 +66,8 @@ export type ClientMessageType =
   | "background_command_inspect"
   | "background_command_stop"
   | "background_agent_inspect"
-  | "background_agent_stop";
+  | "background_agent_stop"
+  | "swarm_dashboard_inspect";
 
 export interface ClientMessage {
   type: ClientMessageType;
@@ -556,7 +558,13 @@ export interface ChildAgentMetadata {
   invocation_id?: string;
   agent_id?: string;
   description?: string;
+  role?: string;
   subagent_type?: string;
+  workspace_strategy?: string;
+  workspace_path?: string;
+  repository_root?: string;
+  worktree_branch?: string;
+  worktree_created?: boolean;
   lifecycle_state?: string;
   status_message?: string;
   stop_block_reason?: string;
@@ -565,6 +573,27 @@ export interface ChildAgentMetadata {
   transcript_path?: string;
   result_path?: string;
   tools?: string[];
+}
+
+export interface SwarmHandoffPayload {
+	id: string;
+	artifact_id?: string;
+	source_role: string;
+	target_role: string;
+	summary: string;
+	changed_files?: string[];
+	commands_run?: string[];
+	verification?: string;
+	risks?: string[];
+	next_action?: string;
+	status: string;
+	status_note?: string;
+	created_at?: string;
+	updated_at?: string;
+}
+
+export interface SwarmDashboardSnapshotPayload {
+	handoffs?: SwarmHandoffPayload[];
 }
 
 export interface ArtifactReviewResponsePayload {

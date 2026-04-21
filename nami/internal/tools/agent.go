@@ -31,6 +31,7 @@ type ChildAgentMetadata struct {
 	InvocationID      string   `json:"invocation_id,omitempty"`
 	AgentID           string   `json:"agent_id,omitempty"`
 	Description       string   `json:"description,omitempty"`
+	Role              string   `json:"role,omitempty"`
 	SubagentType      string   `json:"subagent_type,omitempty"`
 	WorkspaceStrategy string   `json:"workspace_strategy,omitempty"`
 	WorkspacePath     string   `json:"workspace_path,omitempty"`

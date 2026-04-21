@@ -162,18 +162,18 @@ func makeSubagentRunner(
 			return executeSubagent(runCtx, req, subagentType, invocationID, bridge, registry, permissionCtx, parentTracker, sessionStore, artifactManager, hookRunner, childClient, childActiveModelID, currentCWD, nil, nil)
 		}
 		if req.Background {
-			launch := launchBackgroundAgent(ctx, bridge, strings.TrimSpace(req.Description), subagentType, invocationID, sessionStore, func(runCtx context.Context, stopControl *agent.StopController, reportStatus func(toolpkg.AgentRunResult)) (toolpkg.AgentRunResult, error) {
+			launch := launchBackgroundAgent(ctx, bridge, strings.TrimSpace(req.Description), strings.TrimSpace(req.Role), subagentType, invocationID, sessionStore, func(runCtx context.Context, stopControl *agent.StopController, reportStatus func(toolpkg.AgentRunResult)) (toolpkg.AgentRunResult, error) {
 				return executeSubagent(runCtx, req, subagentType, invocationID, bridge, registry, permissionCtx, parentTracker, sessionStore, artifactManager, hookRunner, childClient, childActiveModelID, currentCWD, stopControl, reportStatus)
 			})
 			launch.SubagentType = subagentType
 			launch.Tools = subagentToolNames(subagentType)
-			return withChildMetadata(launch, strings.TrimSpace(req.Description)), nil
+			return withChildMetadata(launch, strings.TrimSpace(req.Description), strings.TrimSpace(req.Role)), nil
 		}
 		result, err := execute(ctx)
 		if err != nil {
 			return toolpkg.AgentRunResult{}, err
 		}
-		return withChildMetadata(result, strings.TrimSpace(req.Description)), nil
+		return withChildMetadata(result, strings.TrimSpace(req.Description), strings.TrimSpace(req.Role)), nil
 	}
 }
 
@@ -436,6 +436,9 @@ func executeSubagent(
 		Tools:          toolDefinitionNames(childRegistry.Definitions()),
 		Metadata:       decorateChildWorkspaceMetadata(lifecycle.metadata(), workspace),
 	}
+	if result.Metadata != nil {
+		result.Metadata.Role = strings.TrimSpace(req.Role)
+	}
 	writeBackgroundAgentResultFile(result)
 	return result, nil
 }
@@ -640,12 +643,12 @@ func childStopBlockedFollowUp(reason string) string {
 	return fmt.Sprintf("A local stop hook blocked completion: %s\n\nContinue working until the stop condition is satisfied.", reason)
 }
 
-func withChildMetadata(result toolpkg.AgentRunResult, description string) toolpkg.AgentRunResult {
-	result.Metadata = buildChildMetadata(result, description)
+func withChildMetadata(result toolpkg.AgentRunResult, description string, role string) toolpkg.AgentRunResult {
+	result.Metadata = buildChildMetadata(result, description, role)
 	return result
 }
 
-func buildChildMetadata(result toolpkg.AgentRunResult, description string) *toolpkg.ChildAgentMetadata {
+func buildChildMetadata(result toolpkg.AgentRunResult, description string, role string) *toolpkg.ChildAgentMetadata {
 	invocationID := firstNonEmpty(result.InvocationID, result.SessionID)
 	if invocationID == "" && result.AgentID == "" {
 		return nil
@@ -658,6 +661,7 @@ func buildChildMetadata(result toolpkg.AgentRunResult, description string) *tool
 	metadata.InvocationID = firstNonEmpty(invocationID, metadata.InvocationID)
 	metadata.AgentID = firstNonEmpty(result.AgentID, metadata.AgentID)
 	metadata.Description = firstNonEmpty(strings.TrimSpace(description), metadata.Description)
+	metadata.Role = firstNonEmpty(strings.TrimSpace(role), metadata.Role)
 	metadata.SubagentType = firstNonEmpty(result.SubagentType, metadata.SubagentType)
 	metadata.LifecycleState = childLifecycleState(result.Status, metadata.LifecycleState)
 	if strings.TrimSpace(result.Summary) != "" || strings.TrimSpace(result.Error) != "" || strings.TrimSpace(metadata.StatusMessage) == "" {

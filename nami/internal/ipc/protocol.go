@@ -56,6 +56,7 @@ const (
 	EventArtifactReviewRequested  EventType = "artifact_review_requested"
 	EventArtifactReviewResolved   EventType = "artifact_review_resolved"
 	EventBackgroundTasksRequested EventType = "background_tasks_requested"
+	EventSwarmDashboardSnapshot   EventType = "swarm_dashboard_snapshot"
 	EventBackgroundCommandDetail  EventType = "background_command_detail"
 	EventBackgroundAgentDetail    EventType = "background_agent_detail"
 	EventBackgroundCommandUpdated EventType = "background_command_updated"
@@ -97,6 +98,7 @@ const (
 	MsgBackgroundCommandStop    ClientMessageType = "background_command_stop"
 	MsgBackgroundAgentInspect   ClientMessageType = "background_agent_inspect"
 	MsgBackgroundAgentStop      ClientMessageType = "background_agent_stop"
+	MsgSwarmDashboardInspect    ClientMessageType = "swarm_dashboard_inspect"
 )
 
 // ClientMessage is one NDJSON line from Ink frontend → Go engine.
@@ -469,6 +471,8 @@ type BackgroundAgentStopPayload struct {
 	WaitMs  int    `json:"wait_ms,omitempty"`
 }
 
+type SwarmDashboardInspectPayload struct{}
+
 type PermissionResponsePayload struct {
 	RequestID string `json:"request_id"`
 	Decision  string `json:"decision"` // "allow", "deny", "always_allow", "allow_all_session"
@@ -597,6 +601,7 @@ type ChildAgentMetadataPayload struct {
 	InvocationID      string   `json:"invocation_id,omitempty"`
 	AgentID           string   `json:"agent_id,omitempty"`
 	Description       string   `json:"description,omitempty"`
+	Role              string   `json:"role,omitempty"`
 	SubagentType      string   `json:"subagent_type,omitempty"`
 	WorkspaceStrategy string   `json:"workspace_strategy,omitempty"`
 	WorkspacePath     string   `json:"workspace_path,omitempty"`
@@ -611,6 +616,27 @@ type ChildAgentMetadataPayload struct {
 	TranscriptPath    string   `json:"transcript_path,omitempty"`
 	ResultPath        string   `json:"result_path,omitempty"`
 	Tools             []string `json:"tools,omitempty"`
+}
+
+type SwarmHandoffPayload struct {
+	ID           string    `json:"id"`
+	ArtifactID   string    `json:"artifact_id,omitempty"`
+	SourceRole   string    `json:"source_role"`
+	TargetRole   string    `json:"target_role"`
+	Summary      string    `json:"summary"`
+	ChangedFiles []string  `json:"changed_files,omitempty"`
+	CommandsRun  []string  `json:"commands_run,omitempty"`
+	Verification string    `json:"verification,omitempty"`
+	Risks        []string  `json:"risks,omitempty"`
+	NextAction   string    `json:"next_action,omitempty"`
+	Status       string    `json:"status"`
+	StatusNote   string    `json:"status_note,omitempty"`
+	CreatedAt    time.Time `json:"created_at,omitempty"`
+	UpdatedAt    time.Time `json:"updated_at,omitempty"`
+}
+
+type SwarmDashboardSnapshotPayload struct {
+	Handoffs []SwarmHandoffPayload `json:"handoffs,omitempty"`
 }
 
 // ArtifactReviewRequestedPayload is emitted when an implementation-plan artifact

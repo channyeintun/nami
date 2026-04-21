@@ -7,6 +7,7 @@ import type {
 import type {
   BackgroundAgentDetailPayload,
   BackgroundCommandDetailPayload,
+  SwarmDashboardSnapshotPayload,
 } from "../protocol/types.js";
 import { formatTokenCount } from "../utils/modelContext.js";
 
@@ -18,6 +19,7 @@ interface BackgroundTasksDialogProps {
   commands: UIBackgroundCommand[];
   agents: UIBackgroundAgent[];
   details: Record<string, TaskDetail>;
+  swarmDashboard: SwarmDashboardSnapshotPayload | null;
   onClose: () => void;
   onInspectTask: (kind: TaskKind, id: string) => void;
   onStopTask: (kind: TaskKind, id: string) => void;
@@ -37,6 +39,7 @@ const BackgroundTasksDialog: FC<BackgroundTasksDialogProps> = ({
   commands,
   agents,
   details,
+  swarmDashboard,
   onClose,
   onInspectTask,
   onStopTask,
@@ -159,6 +162,8 @@ const BackgroundTasksDialog: FC<BackgroundTasksDialogProps> = ({
     >
       <Header items={items} />
 
+      <SwarmOverview agents={agents} swarmDashboard={swarmDashboard} />
+
       {view === "list" ? (
         <TaskList
           items={items}
@@ -206,6 +211,97 @@ const Header: FC<{ items: TaskListItem[] }> = ({ items }) => {
           {runningCount > 0 ? ` · ${runningCount} active` : ""}
         </Text>
       </Box>
+    </Box>
+  );
+};
+
+const SwarmOverview: FC<{
+  agents: UIBackgroundAgent[];
+  swarmDashboard: SwarmDashboardSnapshotPayload | null;
+}> = ({ agents, swarmDashboard }) => {
+  const handoffs = swarmDashboard?.handoffs ?? [];
+  const activeRoleWorkspaces = Array.from(
+    agents.reduce((acc, agent) => {
+      if (!agent.role || !canStopTask(agent.status) || acc.has(agent.role)) {
+        return acc;
+      }
+      const workspaceLabel =
+        agent.worktreeBranch ||
+        (agent.workspacePath ? basename(agent.workspacePath) : undefined) ||
+        agent.workspaceStrategy ||
+        "shared";
+      acc.set(agent.role, workspaceLabel);
+      return acc;
+    }, new Map<string, string>()),
+  );
+  const activeRoles = Array.from(
+    new Set(
+      agents
+        .filter((agent) => agent.role && canStopTask(agent.status))
+        .map((agent) => agent.role as string),
+    ),
+  );
+  const queuedHandoffs = handoffs.filter(
+    (handoff) => handoff.status !== "completed",
+  );
+  const blockedCount = handoffs.filter((handoff) => handoff.status === "blocked").length;
+  const queueByRole = Array.from(
+    queuedHandoffs.reduce((acc, handoff) => {
+      const key = handoff.target_role || "unassigned";
+      acc.set(key, (acc.get(key) ?? 0) + 1);
+      return acc;
+    }, new Map<string, number>()),
+  )
+    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+    .slice(0, 4);
+  const recentHandoffs = queuedHandoffs.slice(0, 4);
+
+  if (
+    activeRoles.length === 0 &&
+    queueByRole.length === 0 &&
+    recentHandoffs.length === 0
+  ) {
+    return null;
+  }
+
+  return (
+    <Box marginTop={1} flexDirection="column" flexShrink={0} minWidth={0}>
+      <Text bold color="$accent">
+        Swarm Overview
+      </Text>
+      <Text color="$muted">
+        {activeRoles.length} active role{activeRoles.length === 1 ? "" : "s"}
+        {queuedHandoffs.length > 0 ? ` · ${queuedHandoffs.length} queued handoff${queuedHandoffs.length === 1 ? "" : "s"}` : ""}
+        {blockedCount > 0 ? ` · ${blockedCount} blocked` : ""}
+      </Text>
+      {activeRoles.length > 0 ? (
+        <Text wrap="wrap">
+          <Text bold>Active Roles:</Text> {activeRoles.join(", ")}
+        </Text>
+      ) : null}
+      {activeRoleWorkspaces.length > 0 ? (
+        <Text wrap="wrap">
+          <Text bold>Workspaces:</Text>{" "}
+          {activeRoleWorkspaces
+            .map(([role, workspace]) => `${role} @ ${workspace}`)
+            .join(" · ")}
+        </Text>
+      ) : null}
+      {queueByRole.length > 0 ? (
+        <Text wrap="wrap">
+          <Text bold>Queue:</Text>{" "}
+          {queueByRole.map(([role, count]) => `${role} ${count}`).join(" · ")}
+        </Text>
+      ) : null}
+      {recentHandoffs.length > 0 ? (
+        <Box marginTop={1} flexDirection="column" minWidth={0}>
+          {recentHandoffs.map((handoff) => (
+            <Text key={handoff.id} color="$muted" wrap="wrap">
+              {handoff.source_role} → {handoff.target_role}: {truncate(handoff.summary, 72)}
+            </Text>
+          ))}
+        </Box>
+      ) : null}
     </Box>
   );
 };
@@ -433,6 +529,26 @@ const AgentDetail: FC<{
             <Text bold>Type:</Text> {detail.subagent_type}
           </Text>
         ) : null}
+        {detail.metadata?.role ? (
+          <Text>
+            <Text bold>Role:</Text> {detail.metadata.role}
+          </Text>
+        ) : null}
+        {detail.metadata?.workspace_strategy ? (
+          <Text>
+            <Text bold>Workspace:</Text> {detail.metadata.workspace_strategy}
+          </Text>
+        ) : null}
+        {detail.metadata?.workspace_path ? (
+          <Text wrap="wrap">
+            <Text bold>Workspace Path:</Text> {detail.metadata.workspace_path}
+          </Text>
+        ) : null}
+        {detail.metadata?.worktree_branch ? (
+          <Text wrap="wrap">
+            <Text bold>Branch:</Text> {detail.metadata.worktree_branch}
+          </Text>
+        ) : null}
         {detail.session_id ? (
           <Text wrap="wrap">
             <Text bold>Session:</Text> {detail.session_id}
@@ -616,7 +732,13 @@ function buildTaskDetailFallback(
       invocation_id: agent.invocationId || undefined,
       agent_id: agent.agentId,
       description: agent.description || undefined,
+      role: agent.role || undefined,
       subagent_type: agent.subagentType || undefined,
+      workspace_strategy: agent.workspaceStrategy,
+      workspace_path: agent.workspacePath,
+      repository_root: agent.repositoryRoot,
+      worktree_branch: agent.worktreeBranch,
+      worktree_created: agent.worktreeCreated,
       lifecycle_state: agent.lifecycleState,
       status_message: agent.statusMessage,
       stop_block_reason: agent.stopBlockReason,
@@ -738,8 +860,14 @@ function buildCommandMeta(command: UIBackgroundCommand): string {
 function buildAgentMeta(agent: UIBackgroundAgent): string {
   const parts = [agent.agentId];
 
+  if (agent.role) {
+    parts.push(`role ${agent.role}`);
+  }
   if (agent.subagentType) {
     parts.push(agent.subagentType);
+  }
+  if (agent.worktreeBranch) {
+    parts.push(`branch ${agent.worktreeBranch}`);
   }
   if (agent.sessionId) {
     parts.push(`session ${agent.sessionId.slice(0, 8)}`);

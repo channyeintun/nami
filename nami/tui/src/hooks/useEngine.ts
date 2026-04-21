@@ -242,6 +242,11 @@ export function useEngine(enginePath: string, options: EngineOptions = {}) {
     [send],
   );
 
+  const sendSwarmDashboardInspect = useCallback(
+    () => send(createMessage("swarm_dashboard_inspect", {})),
+    [send],
+  );
+
   return {
     ...state,
     sendInput,
@@ -259,5 +264,6 @@ export function useEngine(enginePath: string, options: EngineOptions = {}) {
     sendBackgroundCommandStop,
     sendBackgroundAgentInspect,
     sendBackgroundAgentStop,
+    sendSwarmDashboardInspect,
   };
 }
