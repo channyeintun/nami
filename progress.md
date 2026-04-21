@@ -20,13 +20,19 @@
 
 ## Current Focus
 
-- Next task: follow-up plan completed.
+- Next task: fail fast when dequeue policy resolution is invalid.
 
 ## Follow-Up Plan Status
 
 - [x] Add `superseded` handoff status for `latest-wins` policy
 - [x] Add `DequeueHandoffs` function with policy enforcement
 - [x] Wire `DequeueHandoffs` into `swarm_list_inbox` tool
+
+## Review Fixes Status
+
+- [x] Prevent manual `superseded` handoff updates
+- [ ] Fail fast when dequeue policy resolution is invalid
+- [ ] Sync handoff artifacts during `latest-wins` dequeue
 
 ## Completed Tasks
 

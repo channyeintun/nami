@@ -203,7 +203,7 @@ func (t *SwarmUpdateHandoffTool) InputSchema() any {
 		"type": "object",
 		"properties": map[string]any{
 			"handoff_id": map[string]any{"type": "string", "description": "The handoff identifier returned by swarm_submit_handoff."},
-			"status":     map[string]any{"type": "string", "enum": []string{"pending", "acked", "in_progress", "completed", "blocked", "superseded"}},
+			"status":     map[string]any{"type": "string", "enum": []string{"pending", "acked", "in_progress", "completed", "blocked"}},
 			"note":       map[string]any{"type": "string", "description": "Optional status note or resolution detail."},
 		},
 		"required": []string{"handoff_id", "status"},
@@ -221,7 +221,11 @@ func (t *SwarmUpdateHandoffTool) Execute(ctx context.Context, input ToolInput) (
 	if err != nil {
 		return ToolOutput{}, err
 	}
-	updated, err := swarm.UpdateHandoffStatus(store, sessionID, firstStringOrEmpty(input.Params, "handoff_id"), swarm.NormalizeHandoffStatus(firstStringOrEmpty(input.Params, "status")), firstStringOrEmpty(input.Params, "note"))
+	requestedStatus := swarm.NormalizeHandoffStatus(firstStringOrEmpty(input.Params, "status"))
+	if requestedStatus == swarm.HandoffStatusSuperseded {
+		return ToolOutput{}, fmt.Errorf("status %q is managed by queue policy and cannot be set manually", requestedStatus)
+	}
+	updated, err := swarm.UpdateHandoffStatus(store, sessionID, firstStringOrEmpty(input.Params, "handoff_id"), requestedStatus, firstStringOrEmpty(input.Params, "note"))
 	if err != nil {
 		return ToolOutput{}, err
 	}
