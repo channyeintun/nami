@@ -18,6 +18,7 @@
 - Always check errors explicitly. Never swallow or hide failures.
 - Return meaningful error messages. Ask "what can go wrong here?" and handle it at the point of failure.
 - Clear error handling = reliable tools.
+- Use `errors.AsType` [v1.26] instead of `errors.As`
 
 ## Composability
 
