@@ -11,7 +11,6 @@ import type {
   ChildAgentMetadata,
   ArtifactStatusChangedPayload,
   ArtifactUpdatedPayload,
-  AttemptLogSurfacedPayload,
   CompactEndPayload,
   CompactStartPayload,
   ConversationHydratedMessageBlockPayload,
