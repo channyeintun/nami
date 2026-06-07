@@ -11,7 +11,7 @@ import (
 	toolpkg "github.com/channyeintun/nami/internal/tools"
 )
 
-func emitToolArtifacts(bridge *ipc.Bridge, updates []toolpkg.ArtifactMutation, turnMetrics *timing.CheckpointRecorder) error {
+func emitToolArtifacts(bridge ipc.EventSink, updates []toolpkg.ArtifactMutation, turnMetrics *timing.CheckpointRecorder) error {
 	for _, artifactUpdate := range updates {
 		if artifactUpdate.Created {
 			if err := emitArtifactCreated(bridge, artifactUpdate.Artifact); err != nil {
@@ -30,7 +30,7 @@ func emitToolArtifacts(bridge *ipc.Bridge, updates []toolpkg.ArtifactMutation, t
 	return nil
 }
 
-func markFirstToolResult(bridge *ipc.Bridge, turnMetrics *timing.CheckpointRecorder) error {
+func markFirstToolResult(bridge ipc.EventSink, turnMetrics *timing.CheckpointRecorder) error {
 	if turnMetrics == nil || !turnMetrics.Mark("first_tool_result") {
 		return nil
 	}
@@ -61,7 +61,7 @@ func compactToolResults(results []api.ToolResult) []api.ToolResult {
 	return filtered
 }
 
-func emitToolError(bridge *ipc.Bridge, call api.ToolCall, message string, output toolpkg.ToolOutput, err error) error {
+func emitToolError(bridge ipc.EventSink, call api.ToolCall, message string, output toolpkg.ToolOutput, err error) error {
 	payload := ipc.ToolErrorPayload{
 		ToolID:    call.ID,
 		Name:      call.Name,

@@ -188,7 +188,7 @@ func lookupBackgroundTeamMemberStatus(ctx context.Context, member backgroundTeam
 	return toolpkg.AgentRunResult{}, fmt.Errorf("background team member is missing result metadata")
 }
 
-func emitBackgroundAgentUpdated(bridge *ipc.Bridge, bg *backgroundAgent, result toolpkg.AgentRunResult) {
+func emitBackgroundAgentUpdated(bridge ipc.EventSink, bg *backgroundAgent, result toolpkg.AgentRunResult) {
 	if bridge == nil || bg == nil {
 		return
 	}
@@ -249,7 +249,7 @@ func firstNonEmpty(values ...string) string {
 
 func launchBackgroundAgent(
 	parentCtx context.Context,
-	bridge *ipc.Bridge,
+	bridge ipc.EventSink,
 	description string,
 	role string,
 	subagentType string,
@@ -338,7 +338,7 @@ func launchBackgroundAgent(
 	}
 }
 
-func updateBackgroundAgentRunningState(bridge *ipc.Bridge, bg *backgroundAgent, result toolpkg.AgentRunResult) {
+func updateBackgroundAgentRunningState(bridge ipc.EventSink, bg *backgroundAgent, result toolpkg.AgentRunResult) {
 	if bg == nil {
 		return
 	}
@@ -399,7 +399,7 @@ func lookupBackgroundAgentStatus(ctx context.Context, req toolpkg.AgentStatusReq
 	return result, nil
 }
 
-func stopBackgroundAgent(ctx context.Context, bridge *ipc.Bridge, req toolpkg.AgentStopRequest) (toolpkg.AgentRunResult, error) {
+func stopBackgroundAgent(ctx context.Context, bridge ipc.EventSink, req toolpkg.AgentStopRequest) (toolpkg.AgentRunResult, error) {
 	bg, err := getBackgroundAgent(req.AgentID)
 	if err != nil {
 		return toolpkg.AgentRunResult{}, err

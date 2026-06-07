@@ -8,7 +8,7 @@ import (
 	"github.com/channyeintun/nami/internal/swarm"
 )
 
-func handleSwarmDashboardInspectMessage(ctx context.Context, bridge *ipc.Bridge, store *session.Store, sessionID string) error {
+func handleSwarmDashboardInspectMessage(ctx context.Context, bridge ipc.EventSink, store *session.Store, sessionID string) error {
 	handoffs, err := swarm.ListHandoffs(store, sessionID, "", nil)
 	if err != nil {
 		return err

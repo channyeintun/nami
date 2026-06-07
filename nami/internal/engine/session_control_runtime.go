@@ -17,13 +17,13 @@ import (
 )
 
 type sessionControlRuntime struct {
-	bridge  *ipc.Bridge
+	bridge  ipc.EventSink
 	store   *session.Store
 	tracker *costpkg.Tracker
 	state   *engineLoopState
 }
 
-func newSessionControlRuntime(bridge *ipc.Bridge, store *session.Store, tracker *costpkg.Tracker, state *engineLoopState) *sessionControlRuntime {
+func newSessionControlRuntime(bridge ipc.EventSink, store *session.Store, tracker *costpkg.Tracker, state *engineLoopState) *sessionControlRuntime {
 	return &sessionControlRuntime{bridge: bridge, store: store, tracker: tracker, state: state}
 }
 

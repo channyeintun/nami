@@ -100,7 +100,7 @@ func handleModelSlashCommand(cmd *slashCommandContext) error {
 	return emitTextResponse(cmd.bridge, fmt.Sprintf("Set model to %s", cmd.state.ActiveModelID))
 }
 
-func emitCacheBustNoticeOnModelSwitch(bridge *ipc.Bridge, tracker *costpkg.Tracker, previousModelID string, nextModelID string) error {
+func emitCacheBustNoticeOnModelSwitch(bridge ipc.EventSink, tracker *costpkg.Tracker, previousModelID string, nextModelID string) error {
 	if bridge == nil || tracker == nil {
 		return nil
 	}

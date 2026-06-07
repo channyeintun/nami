@@ -20,7 +20,7 @@ const (
 
 func maybeEmitSwarmSpecStartup(
 	ctx context.Context,
-	bridge *ipc.Bridge,
+	bridge ipc.EventSink,
 	artifactManager *artifactspkg.Manager,
 	sessionID string,
 	cwd string,
@@ -59,7 +59,7 @@ const (
 
 func upsertSwarmSpecArtifact(
 	ctx context.Context,
-	bridge *ipc.Bridge,
+	bridge ipc.EventSink,
 	artifactManager *artifactspkg.Manager,
 	sessionID string,
 	content string,

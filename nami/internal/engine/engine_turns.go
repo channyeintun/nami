@@ -27,7 +27,7 @@ import (
 )
 
 type engineLoopDeps struct {
-	bridge             *ipc.Bridge
+	bridge             ipc.EventSink
 	router             *ipc.MessageRouter
 	registry           *toolpkg.Registry
 	permissionCtx      *permissions.Context
@@ -522,7 +522,7 @@ func (t *userTurnContext) flushTurnMetrics(outcome string) {
 	t.turnMetrics = nil
 }
 
-func emitArtifactUpdates(bridge *ipc.Bridge, updates []agent.ArtifactUpdate, turnMetrics *timing.CheckpointRecorder, focusPlans bool) error {
+func emitArtifactUpdates(bridge ipc.EventSink, updates []agent.ArtifactUpdate, turnMetrics *timing.CheckpointRecorder, focusPlans bool) error {
 	for _, update := range updates {
 		if update.Created {
 			if err := emitArtifactCreated(bridge, update.Artifact); err != nil {
@@ -541,7 +541,7 @@ func emitArtifactUpdates(bridge *ipc.Bridge, updates []agent.ArtifactUpdate, tur
 	return nil
 }
 
-func loadAvailableSkills(bridge *ipc.Bridge, cwd string) ([]skillspkg.Skill, error) {
+func loadAvailableSkills(bridge ipc.EventSink, cwd string) ([]skillspkg.Skill, error) {
 	cfg := config.LoadForWorkingDir(cwd)
 	skills, err := skillspkg.LoadAll(cwd, cfg.SkillDir)
 	if err == nil {

@@ -10,7 +10,7 @@ import (
 	"github.com/channyeintun/nami/internal/session"
 )
 
-func emitConversationHydrated(bridge *ipc.Bridge, store *session.Store, sessionID string, messages []api.Message, model string) error {
+func emitConversationHydrated(bridge ipc.EventSink, store *session.Store, sessionID string, messages []api.Message, model string) error {
 	if bridge == nil {
 		return nil
 	}

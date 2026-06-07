@@ -18,7 +18,7 @@ import (
 
 func executeApprovedToolBatches(
 	ctx context.Context,
-	bridge *ipc.Bridge,
+	bridge ipc.EventSink,
 	tracker *costpkg.Tracker,
 	artifactManager *artifactspkg.Manager,
 	hookRunner *hooks.Runner,
@@ -60,7 +60,7 @@ func executeApprovedToolBatches(
 
 func handleToolBatchResult(
 	ctx context.Context,
-	bridge *ipc.Bridge,
+	bridge ipc.EventSink,
 	artifactManager *artifactspkg.Manager,
 	hookRunner *hooks.Runner,
 	sessionID string,
@@ -117,7 +117,7 @@ func handleToolBatchResult(
 
 func finalizeToolOutput(
 	ctx context.Context,
-	bridge *ipc.Bridge,
+	bridge ipc.EventSink,
 	artifactManager *artifactspkg.Manager,
 	sessionID string,
 	turnStats *turnExecutionStats,

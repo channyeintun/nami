@@ -29,7 +29,7 @@ type planReviewGateResult struct {
 
 func handlePlanReviewGate(
 	ctx context.Context,
-	bridge *ipc.Bridge,
+	bridge ipc.EventSink,
 	router *ipc.MessageRouter,
 	mode *agent.ExecutionMode,
 	artifactManager *artifactspkg.Manager,
@@ -122,7 +122,7 @@ func resolvePlanReviewResponse(msg ipc.ClientMessage, requestID string) (planRev
 	return planReviewGateResult{Decision: resolvedDecision, Feedback: feedback}, true, nil
 }
 
-func emitPlanReviewResolution(bridge *ipc.Bridge, requestID string, decision string, mode *agent.ExecutionMode) error {
+func emitPlanReviewResolution(bridge ipc.EventSink, requestID string, decision string, mode *agent.ExecutionMode) error {
 	if err := bridge.Emit(ipc.EventArtifactReviewResolved, ipc.ArtifactReviewResolvedPayload{
 		RequestID: requestID,
 		Decision:  decision,

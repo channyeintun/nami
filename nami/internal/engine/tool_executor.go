@@ -19,7 +19,7 @@ import (
 
 func executeToolCalls(
 	ctx context.Context,
-	bridge *ipc.Bridge,
+	bridge ipc.EventSink,
 	router *ipc.MessageRouter,
 	registry *toolpkg.Registry,
 	permissionCtx *permissions.Context,
@@ -73,7 +73,7 @@ func newToolExecutionState(calls []api.ToolCall, maxOutputTokens int, turnStats 
 
 func prepareToolCalls(
 	ctx context.Context,
-	bridge *ipc.Bridge,
+	bridge ipc.EventSink,
 	router *ipc.MessageRouter,
 	registry *toolpkg.Registry,
 	permissionCtx *permissions.Context,
@@ -94,7 +94,7 @@ func prepareToolCalls(
 
 func prepareToolCall(
 	ctx context.Context,
-	bridge *ipc.Bridge,
+	bridge ipc.EventSink,
 	router *ipc.MessageRouter,
 	registry *toolpkg.Registry,
 	permissionCtx *permissions.Context,
@@ -179,7 +179,7 @@ func validatePlannedTool(
 	call api.ToolCall,
 	pendingCall toolpkg.PendingCall,
 	results []api.ToolResult,
-	bridge *ipc.Bridge,
+	bridge ipc.EventSink,
 ) (bool, error) {
 	if err := planner.ValidateTool(ctx, pendingCall.Tool.Name(), pendingCall.Tool.Permission()); err != nil {
 		if _, ok := errors.AsType[*agent.PlanReviewRequiredError](err); ok {
@@ -202,7 +202,7 @@ func runPreToolUseHooks(
 	index int,
 	results []api.ToolResult,
 	feedback string,
-	bridge *ipc.Bridge,
+	bridge ipc.EventSink,
 ) (bool, error) {
 	if hookRunner == nil {
 		return false, nil
@@ -228,11 +228,11 @@ func runPreToolUseHooks(
 	return false, nil
 }
 
-func emitToolStart(bridge *ipc.Bridge, call api.ToolCall) error {
+func emitToolStart(bridge ipc.EventSink, call api.ToolCall) error {
 	return bridge.Emit(ipc.EventToolStart, ipc.ToolStartPayload{ToolID: call.ID, Name: call.Name, Input: call.Input})
 }
 
-func recordToolPreparationError(bridge *ipc.Bridge, results []api.ToolResult, index int, call api.ToolCall, err error) error {
+func recordToolPreparationError(bridge ipc.EventSink, results []api.ToolResult, index int, call api.ToolCall, err error) error {
 	results[index] = api.ToolResult{ToolCallID: call.ID, Output: err.Error(), IsError: true}
 	return emitToolError(bridge, call, err.Error(), toolpkg.ToolOutput{}, err)
 }

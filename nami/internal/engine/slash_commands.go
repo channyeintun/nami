@@ -18,7 +18,7 @@ import (
 
 func handleSlashCommand(
 	ctx context.Context,
-	bridge *ipc.Bridge,
+	bridge ipc.EventSink,
 	router *ipc.MessageRouter,
 	store *session.Store,
 	timingLogger *timing.Logger,
@@ -72,7 +72,7 @@ func handleSlashCommand(
 	return cmd.state, true, nil
 }
 
-func emitTextResponse(bridge *ipc.Bridge, text string) error {
+func emitTextResponse(bridge ipc.EventSink, text string) error {
 	if strings.TrimSpace(text) != "" {
 		if err := bridge.Emit(ipc.EventTokenDelta, ipc.TokenDeltaPayload{Text: text}); err != nil {
 			return err
@@ -81,7 +81,7 @@ func emitTextResponse(bridge *ipc.Bridge, text string) error {
 	return bridge.Emit(ipc.EventTurnComplete, ipc.TurnCompletePayload{StopReason: "end_turn"})
 }
 
-func appendSlashResponse(bridge *ipc.Bridge, text string) {
+func appendSlashResponse(bridge ipc.EventSink, text string) {
 	if bridge == nil || strings.TrimSpace(text) == "" {
 		return
 	}
@@ -92,7 +92,7 @@ func gitHubCopilotPolicyModels(cfg config.Config) []string {
 	return providerBehaviorFor("github-copilot").PolicyModels(cfg)
 }
 
-func emitSessionArtifacts(ctx context.Context, bridge *ipc.Bridge, artifactManager *artifactspkg.Manager, sessionID string) error {
+func emitSessionArtifacts(ctx context.Context, bridge ipc.EventSink, artifactManager *artifactspkg.Manager, sessionID string) error {
 	if artifactManager == nil || strings.TrimSpace(sessionID) == "" {
 		return nil
 	}

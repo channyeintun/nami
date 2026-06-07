@@ -12,11 +12,11 @@ import (
 )
 
 type askUserQuestionRuntime struct {
-	bridge *ipc.Bridge
+	bridge ipc.EventSink
 	router *ipc.MessageRouter
 }
 
-func newAskUserQuestionRuntime(bridge *ipc.Bridge, router *ipc.MessageRouter) toolpkg.AskUserQuestionRuntime {
+func newAskUserQuestionRuntime(bridge ipc.EventSink, router *ipc.MessageRouter) toolpkg.AskUserQuestionRuntime {
 	return &askUserQuestionRuntime{bridge: bridge, router: router}
 }
 

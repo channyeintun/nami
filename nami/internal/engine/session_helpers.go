@@ -22,7 +22,7 @@ import (
 	toolpkg "github.com/channyeintun/nami/internal/tools"
 )
 
-func emitArtifactCreated(bridge *ipc.Bridge, artifact artifactspkg.Artifact) error {
+func emitArtifactCreated(bridge ipc.EventSink, artifact artifactspkg.Artifact) error {
 	return bridge.Emit(ipc.EventArtifactCreated, ipc.ArtifactCreatedPayload{
 		ID:      artifact.ID,
 		Kind:    string(artifact.Kind),
@@ -34,7 +34,7 @@ func emitArtifactCreated(bridge *ipc.Bridge, artifact artifactspkg.Artifact) err
 	})
 }
 
-func emitArtifactUpdated(bridge *ipc.Bridge, artifact artifactspkg.Artifact, content string) error {
+func emitArtifactUpdated(bridge ipc.EventSink, artifact artifactspkg.Artifact, content string) error {
 	return bridge.Emit(ipc.EventArtifactUpdated, ipc.ArtifactUpdatedPayload{
 		ID:      artifact.ID,
 		Content: content,
@@ -50,7 +50,7 @@ func artifactMetadataString(artifact artifactspkg.Artifact, key string) string {
 	return ""
 }
 
-func emitArtifactFocused(bridge *ipc.Bridge, artifact artifactspkg.Artifact) error {
+func emitArtifactFocused(bridge ipc.EventSink, artifact artifactspkg.Artifact) error {
 	return bridge.Emit(ipc.EventArtifactFocused, ipc.ArtifactFocusedPayload{
 		ID:      artifact.ID,
 		Kind:    string(artifact.Kind),
@@ -60,7 +60,7 @@ func emitArtifactFocused(bridge *ipc.Bridge, artifact artifactspkg.Artifact) err
 	})
 }
 
-func emitArtifactFocusedForTurn(bridge *ipc.Bridge, artifact artifactspkg.Artifact, turnMetrics *timing.CheckpointRecorder) error {
+func emitArtifactFocusedForTurn(bridge ipc.EventSink, artifact artifactspkg.Artifact, turnMetrics *timing.CheckpointRecorder) error {
 	if turnMetrics != nil && turnMetrics.Mark("first_artifact_focus") {
 		if err := emitTurnTimingCheckpoint(bridge, turnMetrics, "first_artifact_focus"); err != nil {
 			return err
@@ -69,7 +69,7 @@ func emitArtifactFocusedForTurn(bridge *ipc.Bridge, artifact artifactspkg.Artifa
 	return emitArtifactFocused(bridge, artifact)
 }
 
-func emitTurnTimingCheckpoint(bridge *ipc.Bridge, recorder *timing.CheckpointRecorder, checkpoint string) error {
+func emitTurnTimingCheckpoint(bridge ipc.EventSink, recorder *timing.CheckpointRecorder, checkpoint string) error {
 	if bridge == nil || recorder == nil || checkpoint == "" {
 		return nil
 	}
@@ -168,7 +168,7 @@ type sessionStateParams struct {
 }
 
 type compactionSummarizer struct {
-	bridge          *ipc.Bridge
+	bridge          ipc.EventSink
 	tracker         *costpkg.Tracker
 	client          api.LLMClient
 	router          *localmodel.Router
@@ -177,7 +177,7 @@ type compactionSummarizer struct {
 	lastSummaryMode compact.SummaryMode
 }
 
-func newCompactionPipeline(bridge *ipc.Bridge, tracker *costpkg.Tracker, client api.LLMClient, systemPrompt string, tools []api.ToolDefinition) *compact.Pipeline {
+func newCompactionPipeline(bridge ipc.EventSink, tracker *costpkg.Tracker, client api.LLMClient, systemPrompt string, tools []api.ToolDefinition) *compact.Pipeline {
 	capabilities := client.Capabilities()
 	return compact.NewPipeline(capabilities.PromptTokenBudget(), &compactionSummarizer{
 		bridge:       bridge,
@@ -191,7 +191,7 @@ func newCompactionPipeline(bridge *ipc.Bridge, tracker *costpkg.Tracker, client 
 
 func compactWithMetrics(
 	ctx context.Context,
-	bridge *ipc.Bridge,
+	bridge ipc.EventSink,
 	tracker *costpkg.Tracker,
 	client api.LLMClient,
 	timingLogger *timing.Logger,
@@ -244,7 +244,7 @@ func compactWithMetrics(
 	return result, nil
 }
 
-func newSessionMemoryRefiner(bridge *ipc.Bridge, tracker *costpkg.Tracker, client api.LLMClient) sessionMemoryRefineFunc {
+func newSessionMemoryRefiner(bridge ipc.EventSink, tracker *costpkg.Tracker, client api.LLMClient) sessionMemoryRefineFunc {
 	return func(ctx context.Context, draft string, recentUserMessages []string) (string, error) {
 		var prompt strings.Builder
 		prompt.WriteString(sessionMemoryRefinePrompt)

@@ -28,9 +28,12 @@ import (
 	toolpkg "github.com/channyeintun/nami/internal/tools"
 )
 
-func RunStdioEngine(ctx context.Context, cfg config.Config) error {
-	engineStartedAt := time.Now()
+type engineTransport interface {
+	ipc.MessageSource
+	ipc.EventSink
+}
 
+func RunStdioEngine(ctx context.Context, cfg config.Config) error {
 	// Debug logging: activated by NAMI_DEBUG=1
 	if os.Getenv("NAMI_DEBUG") != "" {
 		debuglog.Enabled = true
@@ -40,6 +43,10 @@ func RunStdioEngine(ctx context.Context, cfg config.Config) error {
 	var stdoutW io.Writer = debuglog.NewIPCWriter(os.Stdout)
 
 	bridge := ipc.NewBridge(stdinR, stdoutW)
+	return runEngine(ctx, cfg, bridge, time.Now())
+}
+
+func runEngine(ctx context.Context, cfg config.Config, bridge engineTransport, engineStartedAt time.Time) error {
 	registry := toolpkg.NewRegistry()
 	startupSelection := resolveStartupProviderSelection(cfg)
 	provider := normalizeProvider(startupSelection.Provider)
@@ -552,7 +559,7 @@ func ensureClientForSelection(modelSelection string, cfg config.Config, current 
 	return client, modelRef(provider, client.ModelID()), nil
 }
 
-func startMCPDiscovery(ctx context.Context, bridge *ipc.Bridge, registry *toolpkg.Registry, manager *mcppkg.Manager) {
+func startMCPDiscovery(ctx context.Context, bridge ipc.EventSink, registry *toolpkg.Registry, manager *mcppkg.Manager) {
 	if manager == nil {
 		return
 	}
@@ -783,7 +790,7 @@ func latestSessionAssistantContent(messages []api.Message) string {
 
 func trackModelStream(
 	ctx context.Context,
-	bridge *ipc.Bridge,
+	bridge ipc.EventSink,
 	tracker *costpkg.Tracker,
 	client api.LLMClient,
 	req api.ModelRequest,
@@ -839,7 +846,7 @@ func mergeUsage(current api.Usage, next api.Usage) api.Usage {
 	return current
 }
 
-func emitCostUpdate(bridge *ipc.Bridge, tracker *costpkg.Tracker) error {
+func emitCostUpdate(bridge ipc.EventSink, tracker *costpkg.Tracker) error {
 	snapshot := tracker.Snapshot()
 	return bridge.Emit(ipc.EventCostUpdate, ipc.CostUpdatePayload{
 		TotalUSD:                 snapshot.TotalCostUSD,
@@ -854,7 +861,7 @@ func emitCostUpdate(bridge *ipc.Bridge, tracker *costpkg.Tracker) error {
 	})
 }
 
-func emitRateLimitUpdate(bridge *ipc.Bridge, rateLimits *api.RateLimits) error {
+func emitRateLimitUpdate(bridge ipc.EventSink, rateLimits *api.RateLimits) error {
 	if rateLimits == nil {
 		return nil
 	}
@@ -879,7 +886,7 @@ func toRateLimitWindowPayload(window *api.RateLimitWindow) *ipc.RateLimitWindowP
 	}
 }
 
-func emitModelChanged(bridge *ipc.Bridge, activeModelID string, client api.LLMClient) error {
+func emitModelChanged(bridge ipc.EventSink, activeModelID string, client api.LLMClient) error {
 	payload := ipc.ModelChangedPayload{
 		Model:           activeModelID,
 		ReasoningEffort: commandspkg.EffectiveReasoningEffort(strings.TrimSpace(config.Load().ReasoningEffort), activeModelID),
@@ -896,7 +903,7 @@ func emitModelChanged(bridge *ipc.Bridge, activeModelID string, client api.LLMCl
 	return bridge.Emit(ipc.EventModelChanged, payload)
 }
 
-func emitContextWindowUsage(bridge *ipc.Bridge, client api.LLMClient, messages []api.Message) error {
+func emitContextWindowUsage(bridge ipc.EventSink, client api.LLMClient, messages []api.Message) error {
 	if client == nil {
 		return nil
 	}
@@ -906,7 +913,7 @@ func emitContextWindowUsage(bridge *ipc.Bridge, client api.LLMClient, messages [
 	})
 }
 
-func emitSessionUpdated(bridge *ipc.Bridge, sessionID, title string) error {
+func emitSessionUpdated(bridge ipc.EventSink, sessionID, title string) error {
 	return bridge.Emit(ipc.EventSessionUpdated, ipc.SessionUpdatedPayload{
 		SessionID: sessionID,
 		Title:     title,
@@ -914,7 +921,7 @@ func emitSessionUpdated(bridge *ipc.Bridge, sessionID, title string) error {
 }
 
 func emitToolUseCapabilityNotice(
-	bridge *ipc.Bridge,
+	bridge ipc.EventSink,
 	activeModelID string,
 	client api.LLMClient,
 	lastNoticeModelID *string,

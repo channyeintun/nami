@@ -42,7 +42,7 @@ func newPermissionContext(mode string, autoMode bool) *permissions.Context {
 
 func authorizeToolCall(
 	ctx context.Context,
-	bridge *ipc.Bridge,
+	bridge ipc.EventSink,
 	router *ipc.MessageRouter,
 	permissionCtx *permissions.Context,
 	toolCallID string,
@@ -91,7 +91,7 @@ func authorizeToolCall(
 
 func waitForPermissionDecision(
 	ctx context.Context,
-	bridge *ipc.Bridge,
+	bridge ipc.EventSink,
 	router *ipc.MessageRouter,
 	toolCallID string,
 	pending toolpkg.PendingCall,

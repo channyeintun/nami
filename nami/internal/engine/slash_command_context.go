@@ -32,7 +32,7 @@ type slashCommandState struct {
 
 type slashCommandContext struct {
 	ctx             context.Context
-	bridge          *ipc.Bridge
+	bridge          ipc.EventSink
 	router          *ipc.MessageRouter
 	store           *session.Store
 	timingLogger    *timing.Logger
@@ -181,7 +181,7 @@ func modelSelectionOptionRef(provider string, model string) string {
 
 func newSlashCommandContext(
 	ctx context.Context,
-	bridge *ipc.Bridge,
+	bridge ipc.EventSink,
 	router *ipc.MessageRouter,
 	store *session.Store,
 	timingLogger *timing.Logger,

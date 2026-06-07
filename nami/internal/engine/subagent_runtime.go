@@ -121,7 +121,7 @@ var generalPurposeSubagentTools = []string{
 }
 
 func makeSubagentRunner(
-	bridge *ipc.Bridge,
+	bridge ipc.EventSink,
 	registry *toolpkg.Registry,
 	permissionCtx *permissions.Context,
 	parentTracker *costpkg.Tracker,
@@ -234,7 +234,7 @@ func executeSubagent(
 	req toolpkg.AgentRunRequest,
 	subagentType string,
 	invocationID string,
-	bridge *ipc.Bridge,
+	bridge ipc.EventSink,
 	registry *toolpkg.Registry,
 	permissionCtx *permissions.Context,
 	parentTracker *costpkg.Tracker,

@@ -92,7 +92,7 @@ func loadSessionMemorySnapshot(ctx context.Context, artifactManager *artifactspk
 	}, nil
 }
 
-func maybeRefreshSessionMemory(ctx context.Context, bridge *ipc.Bridge, artifactManager *artifactspkg.Manager, sessionID string, turnID int, messages []api.Message, fromIndex int, refiner sessionMemoryRefineFunc) error {
+func maybeRefreshSessionMemory(ctx context.Context, bridge ipc.EventSink, artifactManager *artifactspkg.Manager, sessionID string, turnID int, messages []api.Message, fromIndex int, refiner sessionMemoryRefineFunc) error {
 	if !config.Load().EnableSessionMemory {
 		return nil
 	}
@@ -162,7 +162,7 @@ func maybeRefreshSessionMemory(ctx context.Context, bridge *ipc.Bridge, artifact
 	return emitArtifactUpdated(bridge, artifact, content)
 }
 
-func syncSessionMemoryAfterRewind(ctx context.Context, bridge *ipc.Bridge, artifactManager *artifactspkg.Manager, sessionID string, messages []api.Message) error {
+func syncSessionMemoryAfterRewind(ctx context.Context, bridge ipc.EventSink, artifactManager *artifactspkg.Manager, sessionID string, messages []api.Message) error {
 	if !config.Load().EnableSessionMemory {
 		return nil
 	}

@@ -14,7 +14,7 @@ const backgroundCommandDetailTailBytes = 8 * 1024
 
 func handleBackgroundCommandInspectMessage(
 	ctx context.Context,
-	bridge *ipc.Bridge,
+	bridge ipc.EventSink,
 	payload ipc.BackgroundCommandInspectPayload,
 ) error {
 	commandID := strings.TrimSpace(payload.CommandID)
@@ -61,7 +61,7 @@ func handleBackgroundCommandInspectMessage(
 }
 
 func handleBackgroundCommandStopMessage(
-	bridge *ipc.Bridge,
+	bridge ipc.EventSink,
 	payload ipc.BackgroundCommandStopPayload,
 ) error {
 	commandID := strings.TrimSpace(payload.CommandID)
@@ -117,7 +117,7 @@ func handleBackgroundCommandStopMessage(
 
 func handleBackgroundAgentInspectMessage(
 	ctx context.Context,
-	bridge *ipc.Bridge,
+	bridge ipc.EventSink,
 	payload ipc.BackgroundAgentInspectPayload,
 ) error {
 	agentID := strings.TrimSpace(payload.AgentID)
@@ -149,7 +149,7 @@ func handleBackgroundAgentInspectMessage(
 
 func handleBackgroundAgentStopMessage(
 	ctx context.Context,
-	bridge *ipc.Bridge,
+	bridge ipc.EventSink,
 	payload ipc.BackgroundAgentStopPayload,
 ) error {
 	agentID := strings.TrimSpace(payload.AgentID)
