@@ -254,7 +254,6 @@ func FormatSessionList(sessions []session.Metadata, currentID string) string {
 	return strings.TrimSpace(b.String())
 }
 
-
 func visibleDescriptors(catalog []Descriptor) []Descriptor {
 	visible := make([]Descriptor, 0, len(catalog))
 	for _, descriptor := range catalog {
