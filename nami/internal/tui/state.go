@@ -20,6 +20,7 @@ type uiState struct {
 	PermissionRequest  *permissionRequestState
 	QuestionRequest    *questionRequestState
 	SelectionRequest   *selectionRequestState
+	Hydrated           bool
 	Lines              []string
 	ErrorMessage       string
 	TurnActive         bool

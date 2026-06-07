@@ -248,6 +248,12 @@ func summarizeEvent(event ipc.StreamEvent) string {
 		return "mode: " + strings.TrimSpace(payload.Mode)
 	case ipc.EventTurnComplete:
 		return "turn complete"
+	case ipc.EventConversationHydrated:
+		var payload ipc.ConversationHydratedPayload
+		if err := json.Unmarshal(event.Payload, &payload); err != nil {
+			return fmt.Sprintf("conversation restored: decode failed: %v", err)
+		}
+		return fmt.Sprintf("conversation restored: %d message(s)", len(payload.Messages))
 	default:
 		if len(event.Payload) == 0 {
 			return string(event.Type)

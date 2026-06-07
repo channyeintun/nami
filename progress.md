@@ -33,12 +33,13 @@ The migration is not complete.
 - 2026-06-08: Extended reducer state and the status bar for mode, model, context usage, cost, and rate-limit updates.
 - 2026-06-08: Extended reducer state for artifacts, artifact review requests, background commands, and background agents.
 - 2026-06-08: Extended reducer state for permission requests, ask-user-question prompts, and model/reasoning/resume/rewind selection requests.
+- 2026-06-08: Added reducer support for conversation hydration and rebuilt early transcript lines from hydrated messages, progress, and tool calls.
 
 ## Next Task
 
 Start Phase 3 by porting the UI reducer:
 
-- extend reducer state for conversation hydration and persisted transcript entries
+- extend reducer state for memory, retrieval, compaction, timing, and session restore/rewind events
 - keep the no-tests constraint while porting reducer logic
 
 Done:
@@ -63,6 +64,7 @@ Done:
 - extend reducer state to cover model, mode, context, cost, and rate limits
 - extend reducer state to cover artifacts and background tasks
 - extend reducer state to cover selection dialogs and permission/question prompts
+- extend reducer state for conversation hydration and persisted transcript entries
 - keep the stdio wrapper behavior unchanged
 - keep `nami --stdio` behavior unchanged
 

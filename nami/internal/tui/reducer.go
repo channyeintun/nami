@@ -203,12 +203,116 @@ func applyEvent(state uiState, event ipc.StreamEvent) uiState {
 			Title:     "Rewind conversation",
 			Count:     len(payload.Turns),
 		}
+	case ipc.EventConversationHydrated:
+		payload, err := decodePayload[ipc.ConversationHydratedPayload](event)
+		if err != nil {
+			return state.withDecodeError("conversation hydration", err)
+		}
+		state.Lines = hydratedTranscriptLines(payload)
+		if len(state.Lines) == 0 {
+			state.Lines = []string{"Conversation restored."}
+		}
+		state.Assistant = ""
+		state.TurnActive = false
+		state.Hydrated = true
+		state.ErrorMessage = ""
+		return state
 	}
 
 	if summary := summarizeEvent(event); strings.TrimSpace(summary) != "" {
 		return state.appendLine(summary)
 	}
 	return state
+}
+
+func hydratedTranscriptLines(payload ipc.ConversationHydratedPayload) []string {
+	messages := make(map[string]ipc.ConversationHydratedMessagePayload, len(payload.Messages))
+	for _, message := range payload.Messages {
+		if id := strings.TrimSpace(message.ID); id != "" {
+			messages[id] = message
+		}
+	}
+	progress := make(map[string]ipc.ConversationHydratedProgressPayload, len(payload.Progress))
+	for _, entry := range payload.Progress {
+		if id := strings.TrimSpace(entry.ID); id != "" {
+			progress[id] = entry
+		}
+	}
+	tools := make(map[string]ipc.ConversationHydratedToolCallPayload, len(payload.ToolCalls))
+	for _, tool := range payload.ToolCalls {
+		if id := strings.TrimSpace(tool.ID); id != "" {
+			tools[id] = tool
+		}
+	}
+
+	if len(payload.Transcript) == 0 {
+		lines := make([]string, 0, len(payload.Messages))
+		for _, message := range payload.Messages {
+			if line := hydratedMessageLine(message); line != "" {
+				lines = append(lines, line)
+			}
+		}
+		return lines
+	}
+
+	lines := make([]string, 0, len(payload.Transcript))
+	for _, entry := range payload.Transcript {
+		refID := strings.TrimSpace(entry.RefID)
+		if refID == "" {
+			refID = strings.TrimSpace(entry.ID)
+		}
+		switch entry.Kind {
+		case "message":
+			if line := hydratedMessageLine(messages[refID]); line != "" {
+				lines = append(lines, line)
+			}
+		case "progress":
+			if item, ok := progress[refID]; ok {
+				lines = append(lines, "progress: "+strings.TrimSpace(item.Message))
+			}
+		case "tool_call":
+			if item, ok := tools[refID]; ok {
+				lines = append(lines, hydratedToolLine(item))
+			}
+		}
+	}
+	return lines
+}
+
+func hydratedMessageLine(message ipc.ConversationHydratedMessagePayload) string {
+	role := strings.TrimSpace(message.Role)
+	if role == "" {
+		return ""
+	}
+	text := strings.TrimSpace(message.Text)
+	if text == "" {
+		parts := make([]string, 0, len(message.Blocks))
+		for _, block := range message.Blocks {
+			if blockText := strings.TrimSpace(block.Text); blockText != "" {
+				parts = append(parts, blockText)
+			}
+		}
+		text = strings.Join(parts, "\n")
+	}
+	if text == "" {
+		return ""
+	}
+	if role == "user" {
+		return "> " + text
+	}
+	return role + ": " + text
+}
+
+func hydratedToolLine(tool ipc.ConversationHydratedToolCallPayload) string {
+	name := strings.TrimSpace(tool.Name)
+	if name == "" {
+		name = strings.TrimSpace(tool.ID)
+	}
+	status := strings.TrimSpace(tool.Status)
+	if status == "" {
+		status = "unknown"
+	}
+	return fmt.Sprintf("tool %s: %s", status, name)
 }
 
 func (s uiState) withArtifact(artifact artifactState) uiState {
