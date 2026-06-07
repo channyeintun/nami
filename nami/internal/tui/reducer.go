@@ -285,9 +285,26 @@ func applyEvent(state uiState, event ipc.StreamEvent) uiState {
 	}
 
 	if summary := summarizeEvent(event); strings.TrimSpace(summary) != "" {
-		return state.appendLine(summary)
+		return state.appendTranscript(transcriptKindForEvent(event.Type), summary)
 	}
 	return state
+}
+
+func transcriptKindForEvent(eventType ipc.EventType) string {
+	switch eventType {
+	case ipc.EventError:
+		return "error"
+	case ipc.EventToolStart, ipc.EventToolProgress, ipc.EventToolResult, ipc.EventToolError:
+		return "tool"
+	case ipc.EventProgress:
+		return "progress"
+	case ipc.EventArtifactCreated, ipc.EventArtifactUpdated, ipc.EventArtifactFocused, ipc.EventArtifactStatusChanged, ipc.EventArtifactReviewRequested, ipc.EventArtifactReviewResolved:
+		return "artifact"
+	case ipc.EventBackgroundCommandUpdated, ipc.EventBackgroundCommandDetail, ipc.EventBackgroundAgentUpdated, ipc.EventBackgroundAgentDetail:
+		return "background"
+	default:
+		return "system"
+	}
 }
 
 func slashCommandsFromPayload(payload []ipc.SlashCommandDescriptorPayload) []slashCommandState {

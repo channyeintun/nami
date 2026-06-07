@@ -38,12 +38,13 @@ The migration is not complete.
 - 2026-06-08: Started Phase 4 by replacing plain transcript strings with structured transcript entries and a dedicated renderer.
 - 2026-06-08: Added prompt history navigation and basic tab completion for ready-time slash commands.
 - 2026-06-08: Added basic transcript search state plus page scrolling and follow-tail controls.
+- 2026-06-08: Improved structured transcript row kinds for tool, progress, artifact, background, and error events.
 
 ## Next Task
 
 Start Phase 4 by porting core surfaces:
 
-- improve core transcript rows for tool/progress/artifact entries
+- start Phase 5 dialog surfaces for permission, question, selection, and artifact review prompts
 - keep the no-tests constraint while porting reducer logic
 
 Done:
@@ -73,6 +74,7 @@ Done:
 - replace the early transcript text renderer with structured transcript rows
 - add prompt history and slash-command completion basics
 - add transcript search and scroll/follow-tail behavior
+- improve core transcript rows for tool/progress/artifact entries
 - keep the stdio wrapper behavior unchanged
 - keep `nami --stdio` behavior unchanged
 

@@ -30,8 +30,12 @@ func renderTranscriptEntry(entry transcriptEntry) string {
 		return assistantTranscriptStyle.Render("assistant: " + text)
 	case "error":
 		return errorStyle.Render(text)
-	case "tool":
+	case "tool", "progress":
 		return toolTranscriptStyle.Render(text)
+	case "artifact":
+		return artifactTranscriptStyle.Render(text)
+	case "background":
+		return backgroundTranscriptStyle.Render(text)
 	default:
 		return mutedTranscriptStyle.Render(text)
 	}
@@ -46,6 +50,12 @@ var (
 
 	toolTranscriptStyle = lipgloss.NewStyle().
 				Foreground(lipgloss.Color("#7EE787"))
+
+	artifactTranscriptStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#FFA657"))
+
+	backgroundTranscriptStyle = lipgloss.NewStyle().
+					Foreground(lipgloss.Color("#79C0FF"))
 
 	mutedTranscriptStyle = lipgloss.NewStyle().
 				Foreground(lipgloss.Color("#8B949E"))
