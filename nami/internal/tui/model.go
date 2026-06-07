@@ -213,6 +213,25 @@ func (m model) statusLine() string {
 	if m.state.RateLimit != "" {
 		parts = append(parts, "limit "+m.state.RateLimit)
 	}
+	if m.state.SessionTitle != "" {
+		parts = append(parts, "session "+m.state.SessionTitle)
+	} else if m.state.SessionID != "" {
+		parts = append(parts, "session "+m.state.SessionID)
+	}
+	if m.state.MemoryCount > 0 {
+		parts = append(parts, fmt.Sprintf("memory %d", m.state.MemoryCount))
+	}
+	if m.state.RetrievalSummary != "" {
+		parts = append(parts, "retrieval "+m.state.RetrievalSummary)
+	}
+	if m.state.Compacting {
+		parts = append(parts, "compacting")
+	} else if m.state.CompactSummary != "" {
+		parts = append(parts, "compact "+m.state.CompactSummary)
+	}
+	if m.state.LastTiming != "" {
+		parts = append(parts, "timing "+m.state.LastTiming)
+	}
 	if len(m.state.Artifacts) > 0 {
 		parts = append(parts, fmt.Sprintf("artifacts %d", len(m.state.Artifacts)))
 	}

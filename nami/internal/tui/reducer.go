@@ -217,6 +217,66 @@ func applyEvent(state uiState, event ipc.StreamEvent) uiState {
 		state.Hydrated = true
 		state.ErrorMessage = ""
 		return state
+	case ipc.EventMemoryRecalled:
+		payload, err := decodePayload[ipc.MemoryRecalledPayload](event)
+		if err != nil {
+			return state.withDecodeError("memory", err)
+		}
+		state.MemoryCount = payload.Count
+	case ipc.EventRetrievalUsed:
+		payload, err := decodePayload[ipc.RetrievalUsedPayload](event)
+		if err != nil {
+			return state.withDecodeError("retrieval", err)
+		}
+		if payload.Skipped {
+			state.RetrievalSummary = "skipped"
+		} else {
+			state.RetrievalSummary = fmt.Sprintf("%d snippets", payload.SnippetCount)
+		}
+		return state
+	case ipc.EventCompactStart:
+		payload, err := decodePayload[ipc.CompactStartPayload](event)
+		if err != nil {
+			return state.withDecodeError("compact start", err)
+		}
+		state.Compacting = true
+		state.CompactSummary = fmt.Sprintf("%s from %d tokens", strings.TrimSpace(payload.Strategy), payload.TokensBefore)
+	case ipc.EventCompactEnd:
+		payload, err := decodePayload[ipc.CompactEndPayload](event)
+		if err != nil {
+			return state.withDecodeError("compact end", err)
+		}
+		state.Compacting = false
+		state.CompactSummary = fmt.Sprintf("%d tokens saved", payload.TokensSaved)
+	case ipc.EventTurnTiming:
+		payload, err := decodePayload[ipc.TurnTimingPayload](event)
+		if err != nil {
+			return state.withDecodeError("timing", err)
+		}
+		state.LastTiming = fmt.Sprintf("%s %dms", strings.TrimSpace(payload.Checkpoint), payload.ElapsedMS)
+		return state
+	case ipc.EventSessionUpdated:
+		payload, err := decodePayload[ipc.SessionUpdatedPayload](event)
+		if err != nil {
+			return state.withDecodeError("session", err)
+		}
+		state.SessionID = strings.TrimSpace(payload.SessionID)
+		state.SessionTitle = strings.TrimSpace(payload.Title)
+		return state
+	case ipc.EventSessionRestored:
+		payload, err := decodePayload[ipc.SessionRestoredPayload](event)
+		if err != nil {
+			return state.withDecodeError("session restore", err)
+		}
+		state.SessionID = strings.TrimSpace(payload.SessionID)
+		state.Mode = strings.TrimSpace(payload.Mode)
+	case ipc.EventSessionRewound:
+		payload, err := decodePayload[ipc.SessionRewoundPayload](event)
+		if err != nil {
+			return state.withDecodeError("session rewind", err)
+		}
+		state.SessionID = strings.TrimSpace(payload.SessionID)
+		state.SelectionRequest = nil
 	}
 
 	if summary := summarizeEvent(event); strings.TrimSpace(summary) != "" {

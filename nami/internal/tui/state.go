@@ -12,6 +12,13 @@ type uiState struct {
 	InputTokens        int
 	OutputTokens       int
 	RateLimit          string
+	MemoryCount        int
+	RetrievalSummary   string
+	Compacting         bool
+	CompactSummary     string
+	LastTiming         string
+	SessionID          string
+	SessionTitle       string
 	Artifacts          map[string]artifactState
 	FocusedArtifactID  string
 	ArtifactReview     *artifactReviewState

@@ -254,6 +254,41 @@ func summarizeEvent(event ipc.StreamEvent) string {
 			return fmt.Sprintf("conversation restored: decode failed: %v", err)
 		}
 		return fmt.Sprintf("conversation restored: %d message(s)", len(payload.Messages))
+	case ipc.EventMemoryRecalled:
+		var payload ipc.MemoryRecalledPayload
+		if err := json.Unmarshal(event.Payload, &payload); err != nil {
+			return fmt.Sprintf("memory: decode failed: %v", err)
+		}
+		return fmt.Sprintf("memory recalled: %d item(s)", payload.Count)
+	case ipc.EventRetrievalUsed:
+		var payload ipc.RetrievalUsedPayload
+		if err := json.Unmarshal(event.Payload, &payload); err != nil {
+			return fmt.Sprintf("retrieval: decode failed: %v", err)
+		}
+		if payload.Skipped {
+			return "retrieval skipped"
+		}
+		return fmt.Sprintf("retrieval used: %d snippet(s)", payload.SnippetCount)
+	case ipc.EventCompactStart:
+		return "compaction started"
+	case ipc.EventCompactEnd:
+		var payload ipc.CompactEndPayload
+		if err := json.Unmarshal(event.Payload, &payload); err != nil {
+			return fmt.Sprintf("compaction: decode failed: %v", err)
+		}
+		return fmt.Sprintf("compaction finished: %d token(s) saved", payload.TokensSaved)
+	case ipc.EventSessionRestored:
+		var payload ipc.SessionRestoredPayload
+		if err := json.Unmarshal(event.Payload, &payload); err != nil {
+			return fmt.Sprintf("session restore: decode failed: %v", err)
+		}
+		return "session restored: " + strings.TrimSpace(payload.SessionID)
+	case ipc.EventSessionRewound:
+		var payload ipc.SessionRewoundPayload
+		if err := json.Unmarshal(event.Payload, &payload); err != nil {
+			return fmt.Sprintf("session rewind: decode failed: %v", err)
+		}
+		return fmt.Sprintf("session rewound: %d message(s)", payload.MessageCount)
 	default:
 		if len(event.Payload) == 0 {
 			return string(event.Type)
