@@ -27,13 +27,14 @@ The migration is not complete.
 - 2026-06-08: Wired the Bubble Tea shell to `engine.RunEmbeddedEngine`, converting engine events into Bubble Tea messages and submitted prompts into `ipc.ClientMessage` values.
 - 2026-06-08: Added active-turn tracking so `ctrl+c` sends `ipc.MsgCancel` during a turn and exits only while idle.
 - 2026-06-08: Improved the early transcript renderer by aggregating streaming assistant tokens and formatting common engine events.
+- 2026-06-08: Added Bubbles `key` and `help` support for footer key hints and help toggling.
 
 ## Next Task
 
 Start Phase 2 by adding a minimal Bubble Tea shell:
 
 - handle resize and prompt layout polish
-- add footer key hints with Bubbles `key` and `help`
+- decide whether Phase 2 is sufficient to move into reducer porting
 
 Done:
 
@@ -50,6 +51,7 @@ Done:
 - send submitted prompts to the embedded engine
 - refine cancellation behavior so `ctrl+c` cancels an active turn before exiting when idle
 - improve transcript rendering beyond raw event summaries
+- add footer key hints with Bubbles `key` and `help`
 - keep the stdio wrapper behavior unchanged
 - keep `nami --stdio` behavior unchanged
 

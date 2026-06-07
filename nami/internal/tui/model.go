@@ -4,6 +4,8 @@ import (
 	"context"
 	"strings"
 
+	"charm.land/bubbles/v2/help"
+	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/textarea"
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
@@ -16,6 +18,8 @@ import (
 type model struct {
 	cfg        config.Config
 	engine     engineClient
+	keymap     keyMap
+	help       help.Model
 	width      int
 	height     int
 	transcript viewport.Model
@@ -43,6 +47,8 @@ func newModel(ctx context.Context, cfg config.Config) model {
 	return model{
 		cfg:        cfg,
 		engine:     newEngineClient(ctx),
+		keymap:     defaultKeyMap(),
+		help:       help.New(),
 		transcript: transcript,
 		prompt:     prompt,
 		lines:      []string{"Nami Bubble Tea shell starting..."},
@@ -76,16 +82,18 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.status = "stopped"
 	case tea.KeyPressMsg:
-		switch msg.String() {
-		case "ctrl+c":
+		switch {
+		case key.Matches(msg, m.keymap.Help):
+			m.help.ShowAll = !m.help.ShowAll
+		case key.Matches(msg, m.keymap.Cancel):
 			if m.turnActive {
 				m.appendTranscriptLine("cancel requested")
 				return m, m.engine.cancelTurn()
 			}
 			return m, tea.Batch(m.engine.shutdown(), tea.Quit)
-		case "esc":
+		case key.Matches(msg, m.keymap.Quit):
 			return m, tea.Batch(m.engine.shutdown(), tea.Quit)
-		case "enter":
+		case key.Matches(msg, m.keymap.Submit):
 			text := strings.TrimSpace(m.prompt.Value())
 			if text == "" {
 				break
@@ -171,6 +179,7 @@ func (m *model) resize() {
 	m.transcript.SetHeight(transcriptHeight)
 	m.prompt.SetWidth(m.width)
 	m.prompt.SetHeight(promptHeight)
+	m.help.SetWidth(m.width)
 	m.renderTranscript()
 }
 
@@ -186,7 +195,7 @@ func (m model) content() string {
 	}
 
 	status := statusStyle.Width(width).Render("nami | bubble tea | " + m.status)
-	footer := footerStyle.Width(width).Render("enter send  esc quit  ctrl+c quit")
+	footer := footerStyle.Width(width).Render(m.help.View(m.keymap))
 	parts := []string{
 		status,
 		m.transcript.View(),
