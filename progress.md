@@ -28,13 +28,15 @@ The migration is not complete.
 - 2026-06-08: Added active-turn tracking so `ctrl+c` sends `ipc.MsgCancel` during a turn and exits only while idle.
 - 2026-06-08: Improved the early transcript renderer by aggregating streaming assistant tokens and formatting common engine events.
 - 2026-06-08: Added Bubbles `key` and `help` support for footer key hints and help toggling.
+- 2026-06-08: Polished early shell layout by resizing around expanded help, error rows, and smaller terminal heights.
 
 ## Next Task
 
-Start Phase 2 by adding a minimal Bubble Tea shell:
+Start Phase 3 by porting the UI reducer:
 
-- handle resize and prompt layout polish
-- decide whether Phase 2 is sufficient to move into reducer porting
+- create reducer state structs for ready status, transcript, active turn, and errors
+- move event handling out of the root model into a reducer package/file
+- keep the no-tests constraint while porting reducer logic
 
 Done:
 
@@ -52,6 +54,7 @@ Done:
 - refine cancellation behavior so `ctrl+c` cancels an active turn before exiting when idle
 - improve transcript rendering beyond raw event summaries
 - add footer key hints with Bubbles `key` and `help`
+- handle resize and prompt layout polish
 - keep the stdio wrapper behavior unchanged
 - keep `nami --stdio` behavior unchanged
 

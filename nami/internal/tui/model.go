@@ -85,6 +85,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch {
 		case key.Matches(msg, m.keymap.Help):
 			m.help.ShowAll = !m.help.ShowAll
+			m.resize()
 		case key.Matches(msg, m.keymap.Cancel):
 			if m.turnActive {
 				m.appendTranscriptLine("cancel requested")
@@ -167,10 +168,17 @@ func (m *model) resize() {
 		return
 	}
 
-	promptHeight := 3
 	statusHeight := 1
-	footerHeight := 1
-	transcriptHeight := m.height - promptHeight - statusHeight - footerHeight
+	promptHeight := promptHeightFor(m.height)
+	footerHeight := lipgloss.Height(m.help.View(m.keymap))
+	if footerHeight < 1 {
+		footerHeight = 1
+	}
+	errorHeight := 0
+	if strings.TrimSpace(m.errMessage) != "" {
+		errorHeight = 1
+	}
+	transcriptHeight := m.height - promptHeight - statusHeight - footerHeight - errorHeight
 	if transcriptHeight < 1 {
 		transcriptHeight = 1
 	}
@@ -181,6 +189,17 @@ func (m *model) resize() {
 	m.prompt.SetHeight(promptHeight)
 	m.help.SetWidth(m.width)
 	m.renderTranscript()
+}
+
+func promptHeightFor(totalHeight int) int {
+	switch {
+	case totalHeight < 10:
+		return 1
+	case totalHeight < 18:
+		return 2
+	default:
+		return 3
+	}
 }
 
 func (m *model) renderTranscript() {
@@ -200,10 +219,10 @@ func (m model) content() string {
 		status,
 		m.transcript.View(),
 		m.prompt.View(),
-		footer,
 	}
 	if strings.TrimSpace(m.errMessage) != "" {
 		parts = append(parts, errorStyle.Width(width).Render(m.errMessage))
 	}
+	parts = append(parts, footer)
 	return lipgloss.JoinVertical(lipgloss.Left, parts...)
 }
