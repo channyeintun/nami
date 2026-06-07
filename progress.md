@@ -47,12 +47,13 @@ The migration is not complete.
 - 2026-06-08: Started Phase 6 by handling Bubble Tea paste messages and appending pasted text into the prompt composer.
 - 2026-06-08: Added image reference parsing for pasted image data URLs and absolute local image paths, sending referenced images with user input.
 - 2026-06-08: Added lightweight markdown/code rendering for transcript rows, including fenced code block styling.
+- 2026-06-08: Started Phase 7 by replacing the `cmd/nami-engine` Node launcher path with the in-process Bubble Tea TUI while preserving `--stdio`.
 
 ## Next Task
 
-Start Phase 6 by porting paste, clipboard, images, and markdown:
+Start Phase 7 by collapsing packaging and CLI:
 
-- start Phase 7 packaging and CLI collapse toward the single `nami` executable
+- update installers and release/build scripts to install one Go executable
 - keep the no-tests constraint while porting reducer logic
 
 Done:
@@ -91,6 +92,7 @@ Done:
 - start Phase 6 paste, clipboard, image, and markdown support
 - add image reference parsing for pasted data URLs and file paths
 - add markdown/code rendering for transcript rows
+- start Phase 7 packaging and CLI collapse toward the single `nami` executable
 - keep the stdio wrapper behavior unchanged
 - keep `nami --stdio` behavior unchanged
 

@@ -4,18 +4,14 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"os/signal"
-	"path/filepath"
-	"runtime"
-	"strconv"
-	"strings"
 	"syscall"
 
 	"github.com/spf13/cobra"
 
 	"github.com/channyeintun/nami/internal/config"
 	"github.com/channyeintun/nami/internal/engine"
+	"github.com/channyeintun/nami/internal/tui"
 )
 
 var (
@@ -99,63 +95,5 @@ func runEngine(modelFlag, modeFlag string, stdioMode, autoMode bool) error {
 		return engine.RunStdioEngine(ctx, cfg)
 	}
 
-	return launchTUI(ctx, cfg)
-}
-
-func launchTUI(ctx context.Context, cfg config.Config) error {
-	nodePath, err := exec.LookPath("node")
-	if err != nil {
-		return fmt.Errorf("node is required for TUI mode: %w", err)
-	}
-
-	enginePath, err := os.Executable()
-	if err != nil {
-		return fmt.Errorf("resolve engine executable: %w", err)
-	}
-	if resolvedPath, resolveErr := filepath.EvalSymlinks(enginePath); resolveErr == nil {
-		enginePath = resolvedPath
-	}
-
-	tuiEntry, err := resolveTUIEntry()
-	if err != nil {
-		return err
-	}
-
-	cmd := exec.CommandContext(ctx, nodePath, tuiEntry)
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	cmd.Env = append(os.Environ(),
-		"NAMI_ENGINE_PATH="+enginePath,
-		"NAMI_MODEL="+cfg.Model,
-		"NAMI_MODE="+cfg.DefaultMode,
-		"NAMI_AUTO_MODE="+strconv.FormatBool(cfg.AutoMode),
-		"NAMI_COST_WARNING_THRESHOLD_USD="+strconv.FormatFloat(cfg.CostWarningThresholdUSD, 'f', -1, 64),
-	)
-
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("run ink tui: %w", err)
-	}
-	return nil
-}
-
-func resolveTUIEntry() (string, error) {
-	if override := strings.TrimSpace(os.Getenv("NAMI_TUI_ENTRY")); override != "" {
-		if _, err := os.Stat(override); err != nil {
-			return "", fmt.Errorf("stat NAMI_TUI_ENTRY: %w", err)
-		}
-		return override, nil
-	}
-
-	_, sourceFile, _, ok := runtime.Caller(0)
-	if !ok {
-		return "", fmt.Errorf("resolve TUI entry: runtime caller unavailable")
-	}
-
-	moduleRoot := filepath.Clean(filepath.Join(filepath.Dir(sourceFile), "..", ".."))
-	tuiEntry := filepath.Join(moduleRoot, "tui", "dist", "index.js")
-	if _, err := os.Stat(tuiEntry); err != nil {
-		return "", fmt.Errorf("TUI bundle not found at %s: %w", tuiEntry, err)
-	}
-	return tuiEntry, nil
+	return tui.Run(ctx, cfg)
 }
