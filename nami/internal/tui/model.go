@@ -12,7 +12,6 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/channyeintun/nami/internal/config"
-	"github.com/channyeintun/nami/internal/ipc"
 )
 
 type model struct {
@@ -24,11 +23,7 @@ type model struct {
 	height     int
 	transcript viewport.Model
 	prompt     textarea.Model
-	lines      []string
-	status     string
-	errMessage string
-	turnActive bool
-	assistant  string
+	state      uiState
 }
 
 func newModel(ctx context.Context, cfg config.Config) model {
@@ -51,8 +46,7 @@ func newModel(ctx context.Context, cfg config.Config) model {
 		help:       help.New(),
 		transcript: transcript,
 		prompt:     prompt,
-		lines:      []string{"Nami Bubble Tea shell starting..."},
-		status:     "starting",
+		state:      newUIState(),
 	}
 }
 
@@ -69,25 +63,25 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 		m.resize()
 	case engineStartedMsg:
-		m.status = "engine starting"
+		m.state.Status = "engine starting"
 	case engineEventMsg:
-		m.applyEngineEvent(msg.event)
+		m.state = applyEvent(m.state, msg.event)
+		m.renderTranscript()
 		return m, m.engine.wait()
 	case engineDoneMsg:
 		if msg.err != nil && msg.err != context.Canceled {
-			m.errMessage = msg.err.Error()
-			m.appendTranscriptLine("engine stopped: " + msg.err.Error())
+			m.state = m.state.stopEngine(msg.err)
 		} else {
-			m.appendTranscriptLine("engine stopped")
+			m.state = m.state.stopEngine(nil)
 		}
-		m.status = "stopped"
+		m.renderTranscript()
 	case tea.KeyPressMsg:
 		switch {
 		case key.Matches(msg, m.keymap.Help):
 			m.help.ShowAll = !m.help.ShowAll
 			m.resize()
 		case key.Matches(msg, m.keymap.Cancel):
-			if m.turnActive {
+			if m.state.TurnActive {
 				m.appendTranscriptLine("cancel requested")
 				return m, m.engine.cancelTurn()
 			}
@@ -101,14 +95,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			msg, err := makeUserInputMessage(text)
 			if err != nil {
-				m.errMessage = err.Error()
+				m.state.ErrorMessage = err.Error()
 				return m, nil
 			}
-			m.appendTranscriptLine("> " + text)
-			m.assistant = ""
-			m.turnActive = true
-			m.status = "running"
+			m.state = m.state.startTurn(text)
 			m.prompt.Reset()
+			m.renderTranscript()
 			return m, m.engine.send(msg)
 		}
 	}
@@ -121,38 +113,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
-func (m *model) applyEngineEvent(event ipc.StreamEvent) {
-	switch event.Type {
-	case ipc.EventReady:
-		m.status = "ready"
-	case ipc.EventError:
-		m.errMessage = summarizeEvent(event)
-	case ipc.EventTokenDelta:
-		m.applyAssistantDelta(summarizeEvent(event))
-		return
-	case ipc.EventTurnComplete:
-		m.turnActive = false
-		m.status = "ready"
-	}
-	if summary := summarizeEvent(event); strings.TrimSpace(summary) != "" {
-		m.appendTranscriptLine(summary)
-	}
-}
-
 func (m *model) appendTranscriptLine(line string) {
-	m.lines = append(m.lines, line)
-	m.renderTranscript()
-}
-
-func (m *model) applyAssistantDelta(delta string) {
-	if delta == "" {
-		return
-	}
-	if m.assistant == "" {
-		m.lines = append(m.lines, "assistant: ")
-	}
-	m.assistant += delta
-	m.lines[len(m.lines)-1] = "assistant: " + strings.TrimRight(m.assistant, "\n")
+	m.state = m.state.appendLine(line)
 	m.renderTranscript()
 }
 
@@ -175,7 +137,7 @@ func (m *model) resize() {
 		footerHeight = 1
 	}
 	errorHeight := 0
-	if strings.TrimSpace(m.errMessage) != "" {
+	if strings.TrimSpace(m.state.ErrorMessage) != "" {
 		errorHeight = 1
 	}
 	transcriptHeight := m.height - promptHeight - statusHeight - footerHeight - errorHeight
@@ -203,7 +165,7 @@ func promptHeightFor(totalHeight int) int {
 }
 
 func (m *model) renderTranscript() {
-	m.transcript.SetContent(strings.Join(m.lines, "\n"))
+	m.transcript.SetContent(strings.Join(m.state.Lines, "\n"))
 	m.transcript.GotoBottom()
 }
 
@@ -213,15 +175,15 @@ func (m model) content() string {
 		width = 80
 	}
 
-	status := statusStyle.Width(width).Render("nami | bubble tea | " + m.status)
+	status := statusStyle.Width(width).Render("nami | bubble tea | " + m.state.Status)
 	footer := footerStyle.Width(width).Render(m.help.View(m.keymap))
 	parts := []string{
 		status,
 		m.transcript.View(),
 		m.prompt.View(),
 	}
-	if strings.TrimSpace(m.errMessage) != "" {
-		parts = append(parts, errorStyle.Width(width).Render(m.errMessage))
+	if strings.TrimSpace(m.state.ErrorMessage) != "" {
+		parts = append(parts, errorStyle.Width(width).Render(m.state.ErrorMessage))
 	}
 	parts = append(parts, footer)
 	return lipgloss.JoinVertical(lipgloss.Left, parts...)
