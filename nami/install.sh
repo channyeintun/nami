@@ -58,10 +58,6 @@ download_asset() {
   curl -fsSL "$url" -o "$dest" 2>/dev/null
 }
 
-requires_bun_runtime() {
-  return 1
-}
-
 install_binary() {
   src="$1"
   dest="$2"
