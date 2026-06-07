@@ -18,10 +18,17 @@ The migration is not complete.
 
 - 2026-06-08: Created the Bubble Tea migration plan in `plan.md`.
 - 2026-06-08: Created this progress tracker and recorded the no-tests constraint.
+- 2026-06-08: Started Phase 1 by adding IPC message-source/event-sink interfaces, switching `MessageRouter` to the message-source interface, and adding a channel-backed transport for future embedded mode.
 
 ## Next Task
 
 Start Phase 1 by stabilizing the engine boundary:
+
+- extract the current `engine.RunStdioEngine` setup into a reusable internal runner boundary
+- keep the stdio wrapper behavior unchanged
+- wire the new channel-backed transport into an embedded engine entrypoint
+
+Done:
 
 - inspect `engine.RunStdioEngine`, `ipc.Bridge`, and `ipc.MessageRouter`
 - introduce a small message-source/event-sink boundary for stdio and future embedded mode

@@ -5,11 +5,11 @@ import (
 	"sync"
 )
 
-// MessageRouter continuously reads from a Bridge and dispatches messages
+// MessageRouter continuously reads from a message source and dispatches messages
 // to the current subscriber. It supports cancellation of in-flight queries
 // while allowing permission prompts and other message types to flow through.
 type MessageRouter struct {
-	bridge *Bridge
+	source MessageSource
 	ctx    context.Context
 
 	mu          sync.Mutex
@@ -20,11 +20,11 @@ type MessageRouter struct {
 	stopped     bool
 }
 
-// NewMessageRouter creates a router that reads from the bridge in a
+// NewMessageRouter creates a router that reads from source in a
 // background goroutine. Call Stop() when done.
-func NewMessageRouter(ctx context.Context, bridge *Bridge) *MessageRouter {
+func NewMessageRouter(ctx context.Context, source MessageSource) *MessageRouter {
 	r := &MessageRouter{
-		bridge:   bridge,
+		source:   source,
 		ctx:      ctx,
 		incoming: make(chan ClientMessage, 16),
 	}
@@ -34,7 +34,7 @@ func NewMessageRouter(ctx context.Context, bridge *Bridge) *MessageRouter {
 
 func (r *MessageRouter) readLoop() {
 	for {
-		msg, err := r.bridge.ReadMessage(r.ctx)
+		msg, err := r.source.ReadMessage(r.ctx)
 		if err != nil {
 			r.mu.Lock()
 			r.stopped = true
