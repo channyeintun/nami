@@ -3,6 +3,15 @@ package tui
 type uiState struct {
 	Ready        bool
 	Status       string
+	Mode         string
+	Model        string
+	Reasoning    string
+	ContextUsage int
+	ContextMax   int
+	TotalUSD     float64
+	InputTokens  int
+	OutputTokens int
+	RateLimit    string
 	Lines        []string
 	ErrorMessage string
 	TurnActive   bool

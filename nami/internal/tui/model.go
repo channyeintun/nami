@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"charm.land/bubbles/v2/help"
@@ -175,7 +176,7 @@ func (m model) content() string {
 		width = 80
 	}
 
-	status := statusStyle.Width(width).Render("nami | bubble tea | " + m.state.Status)
+	status := statusStyle.Width(width).Render(m.statusLine())
 	footer := footerStyle.Width(width).Render(m.help.View(m.keymap))
 	parts := []string{
 		status,
@@ -187,4 +188,30 @@ func (m model) content() string {
 	}
 	parts = append(parts, footer)
 	return lipgloss.JoinVertical(lipgloss.Left, parts...)
+}
+
+func (m model) statusLine() string {
+	parts := []string{"nami", m.state.Status}
+	if m.state.Mode != "" {
+		parts = append(parts, "mode "+m.state.Mode)
+	}
+	if m.state.Model != "" {
+		model := "model " + m.state.Model
+		if m.state.Reasoning != "" {
+			model += " " + m.state.Reasoning
+		}
+		parts = append(parts, model)
+	}
+	if m.state.ContextMax > 0 {
+		parts = append(parts, fmt.Sprintf("ctx %d/%d", m.state.ContextUsage, m.state.ContextMax))
+	} else if m.state.ContextUsage > 0 {
+		parts = append(parts, fmt.Sprintf("ctx %d", m.state.ContextUsage))
+	}
+	if m.state.TotalUSD > 0 {
+		parts = append(parts, fmt.Sprintf("$%.4f", m.state.TotalUSD))
+	}
+	if m.state.RateLimit != "" {
+		parts = append(parts, "limit "+m.state.RateLimit)
+	}
+	return strings.Join(parts, " | ")
 }
