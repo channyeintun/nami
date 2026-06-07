@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"strings"
 
 	"charm.land/bubbles/v2/textarea"
@@ -9,10 +10,12 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/channyeintun/nami/internal/config"
+	"github.com/channyeintun/nami/internal/ipc"
 )
 
 type model struct {
 	cfg        config.Config
+	engine     engineClient
 	width      int
 	height     int
 	transcript viewport.Model
@@ -22,7 +25,7 @@ type model struct {
 	errMessage string
 }
 
-func newModel(cfg config.Config) model {
+func newModel(ctx context.Context, cfg config.Config) model {
 	prompt := textarea.New()
 	prompt.Placeholder = "Ask Nami"
 	prompt.Prompt = "> "
@@ -37,6 +40,7 @@ func newModel(cfg config.Config) model {
 
 	return model{
 		cfg:        cfg,
+		engine:     newEngineClient(ctx),
 		transcript: transcript,
 		prompt:     prompt,
 		lines:      []string{"Nami Bubble Tea shell starting..."},
@@ -45,7 +49,7 @@ func newModel(cfg config.Config) model {
 }
 
 func (m model) Init() tea.Cmd {
-	return nil
+	return tea.Batch(m.engine.start(m.cfg), m.engine.wait())
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -56,19 +60,38 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		m.resize()
+	case engineStartedMsg:
+		m.status = "engine starting"
+	case engineEventMsg:
+		m.applyEngineEvent(msg.event)
+		return m, m.engine.wait()
+	case engineDoneMsg:
+		if msg.err != nil && msg.err != context.Canceled {
+			m.errMessage = msg.err.Error()
+			m.lines = append(m.lines, "engine stopped: "+msg.err.Error())
+		} else {
+			m.lines = append(m.lines, "engine stopped")
+		}
+		m.status = "stopped"
+		m.renderTranscript()
 	case tea.KeyPressMsg:
 		switch msg.String() {
 		case "ctrl+c", "esc":
-			return m, tea.Quit
+			return m, tea.Batch(m.engine.shutdown(), tea.Quit)
 		case "enter":
 			text := strings.TrimSpace(m.prompt.Value())
 			if text == "" {
 				break
 			}
+			msg, err := makeUserInputMessage(text)
+			if err != nil {
+				m.errMessage = err.Error()
+				return m, nil
+			}
 			m.lines = append(m.lines, "> "+text)
 			m.prompt.Reset()
 			m.renderTranscript()
-			return m, nil
+			return m, m.engine.send(msg)
 		}
 	}
 
@@ -78,6 +101,19 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m.transcript, cmd = m.transcript.Update(msg)
 	cmds = append(cmds, cmd)
 	return m, tea.Batch(cmds...)
+}
+
+func (m *model) applyEngineEvent(event ipc.StreamEvent) {
+	switch event.Type {
+	case ipc.EventReady:
+		m.status = "ready"
+	case ipc.EventError:
+		m.errMessage = summarizeEvent(event)
+	}
+	if summary := summarizeEvent(event); strings.TrimSpace(summary) != "" {
+		m.lines = append(m.lines, summary)
+		m.renderTranscript()
+	}
 }
 
 func (m model) View() tea.View {

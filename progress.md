@@ -24,14 +24,15 @@ The migration is not complete.
 - 2026-06-08: Audited router shutdown and added `MessageRouter.Stop`, with the engine deferring router cleanup after startup.
 - 2026-06-08: Added latest verified Charm v2 dependencies: Bubble Tea `v2.0.7`, Bubbles `v2.1.0`, and Lip Gloss `v2.0.3`.
 - 2026-06-08: Added a minimal Bubble Tea shell with `viewport`, `textarea`, Lip Gloss styles, and a new `cmd/nami` entrypoint.
+- 2026-06-08: Wired the Bubble Tea shell to `engine.RunEmbeddedEngine`, converting engine events into Bubble Tea messages and submitted prompts into `ipc.ClientMessage` values.
 
 ## Next Task
 
 Start Phase 2 by adding a minimal Bubble Tea shell:
 
-- start the embedded engine from the Bubble Tea shell
-- convert engine events into Bubble Tea messages
-- send submitted prompts to the embedded engine
+- refine cancellation behavior so `ctrl+c` cancels an active turn before exiting when idle
+- improve transcript rendering beyond raw event summaries
+- handle resize and prompt layout polish
 
 Done:
 
@@ -43,6 +44,9 @@ Done:
 - add Charm v2 dependencies
 - create a minimal `internal/tui` Bubble Tea model
 - add a `cmd/nami` entrypoint that starts the shell
+- start the embedded engine from the Bubble Tea shell
+- convert engine events into Bubble Tea messages
+- send submitted prompts to the embedded engine
 - keep the stdio wrapper behavior unchanged
 - keep `nami --stdio` behavior unchanged
 

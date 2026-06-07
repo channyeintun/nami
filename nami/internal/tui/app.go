@@ -10,7 +10,7 @@ import (
 )
 
 func Run(ctx context.Context, cfg config.Config) error {
-	program := tea.NewProgram(newModel(cfg), tea.WithContext(ctx))
+	program := tea.NewProgram(newModel(ctx, cfg), tea.WithContext(ctx))
 	if _, err := program.Run(); err != nil {
 		return fmt.Errorf("run tui: %w", err)
 	}
