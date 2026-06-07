@@ -3,6 +3,7 @@ package tui
 type uiState struct {
 	Ready              bool
 	Status             string
+	SlashCommands      []slashCommandState
 	Mode               string
 	Model              string
 	Reasoning          string
@@ -81,6 +82,13 @@ type selectionRequestState struct {
 	RequestID string
 	Title     string
 	Count     int
+}
+
+type slashCommandState struct {
+	Name           string
+	Description    string
+	Usage          string
+	TakesArguments bool
 }
 
 func newUIState() uiState {

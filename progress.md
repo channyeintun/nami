@@ -36,12 +36,13 @@ The migration is not complete.
 - 2026-06-08: Added reducer support for conversation hydration and rebuilt early transcript lines from hydrated messages, progress, and tool calls.
 - 2026-06-08: Extended reducer state for memory recall, retrieval, compaction, timing, and session update/restore/rewind events.
 - 2026-06-08: Started Phase 4 by replacing plain transcript strings with structured transcript entries and a dedicated renderer.
+- 2026-06-08: Added prompt history navigation and basic tab completion for ready-time slash commands.
 
 ## Next Task
 
 Start Phase 4 by porting core surfaces:
 
-- add prompt history and slash-command completion basics
+- add transcript search and scroll/follow-tail behavior
 - keep the no-tests constraint while porting reducer logic
 
 Done:
@@ -69,6 +70,7 @@ Done:
 - extend reducer state for conversation hydration and persisted transcript entries
 - extend reducer state for memory, retrieval, compaction, timing, and session restore/rewind events
 - replace the early transcript text renderer with structured transcript rows
+- add prompt history and slash-command completion basics
 - keep the stdio wrapper behavior unchanged
 - keep `nami --stdio` behavior unchanged
 

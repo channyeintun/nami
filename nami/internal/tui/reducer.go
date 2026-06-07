@@ -11,8 +11,13 @@ import (
 func applyEvent(state uiState, event ipc.StreamEvent) uiState {
 	switch event.Type {
 	case ipc.EventReady:
+		payload, err := decodePayload[ipc.ReadyPayload](event)
+		if err != nil {
+			return state.withDecodeError("ready", err)
+		}
 		state.Ready = true
 		state.Status = "ready"
+		state.SlashCommands = slashCommandsFromPayload(payload.SlashCommands)
 	case ipc.EventError:
 		state.ErrorMessage = summarizeEvent(event)
 	case ipc.EventTokenDelta:
@@ -283,6 +288,23 @@ func applyEvent(state uiState, event ipc.StreamEvent) uiState {
 		return state.appendLine(summary)
 	}
 	return state
+}
+
+func slashCommandsFromPayload(payload []ipc.SlashCommandDescriptorPayload) []slashCommandState {
+	commands := make([]slashCommandState, 0, len(payload))
+	for _, command := range payload {
+		name := strings.TrimSpace(command.Name)
+		if name == "" {
+			continue
+		}
+		commands = append(commands, slashCommandState{
+			Name:           name,
+			Description:    strings.TrimSpace(command.Description),
+			Usage:          strings.TrimSpace(command.Usage),
+			TakesArguments: command.TakesArguments,
+		})
+	}
+	return commands
 }
 
 func hydratedTranscriptEntries(payload ipc.ConversationHydratedPayload) []transcriptEntry {

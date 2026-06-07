@@ -16,15 +16,17 @@ import (
 )
 
 type model struct {
-	cfg        config.Config
-	engine     engineClient
-	keymap     keyMap
-	help       help.Model
-	width      int
-	height     int
-	transcript viewport.Model
-	prompt     textarea.Model
-	state      uiState
+	cfg                config.Config
+	engine             engineClient
+	keymap             keyMap
+	help               help.Model
+	width              int
+	height             int
+	transcript         viewport.Model
+	prompt             textarea.Model
+	state              uiState
+	promptHistory      []string
+	promptHistoryIndex int
 }
 
 func newModel(ctx context.Context, cfg config.Config) model {
@@ -41,13 +43,14 @@ func newModel(ctx context.Context, cfg config.Config) model {
 	transcript.SetContent("Nami Bubble Tea shell starting...")
 
 	return model{
-		cfg:        cfg,
-		engine:     newEngineClient(ctx),
-		keymap:     defaultKeyMap(),
-		help:       help.New(),
-		transcript: transcript,
-		prompt:     prompt,
-		state:      newUIState(),
+		cfg:                cfg,
+		engine:             newEngineClient(ctx),
+		keymap:             defaultKeyMap(),
+		help:               help.New(),
+		transcript:         transcript,
+		prompt:             prompt,
+		state:              newUIState(),
+		promptHistoryIndex: -1,
 	}
 }
 
@@ -89,6 +92,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Batch(m.engine.shutdown(), tea.Quit)
 		case key.Matches(msg, m.keymap.Quit):
 			return m, tea.Batch(m.engine.shutdown(), tea.Quit)
+		case key.Matches(msg, m.keymap.Complete):
+			m.completeSlashCommand()
+			return m, nil
+		case key.Matches(msg, m.keymap.HistoryPrev):
+			m.previousPrompt()
+			return m, nil
+		case key.Matches(msg, m.keymap.HistoryNext):
+			m.nextPrompt()
+			return m, nil
 		case key.Matches(msg, m.keymap.Submit):
 			text := strings.TrimSpace(m.prompt.Value())
 			if text == "" {
@@ -100,6 +112,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			m.state = m.state.startTurn(text)
+			m.recordPromptHistory(text)
 			m.prompt.Reset()
 			m.renderTranscript()
 			return m, m.engine.send(msg)
@@ -112,6 +125,60 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m.transcript, cmd = m.transcript.Update(msg)
 	cmds = append(cmds, cmd)
 	return m, tea.Batch(cmds...)
+}
+
+func (m *model) recordPromptHistory(text string) {
+	if text == "" {
+		return
+	}
+	if len(m.promptHistory) == 0 || m.promptHistory[len(m.promptHistory)-1] != text {
+		m.promptHistory = append(m.promptHistory, text)
+	}
+	m.promptHistoryIndex = len(m.promptHistory)
+}
+
+func (m *model) previousPrompt() {
+	if len(m.promptHistory) == 0 {
+		return
+	}
+	if m.promptHistoryIndex < 0 || m.promptHistoryIndex > len(m.promptHistory) {
+		m.promptHistoryIndex = len(m.promptHistory)
+	}
+	if m.promptHistoryIndex > 0 {
+		m.promptHistoryIndex--
+	}
+	m.prompt.SetValue(m.promptHistory[m.promptHistoryIndex])
+}
+
+func (m *model) nextPrompt() {
+	if len(m.promptHistory) == 0 || m.promptHistoryIndex < 0 {
+		return
+	}
+	if m.promptHistoryIndex < len(m.promptHistory)-1 {
+		m.promptHistoryIndex++
+		m.prompt.SetValue(m.promptHistory[m.promptHistoryIndex])
+		return
+	}
+	m.promptHistoryIndex = len(m.promptHistory)
+	m.prompt.SetValue("")
+}
+
+func (m *model) completeSlashCommand() {
+	value := strings.TrimSpace(m.prompt.Value())
+	if !strings.HasPrefix(value, "/") {
+		return
+	}
+	prefix := strings.TrimPrefix(value, "/")
+	for _, command := range m.state.SlashCommands {
+		if strings.HasPrefix(command.Name, prefix) {
+			completed := "/" + command.Name
+			if command.TakesArguments {
+				completed += " "
+			}
+			m.prompt.SetValue(completed)
+			return
+		}
+	}
 }
 
 func (m *model) appendTranscriptLine(line string) {
