@@ -23,6 +23,7 @@ type model struct {
 	lines      []string
 	status     string
 	errMessage string
+	turnActive bool
 }
 
 func newModel(ctx context.Context, cfg config.Config) model {
@@ -76,7 +77,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.renderTranscript()
 	case tea.KeyPressMsg:
 		switch msg.String() {
-		case "ctrl+c", "esc":
+		case "ctrl+c":
+			if m.turnActive {
+				m.lines = append(m.lines, "cancel requested")
+				m.renderTranscript()
+				return m, m.engine.cancelTurn()
+			}
+			return m, tea.Batch(m.engine.shutdown(), tea.Quit)
+		case "esc":
 			return m, tea.Batch(m.engine.shutdown(), tea.Quit)
 		case "enter":
 			text := strings.TrimSpace(m.prompt.Value())
@@ -89,6 +97,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			m.lines = append(m.lines, "> "+text)
+			m.turnActive = true
+			m.status = "running"
 			m.prompt.Reset()
 			m.renderTranscript()
 			return m, m.engine.send(msg)
@@ -109,6 +119,9 @@ func (m *model) applyEngineEvent(event ipc.StreamEvent) {
 		m.status = "ready"
 	case ipc.EventError:
 		m.errMessage = summarizeEvent(event)
+	case ipc.EventTurnComplete:
+		m.turnActive = false
+		m.status = "ready"
 	}
 	if summary := summarizeEvent(event); strings.TrimSpace(summary) != "" {
 		m.lines = append(m.lines, summary)

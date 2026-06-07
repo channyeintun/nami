@@ -89,6 +89,10 @@ func (c engineClient) shutdown() tea.Cmd {
 	)
 }
 
+func (c engineClient) cancelTurn() tea.Cmd {
+	return c.send(ipc.ClientMessage{Type: ipc.MsgCancel})
+}
+
 func makeUserInputMessage(text string) (ipc.ClientMessage, error) {
 	payload, err := json.Marshal(ipc.UserInputPayload{Text: text})
 	if err != nil {
