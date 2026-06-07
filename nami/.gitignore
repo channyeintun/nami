@@ -1,15 +1,8 @@
 # Go
 /bin/
-!/tui/bin/
-!/tui/bin/nami.js
 *.exe
 *.test
 *.out
-
-# TUI
-tui/node_modules/
-tui/dist/
-tui/.tsbuildinfo
 
 # IDE
 .idea/

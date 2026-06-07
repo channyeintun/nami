@@ -51,12 +51,13 @@ The migration is not complete.
 - 2026-06-08: Updated the Unix installer to install a single `nami` binary and removed JS runtime checks from that path.
 - 2026-06-08: Updated the Windows installer and release Makefiles to install and package a single Go `nami` executable.
 - 2026-06-08: Updated README and website install/architecture docs for the Bubble Tea single-executable packaging model.
+- 2026-06-08: Removed the legacy Silvery/React TUI source tree and stale npm package files now that release packaging uses the Go executable.
 
 ## Next Task
 
 Start Phase 7 by collapsing packaging and CLI:
 
-- audit remaining release references and decide whether to remove legacy JS TUI sources
+- run final release, stdio, vulnerability, and no-JS-runtime verification
 - keep the no-tests constraint while porting reducer logic
 
 Done:
@@ -99,6 +100,7 @@ Done:
 - update installers and release/build scripts to install one Go executable
 - update Windows installer and release/build scripts to install one Go executable
 - update docs and website install instructions for the single executable
+- remove legacy JS TUI sources and npm package metadata
 - keep the stdio wrapper behavior unchanged
 - keep `nami --stdio` behavior unchanged
 
