@@ -95,6 +95,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.state = m.state.stopEngine(nil)
 		}
 		m.renderTranscript()
+	case tea.PasteMsg:
+		m.handlePaste(msg.Content)
 	case tea.KeyPressMsg:
 		if m.searchActive {
 			m.handleSearchKey(msg)
@@ -175,6 +177,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m.transcript, cmd = m.transcript.Update(msg)
 	cmds = append(cmds, cmd)
 	return m, tea.Batch(cmds...)
+}
+
+func (m *model) handlePaste(content string) {
+	if content == "" {
+		return
+	}
+	m.prompt.SetValue(appendPromptText(m.prompt.Value(), content))
+	if notice := pasteNotice(content); notice != "" {
+		m.state.Status = notice
+	}
 }
 
 func (m *model) syncSelectionList() {

@@ -44,12 +44,13 @@ The migration is not complete.
 - 2026-06-08: Wired Bubbles list selection dialogs for model, reasoning, resume, and rewind requests with enter/escape responses.
 - 2026-06-08: Wired basic ask-user-question responses using recommended or first options, with cancel support.
 - 2026-06-08: Improved ask-user-question dialog rendering by previewing the default answers that `y` will send.
+- 2026-06-08: Started Phase 6 by handling Bubble Tea paste messages and appending pasted text into the prompt composer.
 
 ## Next Task
 
-Start Phase 5 by porting dialogs:
+Start Phase 6 by porting paste, clipboard, images, and markdown:
 
-- start Phase 6 paste, clipboard, image, and markdown support
+- add image reference parsing for pasted data URLs and file paths
 - keep the no-tests constraint while porting reducer logic
 
 Done:
@@ -85,6 +86,7 @@ Done:
 - wire basic selection dialog responses for model, reasoning, resume, and rewind requests
 - wire basic ask-user-question responses
 - improve dialog answer editing and multi-option flows
+- start Phase 6 paste, clipboard, image, and markdown support
 - keep the stdio wrapper behavior unchanged
 - keep `nami --stdio` behavior unchanged
 
