@@ -27,6 +27,10 @@ type model struct {
 	state              uiState
 	promptHistory      []string
 	promptHistoryIndex int
+	followTail         bool
+	searchActive       bool
+	searchQuery        string
+	searchMatches      int
 }
 
 func newModel(ctx context.Context, cfg config.Config) model {
@@ -51,6 +55,7 @@ func newModel(ctx context.Context, cfg config.Config) model {
 		prompt:             prompt,
 		state:              newUIState(),
 		promptHistoryIndex: -1,
+		followTail:         true,
 	}
 }
 
@@ -80,6 +85,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.renderTranscript()
 	case tea.KeyPressMsg:
+		if m.searchActive {
+			m.handleSearchKey(msg)
+			return m, nil
+		}
 		switch {
 		case key.Matches(msg, m.keymap.Help):
 			m.help.ShowAll = !m.help.ShowAll
@@ -100,6 +109,22 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case key.Matches(msg, m.keymap.HistoryNext):
 			m.nextPrompt()
+			return m, nil
+		case key.Matches(msg, m.keymap.Search):
+			m.searchActive = true
+			m.updateSearchMatches()
+			return m, nil
+		case key.Matches(msg, m.keymap.PageUp):
+			m.followTail = false
+			m.transcript.PageUp()
+			return m, nil
+		case key.Matches(msg, m.keymap.PageDown):
+			m.transcript.PageDown()
+			m.followTail = m.transcript.AtBottom()
+			return m, nil
+		case key.Matches(msg, m.keymap.FollowTail):
+			m.followTail = true
+			m.transcript.GotoBottom()
 			return m, nil
 		case key.Matches(msg, m.keymap.Submit):
 			text := strings.TrimSpace(m.prompt.Value())
@@ -181,6 +206,37 @@ func (m *model) completeSlashCommand() {
 	}
 }
 
+func (m *model) handleSearchKey(msg tea.KeyPressMsg) {
+	switch msg.String() {
+	case "enter", "esc", "ctrl+g":
+		m.searchActive = false
+	case "backspace":
+		if len(m.searchQuery) > 0 {
+			m.searchQuery = m.searchQuery[:len(m.searchQuery)-1]
+		}
+	default:
+		if text := msg.Key().Text; text != "" {
+			m.searchQuery += text
+		}
+	}
+	m.updateSearchMatches()
+}
+
+func (m *model) updateSearchMatches() {
+	query := strings.ToLower(strings.TrimSpace(m.searchQuery))
+	if query == "" {
+		m.searchMatches = 0
+		return
+	}
+	matches := 0
+	for _, entry := range m.state.Transcript {
+		if strings.Contains(strings.ToLower(entry.Text), query) {
+			matches++
+		}
+	}
+	m.searchMatches = matches
+}
+
 func (m *model) appendTranscriptLine(line string) {
 	m.state = m.state.appendLine(line)
 	m.renderTranscript()
@@ -234,7 +290,10 @@ func promptHeightFor(totalHeight int) int {
 
 func (m *model) renderTranscript() {
 	m.transcript.SetContent(renderTranscript(m.state.Transcript))
-	m.transcript.GotoBottom()
+	m.updateSearchMatches()
+	if m.followTail {
+		m.transcript.GotoBottom()
+	}
 }
 
 func (m model) content() string {
@@ -298,6 +357,9 @@ func (m model) statusLine() string {
 	}
 	if m.state.LastTiming != "" {
 		parts = append(parts, "timing "+m.state.LastTiming)
+	}
+	if m.searchActive || m.searchQuery != "" {
+		parts = append(parts, fmt.Sprintf("search %q %d", m.searchQuery, m.searchMatches))
 	}
 	if len(m.state.Artifacts) > 0 {
 		parts = append(parts, fmt.Sprintf("artifacts %d", len(m.state.Artifacts)))

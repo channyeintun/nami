@@ -10,6 +10,10 @@ type keyMap struct {
 	Complete    key.Binding
 	HistoryPrev key.Binding
 	HistoryNext key.Binding
+	Search      key.Binding
+	PageUp      key.Binding
+	PageDown    key.Binding
+	FollowTail  key.Binding
 }
 
 func defaultKeyMap() keyMap {
@@ -42,16 +46,33 @@ func defaultKeyMap() keyMap {
 			key.WithKeys("down"),
 			key.WithHelp("down", "history"),
 		),
+		Search: key.NewBinding(
+			key.WithKeys("ctrl+g"),
+			key.WithHelp("ctrl+g", "search"),
+		),
+		PageUp: key.NewBinding(
+			key.WithKeys("pgup"),
+			key.WithHelp("pgup", "scroll"),
+		),
+		PageDown: key.NewBinding(
+			key.WithKeys("pgdown"),
+			key.WithHelp("pgdn", "scroll"),
+		),
+		FollowTail: key.NewBinding(
+			key.WithKeys("end"),
+			key.WithHelp("end", "tail"),
+		),
 	}
 }
 
 func (k keyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Submit, k.Complete, k.HistoryPrev, k.Cancel, k.Quit, k.Help}
+	return []key.Binding{k.Submit, k.Complete, k.HistoryPrev, k.Search, k.PageUp, k.FollowTail, k.Cancel, k.Quit, k.Help}
 }
 
 func (k keyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
-		{k.Submit, k.Complete, k.HistoryPrev, k.HistoryNext},
+		{k.Submit, k.Complete, k.HistoryPrev, k.HistoryNext, k.Search},
+		{k.PageUp, k.PageDown, k.FollowTail},
 		{k.Cancel, k.Quit, k.Help},
 	}
 }
