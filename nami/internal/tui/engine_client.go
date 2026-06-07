@@ -168,6 +168,36 @@ func summarizeEvent(event ipc.StreamEvent) string {
 			name = strings.TrimSpace(payload.ToolID)
 		}
 		return fmt.Sprintf("tool failed: %s: %s", name, strings.TrimSpace(payload.Error))
+	case ipc.EventArtifactCreated:
+		var payload ipc.ArtifactCreatedPayload
+		if err := json.Unmarshal(event.Payload, &payload); err != nil {
+			return fmt.Sprintf("artifact: decode failed: %v", err)
+		}
+		return "artifact created: " + strings.TrimSpace(payload.Title)
+	case ipc.EventArtifactFocused:
+		var payload ipc.ArtifactFocusedPayload
+		if err := json.Unmarshal(event.Payload, &payload); err != nil {
+			return fmt.Sprintf("artifact focus: decode failed: %v", err)
+		}
+		return "artifact focused: " + strings.TrimSpace(payload.Title)
+	case ipc.EventArtifactReviewRequested:
+		var payload ipc.ArtifactReviewRequestedPayload
+		if err := json.Unmarshal(event.Payload, &payload); err != nil {
+			return fmt.Sprintf("artifact review: decode failed: %v", err)
+		}
+		return "artifact review requested: " + strings.TrimSpace(payload.Title)
+	case ipc.EventBackgroundCommandUpdated:
+		var payload ipc.BackgroundCommandUpdatedPayload
+		if err := json.Unmarshal(event.Payload, &payload); err != nil {
+			return fmt.Sprintf("background command: decode failed: %v", err)
+		}
+		return fmt.Sprintf("background command %s: %s", strings.TrimSpace(payload.CommandID), strings.TrimSpace(payload.Status))
+	case ipc.EventBackgroundAgentUpdated:
+		var payload ipc.BackgroundAgentUpdatedPayload
+		if err := json.Unmarshal(event.Payload, &payload); err != nil {
+			return fmt.Sprintf("background agent: decode failed: %v", err)
+		}
+		return fmt.Sprintf("background agent %s: %s", strings.TrimSpace(payload.AgentID), strings.TrimSpace(payload.Status))
 	case ipc.EventModelChanged:
 		var payload ipc.ModelChangedPayload
 		if err := json.Unmarshal(event.Payload, &payload); err != nil {

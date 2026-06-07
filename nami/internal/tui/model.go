@@ -213,5 +213,17 @@ func (m model) statusLine() string {
 	if m.state.RateLimit != "" {
 		parts = append(parts, "limit "+m.state.RateLimit)
 	}
+	if len(m.state.Artifacts) > 0 {
+		parts = append(parts, fmt.Sprintf("artifacts %d", len(m.state.Artifacts)))
+	}
+	if len(m.state.BackgroundCommands) > 0 {
+		parts = append(parts, fmt.Sprintf("bg cmd %d", len(m.state.BackgroundCommands)))
+	}
+	if len(m.state.BackgroundAgents) > 0 {
+		parts = append(parts, fmt.Sprintf("agents %d", len(m.state.BackgroundAgents)))
+	}
+	if m.state.ArtifactReview != nil {
+		parts = append(parts, "review "+m.state.ArtifactReview.Artifact.Title)
+	}
 	return strings.Join(parts, " | ")
 }

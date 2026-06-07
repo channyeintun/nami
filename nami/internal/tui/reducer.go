@@ -57,12 +57,178 @@ func applyEvent(state uiState, event ipc.StreamEvent) uiState {
 		}
 		state.RateLimit = formatRateLimit(payload)
 		return state
+	case ipc.EventArtifactCreated:
+		payload, err := decodePayload[ipc.ArtifactCreatedPayload](event)
+		if err != nil {
+			return state.withDecodeError("artifact", err)
+		}
+		state = state.withArtifact(artifactState{
+			ID:      strings.TrimSpace(payload.ID),
+			Kind:    strings.TrimSpace(payload.Kind),
+			Title:   strings.TrimSpace(payload.Title),
+			Version: payload.Version,
+			Status:  strings.TrimSpace(payload.Status),
+		})
+	case ipc.EventArtifactUpdated:
+		payload, err := decodePayload[ipc.ArtifactUpdatedPayload](event)
+		if err != nil {
+			return state.withDecodeError("artifact update", err)
+		}
+		artifact := state.Artifacts[strings.TrimSpace(payload.ID)]
+		artifact.ID = strings.TrimSpace(payload.ID)
+		if payload.Version > 0 {
+			artifact.Version = payload.Version
+		}
+		if strings.TrimSpace(payload.Status) != "" {
+			artifact.Status = strings.TrimSpace(payload.Status)
+		}
+		state = state.withArtifact(artifact)
+	case ipc.EventArtifactFocused:
+		payload, err := decodePayload[ipc.ArtifactFocusedPayload](event)
+		if err != nil {
+			return state.withDecodeError("artifact focus", err)
+		}
+		artifact := artifactState{
+			ID:      strings.TrimSpace(payload.ID),
+			Kind:    strings.TrimSpace(payload.Kind),
+			Title:   strings.TrimSpace(payload.Title),
+			Version: payload.Version,
+			Status:  strings.TrimSpace(payload.Status),
+		}
+		state = state.withArtifact(artifact)
+		state.FocusedArtifactID = artifact.ID
+	case ipc.EventArtifactStatusChanged:
+		payload, err := decodePayload[ipc.ArtifactStatusChangedPayload](event)
+		if err != nil {
+			return state.withDecodeError("artifact status", err)
+		}
+		artifact := state.Artifacts[strings.TrimSpace(payload.ID)]
+		artifact.ID = strings.TrimSpace(payload.ID)
+		artifact.Status = strings.TrimSpace(payload.Status)
+		state = state.withArtifact(artifact)
+	case ipc.EventArtifactReviewRequested:
+		payload, err := decodePayload[ipc.ArtifactReviewRequestedPayload](event)
+		if err != nil {
+			return state.withDecodeError("artifact review", err)
+		}
+		artifact := artifactState{
+			ID:      strings.TrimSpace(payload.ID),
+			Kind:    strings.TrimSpace(payload.Kind),
+			Title:   strings.TrimSpace(payload.Title),
+			Version: payload.Version,
+			Status:  "review_requested",
+		}
+		state = state.withArtifact(artifact)
+		state.ArtifactReview = &artifactReviewState{
+			RequestID: strings.TrimSpace(payload.RequestID),
+			Artifact:  artifact,
+		}
+	case ipc.EventArtifactReviewResolved:
+		state.ArtifactReview = nil
+	case ipc.EventBackgroundCommandUpdated, ipc.EventBackgroundCommandDetail:
+		command, err := backgroundCommandFromEvent(event)
+		if err != nil {
+			return state.withDecodeError("background command", err)
+		}
+		state = state.withBackgroundCommand(command)
+	case ipc.EventBackgroundAgentUpdated, ipc.EventBackgroundAgentDetail:
+		agent, err := backgroundAgentFromEvent(event)
+		if err != nil {
+			return state.withDecodeError("background agent", err)
+		}
+		state = state.withBackgroundAgent(agent)
 	}
 
 	if summary := summarizeEvent(event); strings.TrimSpace(summary) != "" {
 		return state.appendLine(summary)
 	}
 	return state
+}
+
+func (s uiState) withArtifact(artifact artifactState) uiState {
+	if s.Artifacts == nil {
+		s.Artifacts = make(map[string]artifactState)
+	}
+	if artifact.ID != "" {
+		s.Artifacts[artifact.ID] = artifact
+	}
+	return s
+}
+
+func (s uiState) withBackgroundCommand(command backgroundCommandState) uiState {
+	if s.BackgroundCommands == nil {
+		s.BackgroundCommands = make(map[string]backgroundCommandState)
+	}
+	if command.ID != "" {
+		s.BackgroundCommands[command.ID] = command
+	}
+	return s
+}
+
+func (s uiState) withBackgroundAgent(agent backgroundAgentState) uiState {
+	if s.BackgroundAgents == nil {
+		s.BackgroundAgents = make(map[string]backgroundAgentState)
+	}
+	if agent.ID != "" {
+		s.BackgroundAgents[agent.ID] = agent
+	}
+	return s
+}
+
+func backgroundCommandFromEvent(event ipc.StreamEvent) (backgroundCommandState, error) {
+	if event.Type == ipc.EventBackgroundCommandDetail {
+		payload, err := decodePayload[ipc.BackgroundCommandDetailPayload](event)
+		if err != nil {
+			return backgroundCommandState{}, err
+		}
+		return backgroundCommandState{
+			ID:          strings.TrimSpace(payload.CommandID),
+			Command:     strings.TrimSpace(payload.Command),
+			Status:      strings.TrimSpace(payload.Status),
+			Running:     payload.Running,
+			Error:       strings.TrimSpace(payload.Error),
+			UnreadBytes: payload.UnreadBytes,
+		}, nil
+	}
+	payload, err := decodePayload[ipc.BackgroundCommandUpdatedPayload](event)
+	if err != nil {
+		return backgroundCommandState{}, err
+	}
+	return backgroundCommandState{
+		ID:          strings.TrimSpace(payload.CommandID),
+		Command:     strings.TrimSpace(payload.Command),
+		Status:      strings.TrimSpace(payload.Status),
+		Running:     payload.Running,
+		Error:       strings.TrimSpace(payload.Error),
+		UnreadBytes: payload.UnreadBytes,
+	}, nil
+}
+
+func backgroundAgentFromEvent(event ipc.StreamEvent) (backgroundAgentState, error) {
+	if event.Type == ipc.EventBackgroundAgentDetail {
+		payload, err := decodePayload[ipc.BackgroundAgentDetailPayload](event)
+		if err != nil {
+			return backgroundAgentState{}, err
+		}
+		return backgroundAgentState{
+			ID:          strings.TrimSpace(payload.AgentID),
+			Description: strings.TrimSpace(payload.Description),
+			Status:      strings.TrimSpace(payload.Status),
+			Error:       strings.TrimSpace(payload.Error),
+			TotalUSD:    payload.TotalCostUSD,
+		}, nil
+	}
+	payload, err := decodePayload[ipc.BackgroundAgentUpdatedPayload](event)
+	if err != nil {
+		return backgroundAgentState{}, err
+	}
+	return backgroundAgentState{
+		ID:          strings.TrimSpace(payload.AgentID),
+		Description: strings.TrimSpace(payload.Description),
+		Status:      strings.TrimSpace(payload.Status),
+		Error:       strings.TrimSpace(payload.Error),
+		TotalUSD:    payload.TotalCostUSD,
+	}, nil
 }
 
 func decodePayload[T any](event ipc.StreamEvent) (T, error) {
