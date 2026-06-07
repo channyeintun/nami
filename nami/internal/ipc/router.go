@@ -11,6 +11,7 @@ import (
 type MessageRouter struct {
 	source MessageSource
 	ctx    context.Context
+	cancel context.CancelFunc
 
 	mu          sync.Mutex
 	incoming    chan ClientMessage // buffered channel for incoming messages
@@ -23,9 +24,11 @@ type MessageRouter struct {
 // NewMessageRouter creates a router that reads from source in a
 // background goroutine. Call Stop() when done.
 func NewMessageRouter(ctx context.Context, source MessageSource) *MessageRouter {
+	routerCtx, cancel := context.WithCancel(ctx)
 	r := &MessageRouter{
 		source:   source,
-		ctx:      ctx,
+		ctx:      routerCtx,
+		cancel:   cancel,
 		incoming: make(chan ClientMessage, 16),
 	}
 	go r.readLoop()
@@ -117,4 +120,9 @@ func (r *MessageRouter) SetCancelFunc(fn context.CancelFunc) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.cancelFunc = fn
+}
+
+// Stop cancels the router read loop.
+func (r *MessageRouter) Stop() {
+	r.cancel()
 }

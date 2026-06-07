@@ -224,6 +224,7 @@ func runEngine(ctx context.Context, cfg config.Config, bridge engineTransport, e
 	// Start the message router as soon as the UI is ready so any immediate user
 	// input is buffered while startup capability refresh completes.
 	router := ipc.NewMessageRouter(ctx, bridge)
+	defer router.Stop()
 	interactionRuntime.AskUserQuestionRuntime = newAskUserQuestionRuntime(bridge, router)
 	toolpkg.InstallInteractionRuntime(interactionRuntime)
 	defer toolpkg.ShutdownBackgroundCommandsForSession()
