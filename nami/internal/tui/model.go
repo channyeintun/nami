@@ -264,7 +264,8 @@ func (m *model) resize() {
 	if strings.TrimSpace(m.state.ErrorMessage) != "" {
 		errorHeight = 1
 	}
-	transcriptHeight := m.height - promptHeight - statusHeight - footerHeight - errorHeight
+	dialogHeight := dialogHeight(m.state, m.width)
+	transcriptHeight := m.height - promptHeight - statusHeight - footerHeight - errorHeight - dialogHeight
 	if transcriptHeight < 1 {
 		transcriptHeight = 1
 	}
@@ -307,8 +308,11 @@ func (m model) content() string {
 	parts := []string{
 		status,
 		m.transcript.View(),
-		m.prompt.View(),
 	}
+	if dialog := renderDialog(m.state, width); strings.TrimSpace(dialog) != "" {
+		parts = append(parts, dialog)
+	}
+	parts = append(parts, m.prompt.View())
 	if strings.TrimSpace(m.state.ErrorMessage) != "" {
 		parts = append(parts, errorStyle.Width(width).Render(m.state.ErrorMessage))
 	}

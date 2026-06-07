@@ -12,4 +12,9 @@ var (
 
 	errorStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#F85149"))
+
+	dialogStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#E6EDF3")).
+			Background(lipgloss.Color("#6E40C9")).
+			Padding(0, 1)
 )

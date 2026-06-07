@@ -39,12 +39,13 @@ The migration is not complete.
 - 2026-06-08: Added prompt history navigation and basic tab completion for ready-time slash commands.
 - 2026-06-08: Added basic transcript search state plus page scrolling and follow-tail controls.
 - 2026-06-08: Improved structured transcript row kinds for tool, progress, artifact, background, and error events.
+- 2026-06-08: Started Phase 5 by rendering pending permission, question, selection, and artifact-review request state in a dialog band.
 
 ## Next Task
 
-Start Phase 4 by porting core surfaces:
+Start Phase 5 by porting dialogs:
 
-- start Phase 5 dialog surfaces for permission, question, selection, and artifact review prompts
+- wire keyboard responses for permission and artifact review dialogs
 - keep the no-tests constraint while porting reducer logic
 
 Done:
@@ -75,6 +76,7 @@ Done:
 - add prompt history and slash-command completion basics
 - add transcript search and scroll/follow-tail behavior
 - improve core transcript rows for tool/progress/artifact entries
+- start Phase 5 dialog surfaces for permission, question, selection, and artifact review prompts
 - keep the stdio wrapper behavior unchanged
 - keep `nami --stdio` behavior unchanged
 
