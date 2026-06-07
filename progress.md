@@ -22,14 +22,16 @@ The migration is not complete.
 - 2026-06-08: Extracted `RunStdioEngine` into a stdio wrapper around a reusable transport-driven engine runner, and moved engine emitters onto the `ipc.EventSink` boundary.
 - 2026-06-08: Added `engine.RunEmbeddedEngine` so future Bubble Tea code can run the engine in-process over channels.
 - 2026-06-08: Audited router shutdown and added `MessageRouter.Stop`, with the engine deferring router cleanup after startup.
+- 2026-06-08: Added latest verified Charm v2 dependencies: Bubble Tea `v2.0.7`, Bubbles `v2.1.0`, and Lip Gloss `v2.0.3`.
+- 2026-06-08: Added a minimal Bubble Tea shell with `viewport`, `textarea`, Lip Gloss styles, and a new `cmd/nami` entrypoint.
 
 ## Next Task
 
 Start Phase 2 by adding a minimal Bubble Tea shell:
 
-- add Charm v2 dependencies
-- create a minimal `internal/tui` Bubble Tea model
-- add a `cmd/nami` entrypoint that starts the shell
+- start the embedded engine from the Bubble Tea shell
+- convert engine events into Bubble Tea messages
+- send submitted prompts to the embedded engine
 
 Done:
 
@@ -38,6 +40,9 @@ Done:
 - extract the current `engine.RunStdioEngine` setup into a reusable internal runner boundary
 - wire the new channel-backed transport into an embedded engine entrypoint
 - audit cancellation and shutdown behavior on the new transport boundary
+- add Charm v2 dependencies
+- create a minimal `internal/tui` Bubble Tea model
+- add a `cmd/nami` entrypoint that starts the shell
 - keep the stdio wrapper behavior unchanged
 - keep `nami --stdio` behavior unchanged
 
