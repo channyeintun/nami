@@ -22,7 +22,7 @@ func renderTranscript(entries []transcriptEntry) string {
 }
 
 func renderTranscriptEntry(entry transcriptEntry) string {
-	text := strings.TrimRight(entry.Text, "\n")
+	text := renderMarkdownText(strings.TrimRight(entry.Text, "\n"))
 	switch entry.Kind {
 	case "user":
 		return userTranscriptStyle.Render("> " + text)
@@ -50,6 +50,11 @@ var (
 
 	toolTranscriptStyle = lipgloss.NewStyle().
 				Foreground(lipgloss.Color("#7EE787"))
+
+	codeTranscriptStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#E6EDF3")).
+				Background(lipgloss.Color("#30363D")).
+				Padding(0, 1)
 
 	artifactTranscriptStyle = lipgloss.NewStyle().
 				Foreground(lipgloss.Color("#FFA657"))
