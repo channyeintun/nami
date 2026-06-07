@@ -156,12 +156,7 @@
               </li>
               <li class="flex items-start gap-3">
                 <i data-lucide="check-circle" class="w-4 h-4 text-brand"></i>
-                <span>
-                  One supported runtime to run the launcher:
-                  <code>node</code>, <code>bun</code>, or <code>deno</code>.
-                  The Windows installer can bootstrap Node.js automatically if
-                  none is already available.
-                </span>
+                <span>No JavaScript runtime is required for normal TUI usage.</span>
               </li>
               <li class="flex items-start gap-3">
                 <i data-lucide="check-circle" class="w-4 h-4 text-brand"></i>
@@ -181,8 +176,7 @@
             </h2>
             <p class="text-gray-400 mb-8 leading-relaxed">
               Downloads prebuilt binaries automatically. Current releases ship
-              a launcher shim, a portable <code>nami.js</code> bundle, and the
-              Go engine binary.
+              one platform-native <code>nami</code> executable.
             </p>
             <div class="space-y-8">
               <div>
@@ -214,8 +208,7 @@
                   </button>
                 </div>
                 <p class="text-xs text-gray-600">
-                  Installs <code>nami</code>, <code>nami.js</code>, and
-                  <code>nami-engine</code> to <code>/usr/local/bin</code> or
+                  Installs <code>nami</code> to <code>/usr/local/bin</code> or
                   <code>~/.local/bin</code>.
                 </p>
               </div>
@@ -249,12 +242,9 @@
                 </div>
                 <p class="text-xs text-gray-600">
                   Runs in the current PowerShell session, installs
-                  <code>nami.cmd</code>, <code>nami.js</code>, and
-                  <code>nami-engine.exe</code> into
-                  <code>%LOCALAPPDATA%\Programs\nami\bin</code> and adds that
-                  directory to the user <code>PATH</code>. If no supported
-                  runtime is available, it downloads a local Node.js runtime
-                  automatically.
+                  <code>nami.exe</code> into
+                  <code>%LOCALAPPDATA%\Programs\nami\bin</code>, and adds that
+                  directory to the user <code>PATH</code>.
                 </p>
               </div>
             </div>
@@ -275,11 +265,8 @@
                 <p class="text-sm text-gray-300 leading-relaxed">
                   Download <code>nami-windows-amd64.zip</code> or
                   <code>nami-windows-arm64.zip</code> from GitHub Releases, then
-                  place <code>nami.cmd</code>, <code>nami.js</code>, and
-                  <code>nami-engine.exe</code> in a directory on your
-                  <code>PATH</code>. Manual installs still require
-                  <code>node</code>, <code>bun</code>, or <code>deno</code> on
-                  your <code>PATH</code>.
+                  place <code>nami.exe</code> in a directory on your
+                  <code>PATH</code>.
                 </p>
               </div>
               <div>
@@ -290,9 +277,7 @@
                 </h4>
                 <pre
                   class="bg-subtle p-6 border border-[#1a1a1a] rounded-md text-sm text-gray-300 overflow-x-auto relative group"
-                ><code>sudo install -m 755 nami /usr/local/bin/nami
-sudo install -m 755 nami.js /usr/local/bin/nami.js
-sudo install -m 755 nami-engine /usr/local/bin/nami-engine</code><button class="copy-button absolute top-6 right-6 text-gray-700 hover:text-white transition"><i data-lucide="copy" class="w-4 h-4"></i></button></pre>
+                ><code>sudo install -m 755 nami /usr/local/bin/nami</code><button class="copy-button absolute top-6 right-6 text-gray-700 hover:text-white transition"><i data-lucide="copy" class="w-4 h-4"></i></button></pre>
               </div>
               <div>
                 <h4
@@ -303,9 +288,7 @@ sudo install -m 755 nami-engine /usr/local/bin/nami-engine</code><button class="
                 <pre
                   class="bg-subtle p-6 border border-[#1a1a1a] rounded-md text-sm text-gray-300 overflow-x-auto relative group"
                 ><code>mkdir -p "$HOME/.local/bin"
-install -m 755 nami "$HOME/.local/bin/nami"
-install -m 755 nami.js "$HOME/.local/bin/nami.js"
-install -m 755 nami-engine "$HOME/.local/bin/nami-engine"</code><button class="copy-button absolute top-6 right-6 text-gray-700 hover:text-white transition"><i data-lucide="copy" class="w-4 h-4"></i></button></pre>
+install -m 755 nami "$HOME/.local/bin/nami"</code><button class="copy-button absolute top-6 right-6 text-gray-700 hover:text-white transition"><i data-lucide="copy" class="w-4 h-4"></i></button></pre>
               </div>
             </div>
           </section>
@@ -1955,9 +1938,10 @@ tail -F ~/.config/nami/sessions/&lt;session-id&gt;/debug.log | jq .</code></pre>
               Architecture
             </h2>
             <p class="text-sm text-gray-400 leading-relaxed mb-4">
-              Nami uses a split-process architecture. A Silvery-powered terminal
-              UI communicates with a Go engine over NDJSON. Every turn, the
-              engine assembles context from four cooperating layers: live
+              Nami runs as one Go executable. A Bubble Tea terminal UI talks to
+              the embedded engine over the same typed event/message boundary used
+              by stdio automation. Every turn, the engine assembles context from
+              four cooperating layers: live
               retrieval, durable preference memory, session memory, and
               compaction. Retrieval stays repo-first — no cached code summaries.
             </p>
@@ -2786,9 +2770,9 @@ tail -F ~/.config/nami/sessions/&lt;session-id&gt;/debug.log | jq .</code></pre>
             </h2>
             <pre
               class="bg-subtle p-6 border border-[#1a1a1a] rounded-md text-sm text-gray-300"
-            ><code>vp run setup        # Build TUI & compile Go
-vp run start        # Run dev Silvery TUI
-make release-local  # Package launcher shim + nami.js + engine
+            ><code>cd nami
+make release-local  # Build the local Go executable
+make release        # Build platform archives
 make install        # Install to /usr/local/bin</code></pre>
           </section>
 

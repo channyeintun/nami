@@ -19,23 +19,21 @@ Nami combines a terminal UI, a Go-based execution engine, first-class artifacts,
 
 Nami is built on three core pillars:
 
-1. **TUI (Silvery)** — interactive terminal UX with streaming output, tool transcripts, progress, background task visibility, and artifact panels.
+1. **TUI (Bubble Tea)** — interactive terminal UX with streaming output, tool transcripts, progress, background task visibility, and artifact panels.
 2. **Go Engine** — high-performance backend for the agent loop, tool execution, provider integration, session persistence, and permission gating.
 3. **Artifacts** — durable structured outputs that can be reviewed, revised, and resumed across turns.
 
 ## Architecture Docs
 
 - [Lean Retrieval Architecture](./docs/lean-retrieval-architecture.md)
-- [Silvery Guide for Nami](./docs/silvery-guide.md)
 
 ## Quick Start
 
 ### Prerequisites
 
 - macOS, Linux, or Windows 11
-- One supported JavaScript runtime to run the `nami` launcher: Node.js, Bun, or Deno. The Windows installer can bootstrap a local Node.js runtime automatically if none is already available.
 - One configured model provider: Anthropic, OpenAI, Google, DeepSeek, Groq, Mistral, Ollama, or GitHub Copilot
-- Go 1.26.3 only if building from source or rebuilding `nami-engine`
+- Go 1.26.3 only if building from source
 
 ### Install
 
@@ -45,15 +43,7 @@ Nami is built on three core pillars:
 curl -fsSL https://raw.githubusercontent.com/channyeintun/nami/main/nami/install.sh | sh
 ```
 
-This downloads prebuilt `nami` and `nami-engine` release assets from GitHub Releases. It does **not** build from source.
-
-Current releases install a launcher shim, a portable `nami.js` bundle, and the Go engine.
-
-You need one of these runtimes on your `PATH` to run the installed launcher:
-
-- `node`
-- `bun`
-- `deno`
+This downloads a prebuilt single-file `nami` executable from GitHub Releases. It does **not** build from source.
 
 The installer chooses a writable directory automatically:
 
@@ -78,17 +68,11 @@ export PATH="$HOME/.local/bin:$PATH"
 Set-ExecutionPolicy -Scope Process Bypass -Force; irm https://raw.githubusercontent.com/channyeintun/nami/main/nami/install.ps1 | iex
 ```
 
-This runs in your current PowerShell session, downloads the Windows release archive, installs `nami.cmd`, `nami.js`, and `nami-engine.exe`, and adds the install directory to your user `PATH`.
-
-If `node`, `bun`, or `deno` is already on your `PATH`, the installer reuses it. If not, it downloads a local Node.js runtime automatically and wires `nami` to use it.
+This runs in your current PowerShell session, downloads the Windows release archive, installs `nami.exe`, and adds the install directory to your user `PATH`.
 
 Current Windows releases install into:
 
 - `%LOCALAPPDATA%\Programs\nami\bin`
-
-If the installer had to bootstrap Node.js, it stores it here:
-
-- `%LOCALAPPDATA%\Programs\nami\runtime\node`
 
 After install in the same PowerShell window, verify:
 
@@ -98,20 +82,12 @@ nami --help
 
 #### Manual install
 
-On Windows, download `nami-windows-amd64.zip` or `nami-windows-arm64.zip` from GitHub Releases, extract it, then copy these files into a directory on your `PATH`:
+On Windows, download `nami-windows-amd64.zip` or `nami-windows-arm64.zip` from GitHub Releases, extract it, then copy `nami.exe` into a directory on your `PATH`.
 
-- `nami.cmd`
-- `nami.js`
-- `nami-engine.exe`
-
-You also need one supported runtime on your `PATH`: `node`, `bun`, or `deno`.
-
-If you already have local Unix launcher assets and engine binaries:
+If you already have a local Unix binary:
 
 ```bash
 sudo install -m 755 nami /usr/local/bin/nami
-sudo install -m 755 nami.js /usr/local/bin/nami.js
-sudo install -m 755 nami-engine /usr/local/bin/nami-engine
 ```
 
 Without `sudo`:
@@ -119,27 +95,23 @@ Without `sudo`:
 ```bash
 mkdir -p "$HOME/.local/bin"
 install -m 755 nami "$HOME/.local/bin/nami"
-install -m 755 nami.js "$HOME/.local/bin/nami.js"
-install -m 755 nami-engine "$HOME/.local/bin/nami-engine"
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
 If installing from a local clone:
 
 ```bash
-cd nami/tui
+cd nami
 make release-local
 mkdir -p "$HOME/.local/bin"
 install -m 755 release/nami "$HOME/.local/bin/nami"
-install -m 755 release/nami.js "$HOME/.local/bin/nami.js"
-install -m 755 release/nami-engine "$HOME/.local/bin/nami-engine"
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
 To build Windows release assets from source:
 
 ```bash
-cd nami/tui
+cd nami
 make release
 ```
 
@@ -484,7 +456,7 @@ tail -F ~/.config/nami/sessions/<session-id>/debug.log | jq .
 ## Repository Layout
 
 ```text
-nami/    Go engine, CLI, TUI launcher, install script
+nami/    Go engine, Bubble Tea CLI, install script
 web/     Project website and docs page assets
 docs/    Architecture and integration guides
 reference/  Reference material and external notes
@@ -494,35 +466,29 @@ reference/  Reference material and external notes
 
 ```text
 ┌──────────────────────────────┐
-│  nami (JS launcher)          │  ← Terminal UI
-│    Renders TUI, handles I/O  │
-│         │ stdin/stdout NDJSON│
-│  ┌──────▼─────────────────┐  │
-│  │ nami-engine (Go)       │  │  ← LLM client, tools, agent loop
-│  │  Streams events out    │  │
-│  │  Reads commands in     │  │
+│  nami (Go executable)        │
+│  ┌────────────────────────┐  │
+│  │ Bubble Tea TUI         │  │  ← Terminal UI
+│  ├────────────────────────┤  │
+│  │ Embedded Go engine     │  │  ← LLM client, tools, agent loop
 │  └────────────────────────┘  │
 └──────────────────────────────┘
 ```
 
-The launcher shim, `nami.js`, and `nami-engine` should live in the same directory, or `nami-engine` must be in `PATH`.
+Normal TUI usage runs in one executable. The `nami --stdio` engine protocol remains available for automation and compatibility.
 
 ## Building from Source
 
-Requires: Go 1.26.3 and Vite+ `vp` for local builds
+Requires: Go 1.26.3
 
 ```bash
-cd nami/tui
-vp install
-vp run setup
-vp run start
-
+cd nami
 make release-local
 make release
 make install
 ```
 
-`make release` writes GitHub-release-ready artifacts under `nami/tui/release/`.
+`make release` writes GitHub-release-ready single-binary artifacts under `nami/release/`.
 
 ## License
 

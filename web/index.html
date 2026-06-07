@@ -110,12 +110,12 @@
             <div class="md:w-1/2 text-left">
                 <h2 class="text-5xl font-bold mb-8">Raw Efficiency.</h2>
                 <p class="text-gray-400 text-lg font-light mb-10 leading-relaxed">
-                    A split architecture: Silvery for high-performance terminal UI and Go for low-latency tool execution.
+                    A single Go executable: Bubble Tea for terminal UI and an embedded engine for low-latency tool execution.
                 </p>
                 <div class="space-y-6">
                     <div class="flex items-center gap-4">
                         <div class="w-1 h-1 bg-brand"></div>
-                        <p class="text-sm uppercase tracking-widest font-bold">Fast TUI (Silvery)</p>
+                        <p class="text-sm uppercase tracking-widest font-bold">Fast TUI (Bubble Tea)</p>
                     </div>
                     <div class="flex items-center gap-4">
                         <div class="w-1 h-1 bg-brand"></div>
@@ -128,8 +128,8 @@
                 <div class="arch-visual">
                     <div class="arch-node">
                         <div class="node-header mb-4">
-                            <span class="text-[10px] uppercase font-bold text-gray-500">Nami Launcher</span>
-                            <span class="tech-badge">NodeJS &bull; Silvery</span>
+                            <span class="text-[10px] uppercase font-bold text-gray-500">Nami TUI</span>
+                            <span class="tech-badge">Go &bull; Bubble Tea</span>
                         </div>
                         <div class="flex items-center gap-3">
                             <i data-lucide="terminal" class="w-5 h-5 text-gray-500"></i>
@@ -138,11 +138,11 @@
                     </div>
                     <div class="stream-connector">
                         <div class="stream-pulse"></div>
-                        <span class="stream-label">Bidirectional NDJSON Stream</span>
+                        <span class="stream-label">In-process Event Stream</span>
                     </div>
                     <div class="arch-node">
                         <div class="node-header mb-4">
-                            <span class="text-[10px] uppercase font-bold text-gray-500">Nami Engine</span>
+                            <span class="text-[10px] uppercase font-bold text-gray-500">Embedded Engine</span>
                             <span class="tech-badge">Go &bull; LLM Loop</span>
                         </div>
                         <div class="flex items-center gap-3">

@@ -50,12 +50,13 @@ The migration is not complete.
 - 2026-06-08: Started Phase 7 by replacing the `cmd/nami-engine` Node launcher path with the in-process Bubble Tea TUI while preserving `--stdio`.
 - 2026-06-08: Updated the Unix installer to install a single `nami` binary and removed JS runtime checks from that path.
 - 2026-06-08: Updated the Windows installer and release Makefiles to install and package a single Go `nami` executable.
+- 2026-06-08: Updated README and website install/architecture docs for the Bubble Tea single-executable packaging model.
 
 ## Next Task
 
 Start Phase 7 by collapsing packaging and CLI:
 
-- update docs and website install instructions for the single executable
+- audit remaining release references and decide whether to remove legacy JS TUI sources
 - keep the no-tests constraint while porting reducer logic
 
 Done:
@@ -97,6 +98,7 @@ Done:
 - start Phase 7 packaging and CLI collapse toward the single `nami` executable
 - update installers and release/build scripts to install one Go executable
 - update Windows installer and release/build scripts to install one Go executable
+- update docs and website install instructions for the single executable
 - keep the stdio wrapper behavior unchanged
 - keep `nami --stdio` behavior unchanged
 
