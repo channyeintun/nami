@@ -6,14 +6,11 @@ set -e
 
 REPO="channyeintun/nami"
 BINARY_NAME="nami"
-ENGINE_NAME="nami-engine"
-LAUNCHER_JS_NAME="${BINARY_NAME}.js"
 
 DEFAULT_SYSTEM_DIR="/usr/local/bin"
 DEFAULT_USER_DIR="${HOME}/.local/bin"
 INSTALL_DIR="${INSTALL_DIR:-}"
 USE_SUDO="false"
-JS_RUNTIME=""
 
 # Detect OS and architecture
 OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
@@ -65,37 +62,6 @@ requires_bun_runtime() {
   return 1
 }
 
-detect_supported_runtime() {
-  for runtime in node bun deno; do
-    if command -v "$runtime" >/dev/null 2>&1; then
-      echo "$runtime"
-      return 0
-    fi
-  done
-  return 1
-}
-
-ensure_supported_runtime_available() {
-  JS_RUNTIME="$(detect_supported_runtime || true)"
-  if [ -n "$JS_RUNTIME" ]; then
-    return 0
-  fi
-
-  echo ""
-  echo "Install failed: Nami needs one of these runtimes on PATH: node, bun, or deno."
-  echo ""
-  echo "Install one of the supported runtimes, then rerun this installer:"
-  echo "  Node.js: https://nodejs.org"
-  echo "  Bun:     https://bun.sh"
-  echo "  Deno:    https://deno.com"
-  echo ""
-  echo "After installing a runtime, verify it with one of:"
-  echo "  node --version"
-  echo "  bun --version"
-  echo "  deno --version"
-  exit 1
-}
-
 install_binary() {
   src="$1"
   dest="$2"
@@ -110,9 +76,7 @@ install_binary() {
 echo "Downloading release archive ${ARCHIVE}..."
 if download_asset "$ARCHIVE_URL" "$TMPDIR/$ARCHIVE"; then
   tar -xzf "$TMPDIR/$ARCHIVE" -C "$TMPDIR"
-  WRAPPER_SOURCE="$TMPDIR/${BINARY_NAME}-${PLATFORM}/${BINARY_NAME}"
-  LAUNCHER_JS_SOURCE="$TMPDIR/${BINARY_NAME}-${PLATFORM}/${LAUNCHER_JS_NAME}"
-  ENGINE_SOURCE="$TMPDIR/${BINARY_NAME}-${PLATFORM}/${ENGINE_NAME}"
+  BINARY_SOURCE="$TMPDIR/${BINARY_NAME}-${PLATFORM}/${BINARY_NAME}"
 else
   echo ""
   echo "Install failed: no release archive found for ${PLATFORM}."
@@ -125,27 +89,19 @@ else
   echo "If you already have a local build, install manually instead:"
   echo "  mkdir -p \"\$HOME/.local/bin\""
   echo "  install -m 755 nami \"\$HOME/.local/bin/nami\""
-  echo "  install -m 755 nami.js \"\$HOME/.local/bin/nami.js\""
-  echo "  install -m 755 nami-engine \"\$HOME/.local/bin/nami-engine\""
   echo "  export PATH=\"\$HOME/.local/bin:\$PATH\""
   exit 1
 fi
 
-for required in "$WRAPPER_SOURCE" "$LAUNCHER_JS_SOURCE" "$ENGINE_SOURCE"; do
-  if [ ! -f "$required" ]; then
-    echo ""
-    echo "Install failed: release archive is missing required file: $required"
-    exit 1
-  fi
-done
-
-ensure_supported_runtime_available
+if [ ! -f "$BINARY_SOURCE" ]; then
+  echo ""
+  echo "Install failed: release archive is missing required file: $BINARY_SOURCE"
+  exit 1
+fi
 
 # Install binaries
 echo "Installing to ${INSTALL_DIR}..."
-install_binary "$WRAPPER_SOURCE" "$INSTALL_DIR/$BINARY_NAME"
-install_binary "$LAUNCHER_JS_SOURCE" "$INSTALL_DIR/$LAUNCHER_JS_NAME"
-install_binary "$ENGINE_SOURCE" "$INSTALL_DIR/$ENGINE_NAME"
+install_binary "$BINARY_SOURCE" "$INSTALL_DIR/$BINARY_NAME"
 
 echo ""
 echo "nami installed successfully!"
@@ -153,7 +109,6 @@ echo "Installed to: ${INSTALL_DIR}"
 echo ""
 echo "Verify installation:"
 echo "  command -v nami"
-echo "Detected JavaScript runtime: ${JS_RUNTIME}"
 
 case ":$PATH:" in
   *":${INSTALL_DIR}:"*)
