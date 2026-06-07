@@ -208,9 +208,9 @@ func applyEvent(state uiState, event ipc.StreamEvent) uiState {
 		if err != nil {
 			return state.withDecodeError("conversation hydration", err)
 		}
-		state.Lines = hydratedTranscriptLines(payload)
-		if len(state.Lines) == 0 {
-			state.Lines = []string{"Conversation restored."}
+		state.Transcript = hydratedTranscriptEntries(payload)
+		if len(state.Transcript) == 0 {
+			state.Transcript = []transcriptEntry{{Kind: "system", Text: "Conversation restored."}}
 		}
 		state.Assistant = ""
 		state.TurnActive = false
@@ -285,7 +285,7 @@ func applyEvent(state uiState, event ipc.StreamEvent) uiState {
 	return state
 }
 
-func hydratedTranscriptLines(payload ipc.ConversationHydratedPayload) []string {
+func hydratedTranscriptEntries(payload ipc.ConversationHydratedPayload) []transcriptEntry {
 	messages := make(map[string]ipc.ConversationHydratedMessagePayload, len(payload.Messages))
 	for _, message := range payload.Messages {
 		if id := strings.TrimSpace(message.ID); id != "" {
@@ -306,16 +306,16 @@ func hydratedTranscriptLines(payload ipc.ConversationHydratedPayload) []string {
 	}
 
 	if len(payload.Transcript) == 0 {
-		lines := make([]string, 0, len(payload.Messages))
+		entries := make([]transcriptEntry, 0, len(payload.Messages))
 		for _, message := range payload.Messages {
-			if line := hydratedMessageLine(message); line != "" {
-				lines = append(lines, line)
+			if entry, ok := hydratedMessageEntry(message); ok {
+				entries = append(entries, entry)
 			}
 		}
-		return lines
+		return entries
 	}
 
-	lines := make([]string, 0, len(payload.Transcript))
+	entries := make([]transcriptEntry, 0, len(payload.Transcript))
 	for _, entry := range payload.Transcript {
 		refID := strings.TrimSpace(entry.RefID)
 		if refID == "" {
@@ -323,26 +323,26 @@ func hydratedTranscriptLines(payload ipc.ConversationHydratedPayload) []string {
 		}
 		switch entry.Kind {
 		case "message":
-			if line := hydratedMessageLine(messages[refID]); line != "" {
-				lines = append(lines, line)
+			if item, ok := hydratedMessageEntry(messages[refID]); ok {
+				entries = append(entries, item)
 			}
 		case "progress":
 			if item, ok := progress[refID]; ok {
-				lines = append(lines, "progress: "+strings.TrimSpace(item.Message))
+				entries = append(entries, transcriptEntry{Kind: "system", Text: "progress: " + strings.TrimSpace(item.Message)})
 			}
 		case "tool_call":
 			if item, ok := tools[refID]; ok {
-				lines = append(lines, hydratedToolLine(item))
+				entries = append(entries, transcriptEntry{Kind: "tool", Text: hydratedToolLine(item)})
 			}
 		}
 	}
-	return lines
+	return entries
 }
 
-func hydratedMessageLine(message ipc.ConversationHydratedMessagePayload) string {
+func hydratedMessageEntry(message ipc.ConversationHydratedMessagePayload) (transcriptEntry, bool) {
 	role := strings.TrimSpace(message.Role)
 	if role == "" {
-		return ""
+		return transcriptEntry{}, false
 	}
 	text := strings.TrimSpace(message.Text)
 	if text == "" {
@@ -355,12 +355,15 @@ func hydratedMessageLine(message ipc.ConversationHydratedMessagePayload) string 
 		text = strings.Join(parts, "\n")
 	}
 	if text == "" {
-		return ""
+		return transcriptEntry{}, false
 	}
 	if role == "user" {
-		return "> " + text
+		return transcriptEntry{Kind: "user", Text: text}, true
 	}
-	return role + ": " + text
+	if role == "assistant" {
+		return transcriptEntry{Kind: "assistant", Text: text}, true
+	}
+	return transcriptEntry{Kind: "system", Text: role + ": " + text}, true
 }
 
 func hydratedToolLine(tool ipc.ConversationHydratedToolCallPayload) string {
@@ -490,9 +493,9 @@ func applyAssistantDelta(state uiState, delta string) uiState {
 		return state
 	}
 	if state.Assistant == "" {
-		state.Lines = append(state.Lines, "assistant: ")
+		state.Transcript = append(state.Transcript, transcriptEntry{Kind: "assistant"})
 	}
 	state.Assistant += delta
-	state.Lines[len(state.Lines)-1] = "assistant: " + strings.TrimRight(state.Assistant, "\n")
+	state.Transcript[len(state.Transcript)-1].Text = strings.TrimRight(state.Assistant, "\n")
 	return state
 }

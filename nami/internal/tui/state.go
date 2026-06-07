@@ -28,7 +28,7 @@ type uiState struct {
 	QuestionRequest    *questionRequestState
 	SelectionRequest   *selectionRequestState
 	Hydrated           bool
-	Lines              []string
+	Transcript         []transcriptEntry
 	ErrorMessage       string
 	TurnActive         bool
 	Assistant          string
@@ -89,17 +89,21 @@ func newUIState() uiState {
 		Artifacts:          make(map[string]artifactState),
 		BackgroundCommands: make(map[string]backgroundCommandState),
 		BackgroundAgents:   make(map[string]backgroundAgentState),
-		Lines:              []string{"Nami Bubble Tea shell starting..."},
+		Transcript:         []transcriptEntry{{Kind: "system", Text: "Nami Bubble Tea shell starting..."}},
 	}
 }
 
 func (s uiState) appendLine(line string) uiState {
-	s.Lines = append(s.Lines, line)
+	return s.appendTranscript("system", line)
+}
+
+func (s uiState) appendTranscript(kind, text string) uiState {
+	s.Transcript = append(s.Transcript, transcriptEntry{Kind: kind, Text: text})
 	return s
 }
 
 func (s uiState) startTurn(prompt string) uiState {
-	s = s.appendLine("> " + prompt)
+	s = s.appendTranscript("user", prompt)
 	s.Assistant = ""
 	s.TurnActive = true
 	s.Status = "running"
@@ -111,7 +115,7 @@ func (s uiState) stopEngine(err error) uiState {
 	s.Status = "stopped"
 	if err != nil {
 		s.ErrorMessage = err.Error()
-		return s.appendLine("engine stopped: " + err.Error())
+		return s.appendTranscript("error", "engine stopped: "+err.Error())
 	}
 	return s.appendLine("engine stopped")
 }

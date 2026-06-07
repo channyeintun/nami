@@ -166,7 +166,7 @@ func promptHeightFor(totalHeight int) int {
 }
 
 func (m *model) renderTranscript() {
-	m.transcript.SetContent(strings.Join(m.state.Lines, "\n"))
+	m.transcript.SetContent(renderTranscript(m.state.Transcript))
 	m.transcript.GotoBottom()
 }
 

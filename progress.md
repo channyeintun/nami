@@ -35,12 +35,12 @@ The migration is not complete.
 - 2026-06-08: Extended reducer state for permission requests, ask-user-question prompts, and model/reasoning/resume/rewind selection requests.
 - 2026-06-08: Added reducer support for conversation hydration and rebuilt early transcript lines from hydrated messages, progress, and tool calls.
 - 2026-06-08: Extended reducer state for memory recall, retrieval, compaction, timing, and session update/restore/rewind events.
+- 2026-06-08: Started Phase 4 by replacing plain transcript strings with structured transcript entries and a dedicated renderer.
 
 ## Next Task
 
 Start Phase 4 by porting core surfaces:
 
-- replace the early transcript text renderer with structured transcript rows
 - add prompt history and slash-command completion basics
 - keep the no-tests constraint while porting reducer logic
 
@@ -68,6 +68,7 @@ Done:
 - extend reducer state to cover selection dialogs and permission/question prompts
 - extend reducer state for conversation hydration and persisted transcript entries
 - extend reducer state for memory, retrieval, compaction, timing, and session restore/rewind events
+- replace the early transcript text renderer with structured transcript rows
 - keep the stdio wrapper behavior unchanged
 - keep `nami --stdio` behavior unchanged
 
