@@ -198,6 +198,42 @@ func summarizeEvent(event ipc.StreamEvent) string {
 			return fmt.Sprintf("background agent: decode failed: %v", err)
 		}
 		return fmt.Sprintf("background agent %s: %s", strings.TrimSpace(payload.AgentID), strings.TrimSpace(payload.Status))
+	case ipc.EventPermissionRequest:
+		var payload ipc.PermissionRequestPayload
+		if err := json.Unmarshal(event.Payload, &payload); err != nil {
+			return fmt.Sprintf("permission: decode failed: %v", err)
+		}
+		return fmt.Sprintf("permission requested: %s %s", strings.TrimSpace(payload.Tool), strings.TrimSpace(payload.Risk))
+	case ipc.EventAskUserQuestionRequested:
+		var payload ipc.AskUserQuestionRequestedPayload
+		if err := json.Unmarshal(event.Payload, &payload); err != nil {
+			return fmt.Sprintf("question: decode failed: %v", err)
+		}
+		return fmt.Sprintf("question requested: %d prompt(s)", len(payload.Questions))
+	case ipc.EventModelSelectionRequested:
+		var payload ipc.ModelSelectionRequestedPayload
+		if err := json.Unmarshal(event.Payload, &payload); err != nil {
+			return fmt.Sprintf("model selection: decode failed: %v", err)
+		}
+		return fmt.Sprintf("model selection requested: %d option(s)", len(payload.Options))
+	case ipc.EventReasoningSelectionRequested:
+		var payload ipc.ReasoningSelectionRequestedPayload
+		if err := json.Unmarshal(event.Payload, &payload); err != nil {
+			return fmt.Sprintf("reasoning selection: decode failed: %v", err)
+		}
+		return fmt.Sprintf("reasoning selection requested: %d option(s)", len(payload.Options))
+	case ipc.EventResumeSelectionRequested:
+		var payload ipc.ResumeSelectionRequestedPayload
+		if err := json.Unmarshal(event.Payload, &payload); err != nil {
+			return fmt.Sprintf("resume selection: decode failed: %v", err)
+		}
+		return fmt.Sprintf("resume selection requested: %d session(s)", len(payload.Sessions))
+	case ipc.EventRewindSelectionRequested:
+		var payload ipc.RewindSelectionRequestedPayload
+		if err := json.Unmarshal(event.Payload, &payload); err != nil {
+			return fmt.Sprintf("rewind selection: decode failed: %v", err)
+		}
+		return fmt.Sprintf("rewind selection requested: %d turn(s)", len(payload.Turns))
 	case ipc.EventModelChanged:
 		var payload ipc.ModelChangedPayload
 		if err := json.Unmarshal(event.Payload, &payload); err != nil {

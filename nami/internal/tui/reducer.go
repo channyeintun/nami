@@ -20,6 +20,8 @@ func applyEvent(state uiState, event ipc.StreamEvent) uiState {
 	case ipc.EventTurnComplete:
 		state.TurnActive = false
 		state.Status = "ready"
+		state.PermissionRequest = nil
+		state.QuestionRequest = nil
 	case ipc.EventModelChanged:
 		payload, err := decodePayload[ipc.ModelChangedPayload](event)
 		if err != nil {
@@ -137,6 +139,70 @@ func applyEvent(state uiState, event ipc.StreamEvent) uiState {
 			return state.withDecodeError("background agent", err)
 		}
 		state = state.withBackgroundAgent(agent)
+	case ipc.EventPermissionRequest:
+		payload, err := decodePayload[ipc.PermissionRequestPayload](event)
+		if err != nil {
+			return state.withDecodeError("permission", err)
+		}
+		state.PermissionRequest = &permissionRequestState{
+			RequestID: strings.TrimSpace(payload.RequestID),
+			Tool:      strings.TrimSpace(payload.Tool),
+			Risk:      strings.TrimSpace(payload.Risk),
+			Command:   strings.TrimSpace(payload.Command),
+		}
+	case ipc.EventAskUserQuestionRequested:
+		payload, err := decodePayload[ipc.AskUserQuestionRequestedPayload](event)
+		if err != nil {
+			return state.withDecodeError("question", err)
+		}
+		state.QuestionRequest = &questionRequestState{
+			RequestID: strings.TrimSpace(payload.RequestID),
+			Count:     len(payload.Questions),
+		}
+	case ipc.EventModelSelectionRequested:
+		payload, err := decodePayload[ipc.ModelSelectionRequestedPayload](event)
+		if err != nil {
+			return state.withDecodeError("model selection", err)
+		}
+		state.SelectionRequest = &selectionRequestState{
+			Kind:      "model",
+			RequestID: strings.TrimSpace(payload.RequestID),
+			Title:     strings.TrimSpace(payload.Title),
+			Count:     len(payload.Options),
+		}
+	case ipc.EventReasoningSelectionRequested:
+		payload, err := decodePayload[ipc.ReasoningSelectionRequestedPayload](event)
+		if err != nil {
+			return state.withDecodeError("reasoning selection", err)
+		}
+		state.SelectionRequest = &selectionRequestState{
+			Kind:      "reasoning",
+			RequestID: strings.TrimSpace(payload.RequestID),
+			Title:     strings.TrimSpace(payload.Title),
+			Count:     len(payload.Options),
+		}
+	case ipc.EventResumeSelectionRequested:
+		payload, err := decodePayload[ipc.ResumeSelectionRequestedPayload](event)
+		if err != nil {
+			return state.withDecodeError("resume selection", err)
+		}
+		state.SelectionRequest = &selectionRequestState{
+			Kind:      "resume",
+			RequestID: strings.TrimSpace(payload.RequestID),
+			Title:     "Resume session",
+			Count:     len(payload.Sessions),
+		}
+	case ipc.EventRewindSelectionRequested:
+		payload, err := decodePayload[ipc.RewindSelectionRequestedPayload](event)
+		if err != nil {
+			return state.withDecodeError("rewind selection", err)
+		}
+		state.SelectionRequest = &selectionRequestState{
+			Kind:      "rewind",
+			RequestID: strings.TrimSpace(payload.RequestID),
+			Title:     "Rewind conversation",
+			Count:     len(payload.Turns),
+		}
 	}
 
 	if summary := summarizeEvent(event); strings.TrimSpace(summary) != "" {

@@ -17,6 +17,9 @@ type uiState struct {
 	ArtifactReview     *artifactReviewState
 	BackgroundCommands map[string]backgroundCommandState
 	BackgroundAgents   map[string]backgroundAgentState
+	PermissionRequest  *permissionRequestState
+	QuestionRequest    *questionRequestState
+	SelectionRequest   *selectionRequestState
 	Lines              []string
 	ErrorMessage       string
 	TurnActive         bool
@@ -51,6 +54,25 @@ type backgroundAgentState struct {
 	Status      string
 	Error       string
 	TotalUSD    float64
+}
+
+type permissionRequestState struct {
+	RequestID string
+	Tool      string
+	Risk      string
+	Command   string
+}
+
+type questionRequestState struct {
+	RequestID string
+	Count     int
+}
+
+type selectionRequestState struct {
+	Kind      string
+	RequestID string
+	Title     string
+	Count     int
 }
 
 func newUIState() uiState {

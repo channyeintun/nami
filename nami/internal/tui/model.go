@@ -225,5 +225,14 @@ func (m model) statusLine() string {
 	if m.state.ArtifactReview != nil {
 		parts = append(parts, "review "+m.state.ArtifactReview.Artifact.Title)
 	}
+	if m.state.PermissionRequest != nil {
+		parts = append(parts, "permission "+m.state.PermissionRequest.Tool)
+	}
+	if m.state.QuestionRequest != nil {
+		parts = append(parts, fmt.Sprintf("questions %d", m.state.QuestionRequest.Count))
+	}
+	if m.state.SelectionRequest != nil {
+		parts = append(parts, fmt.Sprintf("%s options %d", m.state.SelectionRequest.Kind, m.state.SelectionRequest.Count))
+	}
 	return strings.Join(parts, " | ")
 }
