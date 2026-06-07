@@ -45,12 +45,13 @@ The migration is not complete.
 - 2026-06-08: Wired basic ask-user-question responses using recommended or first options, with cancel support.
 - 2026-06-08: Improved ask-user-question dialog rendering by previewing the default answers that `y` will send.
 - 2026-06-08: Started Phase 6 by handling Bubble Tea paste messages and appending pasted text into the prompt composer.
+- 2026-06-08: Added image reference parsing for pasted image data URLs and absolute local image paths, sending referenced images with user input.
 
 ## Next Task
 
 Start Phase 6 by porting paste, clipboard, images, and markdown:
 
-- add image reference parsing for pasted data URLs and file paths
+- add markdown/code rendering for transcript rows
 - keep the no-tests constraint while porting reducer logic
 
 Done:
@@ -87,6 +88,7 @@ Done:
 - wire basic ask-user-question responses
 - improve dialog answer editing and multi-option flows
 - start Phase 6 paste, clipboard, image, and markdown support
+- add image reference parsing for pasted data URLs and file paths
 - keep the stdio wrapper behavior unchanged
 - keep `nami --stdio` behavior unchanged
 

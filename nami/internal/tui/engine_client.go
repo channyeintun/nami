@@ -93,8 +93,8 @@ func (c engineClient) cancelTurn() tea.Cmd {
 	return c.send(ipc.ClientMessage{Type: ipc.MsgCancel})
 }
 
-func makeUserInputMessage(text string) (ipc.ClientMessage, error) {
-	payload, err := json.Marshal(ipc.UserInputPayload{Text: text})
+func makeUserInputMessage(text string, images []ipc.ImageInputPayload) (ipc.ClientMessage, error) {
+	payload, err := json.Marshal(ipc.UserInputPayload{Text: text, Images: images})
 	if err != nil {
 		return ipc.ClientMessage{}, fmt.Errorf("marshal user input: %w", err)
 	}

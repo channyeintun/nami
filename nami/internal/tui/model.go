@@ -14,6 +14,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/channyeintun/nami/internal/config"
+	"github.com/channyeintun/nami/internal/ipc"
 )
 
 type model struct {
@@ -33,6 +34,8 @@ type model struct {
 	searchActive       bool
 	searchQuery        string
 	searchMatches      int
+	promptImages       []promptImage
+	nextImageID        int
 }
 
 func newModel(ctx context.Context, cfg config.Config) model {
@@ -63,6 +66,7 @@ func newModel(ctx context.Context, cfg config.Config) model {
 		state:              newUIState(),
 		promptHistoryIndex: -1,
 		followTail:         true,
+		nextImageID:        1,
 	}
 }
 
@@ -154,7 +158,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if text == "" {
 				break
 			}
-			msg, err := makeUserInputMessage(text)
+			msg, err := makeUserInputMessage(text, m.referencedPromptImages(text))
 			if err != nil {
 				m.state.ErrorMessage = err.Error()
 				return m, nil
@@ -162,6 +166,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.state = m.state.startTurn(text)
 			m.recordPromptHistory(text)
 			m.prompt.Reset()
+			m.dropUnreferencedPromptImages("")
 			m.renderTranscript()
 			return m, m.engine.send(msg)
 		}
@@ -183,10 +188,39 @@ func (m *model) handlePaste(content string) {
 	if content == "" {
 		return
 	}
+	images, replacement := parseImageReferences(content, m.nextImageID)
+	if len(images) > 0 {
+		m.promptImages = append(m.promptImages, images...)
+		m.nextImageID += len(images)
+		content = replacement
+	}
 	m.prompt.SetValue(appendPromptText(m.prompt.Value(), content))
+	m.dropUnreferencedPromptImages(m.prompt.Value())
 	if notice := pasteNotice(content); notice != "" {
 		m.state.Status = notice
 	}
+}
+
+func (m *model) referencedPromptImages(text string) []ipc.ImageInputPayload {
+	ids := referencedImageIDs(text)
+	images := make([]ipc.ImageInputPayload, 0, len(m.promptImages))
+	for _, image := range m.promptImages {
+		if ids[image.payload.ID] {
+			images = append(images, image.payload)
+		}
+	}
+	return images
+}
+
+func (m *model) dropUnreferencedPromptImages(text string) {
+	ids := referencedImageIDs(text)
+	filtered := m.promptImages[:0]
+	for _, image := range m.promptImages {
+		if ids[image.payload.ID] {
+			filtered = append(filtered, image)
+		}
+	}
+	m.promptImages = filtered
 }
 
 func (m *model) syncSelectionList() {
