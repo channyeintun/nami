@@ -130,6 +130,56 @@ func summarizeEvent(event ipc.StreamEvent) string {
 			return fmt.Sprintf("assistant: decode failed: %v", err)
 		}
 		return strings.TrimRight(payload.Text, "\n")
+	case ipc.EventThinkingDelta:
+		var payload ipc.TokenDeltaPayload
+		if err := json.Unmarshal(event.Payload, &payload); err != nil {
+			return fmt.Sprintf("thinking: decode failed: %v", err)
+		}
+		return "thinking: " + strings.TrimSpace(payload.Text)
+	case ipc.EventProgress:
+		var payload ipc.ProgressPayload
+		if err := json.Unmarshal(event.Payload, &payload); err != nil {
+			return fmt.Sprintf("progress: decode failed: %v", err)
+		}
+		return "progress: " + strings.TrimSpace(payload.Message)
+	case ipc.EventToolStart:
+		var payload ipc.ToolStartPayload
+		if err := json.Unmarshal(event.Payload, &payload); err != nil {
+			return fmt.Sprintf("tool: decode failed: %v", err)
+		}
+		return "tool started: " + strings.TrimSpace(payload.Name)
+	case ipc.EventToolResult:
+		var payload ipc.ToolResultPayload
+		if err := json.Unmarshal(event.Payload, &payload); err != nil {
+			return fmt.Sprintf("tool result: decode failed: %v", err)
+		}
+		name := strings.TrimSpace(payload.Name)
+		if name == "" {
+			name = strings.TrimSpace(payload.ToolID)
+		}
+		return "tool finished: " + name
+	case ipc.EventToolError:
+		var payload ipc.ToolErrorPayload
+		if err := json.Unmarshal(event.Payload, &payload); err != nil {
+			return fmt.Sprintf("tool error: decode failed: %v", err)
+		}
+		name := strings.TrimSpace(payload.Name)
+		if name == "" {
+			name = strings.TrimSpace(payload.ToolID)
+		}
+		return fmt.Sprintf("tool failed: %s: %s", name, strings.TrimSpace(payload.Error))
+	case ipc.EventModelChanged:
+		var payload ipc.ModelChangedPayload
+		if err := json.Unmarshal(event.Payload, &payload); err != nil {
+			return fmt.Sprintf("model: decode failed: %v", err)
+		}
+		return "model: " + strings.TrimSpace(payload.Model)
+	case ipc.EventModeChanged:
+		var payload ipc.ModeChangedPayload
+		if err := json.Unmarshal(event.Payload, &payload); err != nil {
+			return fmt.Sprintf("mode: decode failed: %v", err)
+		}
+		return "mode: " + strings.TrimSpace(payload.Mode)
 	case ipc.EventTurnComplete:
 		return "turn complete"
 	default:

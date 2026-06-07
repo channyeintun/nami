@@ -24,6 +24,7 @@ type model struct {
 	status     string
 	errMessage string
 	turnActive bool
+	assistant  string
 }
 
 func newModel(ctx context.Context, cfg config.Config) model {
@@ -69,18 +70,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case engineDoneMsg:
 		if msg.err != nil && msg.err != context.Canceled {
 			m.errMessage = msg.err.Error()
-			m.lines = append(m.lines, "engine stopped: "+msg.err.Error())
+			m.appendTranscriptLine("engine stopped: " + msg.err.Error())
 		} else {
-			m.lines = append(m.lines, "engine stopped")
+			m.appendTranscriptLine("engine stopped")
 		}
 		m.status = "stopped"
-		m.renderTranscript()
 	case tea.KeyPressMsg:
 		switch msg.String() {
 		case "ctrl+c":
 			if m.turnActive {
-				m.lines = append(m.lines, "cancel requested")
-				m.renderTranscript()
+				m.appendTranscriptLine("cancel requested")
 				return m, m.engine.cancelTurn()
 			}
 			return m, tea.Batch(m.engine.shutdown(), tea.Quit)
@@ -96,11 +95,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.errMessage = err.Error()
 				return m, nil
 			}
-			m.lines = append(m.lines, "> "+text)
+			m.appendTranscriptLine("> " + text)
+			m.assistant = ""
 			m.turnActive = true
 			m.status = "running"
 			m.prompt.Reset()
-			m.renderTranscript()
 			return m, m.engine.send(msg)
 		}
 	}
@@ -119,14 +118,33 @@ func (m *model) applyEngineEvent(event ipc.StreamEvent) {
 		m.status = "ready"
 	case ipc.EventError:
 		m.errMessage = summarizeEvent(event)
+	case ipc.EventTokenDelta:
+		m.applyAssistantDelta(summarizeEvent(event))
+		return
 	case ipc.EventTurnComplete:
 		m.turnActive = false
 		m.status = "ready"
 	}
 	if summary := summarizeEvent(event); strings.TrimSpace(summary) != "" {
-		m.lines = append(m.lines, summary)
-		m.renderTranscript()
+		m.appendTranscriptLine(summary)
 	}
+}
+
+func (m *model) appendTranscriptLine(line string) {
+	m.lines = append(m.lines, line)
+	m.renderTranscript()
+}
+
+func (m *model) applyAssistantDelta(delta string) {
+	if delta == "" {
+		return
+	}
+	if m.assistant == "" {
+		m.lines = append(m.lines, "assistant: ")
+	}
+	m.assistant += delta
+	m.lines[len(m.lines)-1] = "assistant: " + strings.TrimRight(m.assistant, "\n")
+	m.renderTranscript()
 }
 
 func (m model) View() tea.View {

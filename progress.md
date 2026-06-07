@@ -26,13 +26,14 @@ The migration is not complete.
 - 2026-06-08: Added a minimal Bubble Tea shell with `viewport`, `textarea`, Lip Gloss styles, and a new `cmd/nami` entrypoint.
 - 2026-06-08: Wired the Bubble Tea shell to `engine.RunEmbeddedEngine`, converting engine events into Bubble Tea messages and submitted prompts into `ipc.ClientMessage` values.
 - 2026-06-08: Added active-turn tracking so `ctrl+c` sends `ipc.MsgCancel` during a turn and exits only while idle.
+- 2026-06-08: Improved the early transcript renderer by aggregating streaming assistant tokens and formatting common engine events.
 
 ## Next Task
 
 Start Phase 2 by adding a minimal Bubble Tea shell:
 
-- improve transcript rendering beyond raw event summaries
 - handle resize and prompt layout polish
+- add footer key hints with Bubbles `key` and `help`
 
 Done:
 
@@ -48,6 +49,7 @@ Done:
 - convert engine events into Bubble Tea messages
 - send submitted prompts to the embedded engine
 - refine cancellation behavior so `ctrl+c` cancels an active turn before exiting when idle
+- improve transcript rendering beyond raw event summaries
 - keep the stdio wrapper behavior unchanged
 - keep `nami --stdio` behavior unchanged
 
