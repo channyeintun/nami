@@ -52,12 +52,14 @@ The migration is not complete.
 - 2026-06-08: Updated the Windows installer and release Makefiles to install and package a single Go `nami` executable.
 - 2026-06-08: Updated README and website install/architecture docs for the Bubble Tea single-executable packaging model.
 - 2026-06-08: Removed the legacy Silvery/React TUI source tree and stale npm package files now that release packaging uses the Go executable.
+- 2026-06-08: Fixed release packaging to build the full Cobra CLI package as `nami`, preserving `--stdio`, and bumped the source-build requirement to Go 1.26.4 after `govulncheck` flagged standard-library vulnerabilities in Go 1.26.3.
+- 2026-06-08: Completed automated final checks: `go build ./...`, `make release`, archive single-binary inspection, `nami --help` without Node on `PATH`, stdio `shutdown` smoke, and `govulncheck`.
 
 ## Next Task
 
 Start Phase 7 by collapsing packaging and CLI:
 
-- run final release, stdio, vulnerability, and no-JS-runtime verification
+- run a manual interactive Bubble Tea TUI smoke in a real terminal and resolve any remaining parity gaps
 - keep the no-tests constraint while porting reducer logic
 
 Done:
@@ -101,6 +103,7 @@ Done:
 - update Windows installer and release/build scripts to install one Go executable
 - update docs and website install instructions for the single executable
 - remove legacy JS TUI sources and npm package metadata
+- run final release, stdio, vulnerability, and no-JS-runtime verification
 - keep the stdio wrapper behavior unchanged
 - keep `nami --stdio` behavior unchanged
 

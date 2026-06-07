@@ -33,7 +33,7 @@ Nami is built on three core pillars:
 
 - macOS, Linux, or Windows 11
 - One configured model provider: Anthropic, OpenAI, Google, DeepSeek, Groq, Mistral, Ollama, or GitHub Copilot
-- Go 1.26.3 only if building from source
+- Go 1.26.4 only if building from source
 
 ### Install
 
@@ -479,7 +479,7 @@ Normal TUI usage runs in one executable. The `nami --stdio` engine protocol rema
 
 ## Building from Source
 
-Requires: Go 1.26.3
+Requires: Go 1.26.4
 
 ```bash
 cd nami
