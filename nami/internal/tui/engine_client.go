@@ -126,6 +126,54 @@ func makeArtifactReviewResponseMessage(requestID, decision string) (ipc.ClientMe
 	return ipc.ClientMessage{Type: ipc.MsgArtifactReviewResponse, Payload: payload}, nil
 }
 
+func makeSelectionResponseMessage(request selectionRequestState, option selectionOptionState, cancel bool) (ipc.ClientMessage, error) {
+	switch request.Kind {
+	case "model":
+		payload, err := json.Marshal(ipc.ModelSelectionResponsePayload{
+			RequestID: request.RequestID,
+			Model:     option.Model,
+			Provider:  option.Provider,
+			Cancel:    cancel,
+		})
+		if err != nil {
+			return ipc.ClientMessage{}, fmt.Errorf("marshal model selection response: %w", err)
+		}
+		return ipc.ClientMessage{Type: ipc.MsgModelSelectionResponse, Payload: payload}, nil
+	case "reasoning":
+		payload, err := json.Marshal(ipc.ReasoningSelectionResponsePayload{
+			RequestID: request.RequestID,
+			Effort:    option.Effort,
+			Cancel:    cancel,
+		})
+		if err != nil {
+			return ipc.ClientMessage{}, fmt.Errorf("marshal reasoning selection response: %w", err)
+		}
+		return ipc.ClientMessage{Type: ipc.MsgReasoningSelectionResponse, Payload: payload}, nil
+	case "resume":
+		payload, err := json.Marshal(ipc.ResumeSelectionResponsePayload{
+			RequestID: request.RequestID,
+			SessionID: option.SessionID,
+			Cancel:    cancel,
+		})
+		if err != nil {
+			return ipc.ClientMessage{}, fmt.Errorf("marshal resume selection response: %w", err)
+		}
+		return ipc.ClientMessage{Type: ipc.MsgResumeSelectionResponse, Payload: payload}, nil
+	case "rewind":
+		payload, err := json.Marshal(ipc.RewindSelectionResponsePayload{
+			RequestID:    request.RequestID,
+			MessageIndex: option.MessageIndex,
+			Cancel:       cancel,
+		})
+		if err != nil {
+			return ipc.ClientMessage{}, fmt.Errorf("marshal rewind selection response: %w", err)
+		}
+		return ipc.ClientMessage{Type: ipc.MsgRewindSelectionResponse, Payload: payload}, nil
+	default:
+		return ipc.ClientMessage{}, fmt.Errorf("unknown selection kind %q", request.Kind)
+	}
+}
+
 func summarizeEvent(event ipc.StreamEvent) string {
 	switch event.Type {
 	case ipc.EventReady:

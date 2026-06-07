@@ -1,5 +1,7 @@
 package tui
 
+import "strings"
+
 type uiState struct {
 	Ready              bool
 	Status             string
@@ -82,6 +84,7 @@ type selectionRequestState struct {
 	RequestID string
 	Title     string
 	Count     int
+	Options   []selectionOptionState
 }
 
 type slashCommandState struct {
@@ -89,6 +92,20 @@ type slashCommandState struct {
 	Description    string
 	Usage          string
 	TakesArguments bool
+}
+
+type selectionOptionState struct {
+	Label        string
+	Description  string
+	Model        string
+	Provider     string
+	Effort       string
+	SessionID    string
+	MessageIndex int
+}
+
+func (o selectionOptionState) FilterValue() string {
+	return strings.TrimSpace(o.Label + " " + o.Description)
 }
 
 func newUIState() uiState {
@@ -135,5 +152,10 @@ func (s uiState) clearPermissionRequest() uiState {
 
 func (s uiState) clearArtifactReview() uiState {
 	s.ArtifactReview = nil
+	return s
+}
+
+func (s uiState) clearSelectionRequest() uiState {
+	s.SelectionRequest = nil
 	return s
 }

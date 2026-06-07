@@ -7,6 +7,7 @@ import (
 
 	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/list"
 	"charm.land/bubbles/v2/textarea"
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
@@ -23,6 +24,7 @@ type model struct {
 	width              int
 	height             int
 	transcript         viewport.Model
+	selection          list.Model
 	prompt             textarea.Model
 	state              uiState
 	promptHistory      []string
@@ -45,6 +47,10 @@ func newModel(ctx context.Context, cfg config.Config) model {
 	transcript := viewport.New()
 	transcript.SoftWrap = true
 	transcript.SetContent("Nami Bubble Tea shell starting...")
+	selection := list.New(nil, list.NewDefaultDelegate(), 80, 5)
+	selection.SetShowStatusBar(false)
+	selection.SetFilteringEnabled(false)
+	selection.SetShowHelp(false)
 
 	return model{
 		cfg:                cfg,
@@ -52,6 +58,7 @@ func newModel(ctx context.Context, cfg config.Config) model {
 		keymap:             defaultKeyMap(),
 		help:               help.New(),
 		transcript:         transcript,
+		selection:          selection,
 		prompt:             prompt,
 		state:              newUIState(),
 		promptHistoryIndex: -1,
@@ -74,7 +81,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case engineStartedMsg:
 		m.state.Status = "engine starting"
 	case engineEventMsg:
+		hadSelection := m.state.SelectionRequest
 		m.state = applyEvent(m.state, msg.event)
+		if m.state.SelectionRequest != hadSelection {
+			m.syncSelectionList()
+		}
 		m.renderTranscript()
 		return m, m.engine.wait()
 	case engineDoneMsg:
@@ -91,6 +102,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if hasActionableDialog(m.state) {
 			if handled, cmd := m.handleDialogKey(msg); handled {
+				return m, cmd
+			}
+		}
+		if m.state.SelectionRequest != nil {
+			if handled, cmd := m.handleSelectionKey(msg); handled {
 				return m, cmd
 			}
 		}
@@ -150,11 +166,68 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	var cmd tea.Cmd
+	if m.state.SelectionRequest != nil {
+		m.selection, cmd = m.selection.Update(msg)
+		cmds = append(cmds, cmd)
+	}
 	m.prompt, cmd = m.prompt.Update(msg)
 	cmds = append(cmds, cmd)
 	m.transcript, cmd = m.transcript.Update(msg)
 	cmds = append(cmds, cmd)
 	return m, tea.Batch(cmds...)
+}
+
+func (m *model) syncSelectionList() {
+	if m.state.SelectionRequest == nil {
+		m.selection.SetItems(nil)
+		return
+	}
+	_ = m.selection.SetItems(selectionItems(m.state.SelectionRequest.Options))
+	m.selection.Title = selectionListTitle(*m.state.SelectionRequest)
+}
+
+func (m *model) handleSelectionKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
+	switch {
+	case key.Matches(msg, m.keymap.Submit):
+		return true, m.sendSelectionResponse()
+	case key.Matches(msg, m.keymap.Quit), key.Matches(msg, m.keymap.Deny):
+		return true, m.sendSelectionCancel()
+	default:
+		return false, nil
+	}
+}
+
+func (m *model) sendSelectionResponse() tea.Cmd {
+	if m.state.SelectionRequest == nil {
+		return nil
+	}
+	item, ok := m.selection.SelectedItem().(selectionOptionState)
+	if !ok {
+		m.state.ErrorMessage = "no selection item is active"
+		return nil
+	}
+	msg, err := makeSelectionResponseMessage(*m.state.SelectionRequest, item, false)
+	if err != nil {
+		m.state.ErrorMessage = err.Error()
+		return nil
+	}
+	m.state = m.state.clearSelectionRequest()
+	m.syncSelectionList()
+	return m.engine.send(msg)
+}
+
+func (m *model) sendSelectionCancel() tea.Cmd {
+	if m.state.SelectionRequest == nil {
+		return nil
+	}
+	msg, err := makeSelectionResponseMessage(*m.state.SelectionRequest, selectionOptionState{}, true)
+	if err != nil {
+		m.state.ErrorMessage = err.Error()
+		return nil
+	}
+	m.state = m.state.clearSelectionRequest()
+	m.syncSelectionList()
+	return m.engine.send(msg)
 }
 
 func (m *model) handleDialogKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
@@ -314,13 +387,19 @@ func (m *model) resize() {
 		errorHeight = 1
 	}
 	dialogHeight := dialogHeight(m.state, m.width)
-	transcriptHeight := m.height - promptHeight - statusHeight - footerHeight - errorHeight - dialogHeight
+	selectionHeight := 0
+	if m.state.SelectionRequest != nil {
+		selectionHeight = 6
+	}
+	transcriptHeight := m.height - promptHeight - statusHeight - footerHeight - errorHeight - dialogHeight - selectionHeight
 	if transcriptHeight < 1 {
 		transcriptHeight = 1
 	}
 
 	m.transcript.SetWidth(m.width)
 	m.transcript.SetHeight(transcriptHeight)
+	m.selection.SetWidth(m.width)
+	m.selection.SetHeight(selectionHeight)
 	m.prompt.SetWidth(m.width)
 	m.prompt.SetHeight(promptHeight)
 	m.help.SetWidth(m.width)
@@ -360,6 +439,9 @@ func (m model) content() string {
 	}
 	if dialog := renderDialog(m.state, width); strings.TrimSpace(dialog) != "" {
 		parts = append(parts, dialog)
+	}
+	if m.state.SelectionRequest != nil {
+		parts = append(parts, m.selection.View())
 	}
 	parts = append(parts, m.prompt.View())
 	if strings.TrimSpace(m.state.ErrorMessage) != "" {

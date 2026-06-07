@@ -41,12 +41,13 @@ The migration is not complete.
 - 2026-06-08: Improved structured transcript row kinds for tool, progress, artifact, background, and error events.
 - 2026-06-08: Started Phase 5 by rendering pending permission, question, selection, and artifact-review request state in a dialog band.
 - 2026-06-08: Wired keyboard responses for permission dialogs and artifact-review dialogs.
+- 2026-06-08: Wired Bubbles list selection dialogs for model, reasoning, resume, and rewind requests with enter/escape responses.
 
 ## Next Task
 
 Start Phase 5 by porting dialogs:
 
-- wire basic selection dialog responses for model, reasoning, resume, and rewind requests
+- wire basic ask-user-question responses
 - keep the no-tests constraint while porting reducer logic
 
 Done:
@@ -79,6 +80,7 @@ Done:
 - improve core transcript rows for tool/progress/artifact entries
 - start Phase 5 dialog surfaces for permission, question, selection, and artifact review prompts
 - wire keyboard responses for permission and artifact review dialogs
+- wire basic selection dialog responses for model, reasoning, resume, and rewind requests
 - keep the stdio wrapper behavior unchanged
 - keep `nami --stdio` behavior unchanged
 

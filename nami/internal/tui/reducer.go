@@ -174,6 +174,7 @@ func applyEvent(state uiState, event ipc.StreamEvent) uiState {
 			RequestID: strings.TrimSpace(payload.RequestID),
 			Title:     strings.TrimSpace(payload.Title),
 			Count:     len(payload.Options),
+			Options:   modelSelectionOptions(payload.Options),
 		}
 	case ipc.EventReasoningSelectionRequested:
 		payload, err := decodePayload[ipc.ReasoningSelectionRequestedPayload](event)
@@ -185,6 +186,7 @@ func applyEvent(state uiState, event ipc.StreamEvent) uiState {
 			RequestID: strings.TrimSpace(payload.RequestID),
 			Title:     strings.TrimSpace(payload.Title),
 			Count:     len(payload.Options),
+			Options:   reasoningSelectionOptions(payload.Options),
 		}
 	case ipc.EventResumeSelectionRequested:
 		payload, err := decodePayload[ipc.ResumeSelectionRequestedPayload](event)
@@ -196,6 +198,7 @@ func applyEvent(state uiState, event ipc.StreamEvent) uiState {
 			RequestID: strings.TrimSpace(payload.RequestID),
 			Title:     "Resume session",
 			Count:     len(payload.Sessions),
+			Options:   resumeSelectionOptions(payload.Sessions),
 		}
 	case ipc.EventRewindSelectionRequested:
 		payload, err := decodePayload[ipc.RewindSelectionRequestedPayload](event)
@@ -207,6 +210,7 @@ func applyEvent(state uiState, event ipc.StreamEvent) uiState {
 			RequestID: strings.TrimSpace(payload.RequestID),
 			Title:     "Rewind conversation",
 			Count:     len(payload.Turns),
+			Options:   rewindSelectionOptions(payload.Turns),
 		}
 	case ipc.EventConversationHydrated:
 		payload, err := decodePayload[ipc.ConversationHydratedPayload](event)
@@ -288,6 +292,81 @@ func applyEvent(state uiState, event ipc.StreamEvent) uiState {
 		return state.appendTranscript(transcriptKindForEvent(event.Type), summary)
 	}
 	return state
+}
+
+func modelSelectionOptions(payload []ipc.ModelSelectionOptionPayload) []selectionOptionState {
+	options := make([]selectionOptionState, 0, len(payload))
+	for _, option := range payload {
+		label := strings.TrimSpace(option.Label)
+		if label == "" {
+			label = strings.TrimSpace(option.Model)
+		}
+		if label == "" {
+			continue
+		}
+		options = append(options, selectionOptionState{
+			Label:       label,
+			Description: strings.TrimSpace(option.Description),
+			Model:       strings.TrimSpace(option.Model),
+			Provider:    strings.TrimSpace(option.Provider),
+		})
+	}
+	return options
+}
+
+func reasoningSelectionOptions(payload []ipc.ReasoningSelectionOptionPayload) []selectionOptionState {
+	options := make([]selectionOptionState, 0, len(payload))
+	for _, option := range payload {
+		label := strings.TrimSpace(option.Label)
+		if label == "" {
+			label = strings.TrimSpace(option.Value)
+		}
+		if label == "" {
+			continue
+		}
+		options = append(options, selectionOptionState{
+			Label:       label,
+			Description: strings.TrimSpace(option.Description),
+			Effort:      strings.TrimSpace(option.Value),
+		})
+	}
+	return options
+}
+
+func resumeSelectionOptions(payload []ipc.ResumeSelectionSessionPayload) []selectionOptionState {
+	options := make([]selectionOptionState, 0, len(payload))
+	for _, session := range payload {
+		sessionID := strings.TrimSpace(session.SessionID)
+		if sessionID == "" {
+			continue
+		}
+		label := strings.TrimSpace(session.Title)
+		if label == "" {
+			label = sessionID
+		}
+		options = append(options, selectionOptionState{
+			Label:       label,
+			Description: strings.TrimSpace(session.Model),
+			SessionID:   sessionID,
+		})
+	}
+	return options
+}
+
+func rewindSelectionOptions(payload []ipc.RewindSelectionTurnPayload) []selectionOptionState {
+	options := make([]selectionOptionState, 0, len(payload))
+	for _, turn := range payload {
+		label := strings.TrimSpace(turn.Preview)
+		if label == "" {
+			label = fmt.Sprintf("Turn %d", turn.TurnNumber)
+		}
+		options = append(options, selectionOptionState{
+			Label:        label,
+			Description:  fmt.Sprintf("turn %d", turn.TurnNumber),
+			MessageIndex: turn.MessageIndex,
+		})
+	}
+	return options
 }
 
 func transcriptKindForEvent(eventType ipc.EventType) string {
