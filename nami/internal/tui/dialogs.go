@@ -10,7 +10,7 @@ func renderDialog(state uiState, width int) string {
 	case state.PermissionRequest != nil:
 		return renderPermissionDialog(*state.PermissionRequest, width)
 	case state.QuestionRequest != nil:
-		return dialogStyle.Width(width).Render(fmt.Sprintf("Question requested: %d prompt(s) | y answer recommended | n cancel", state.QuestionRequest.Count))
+		return renderQuestionDialog(*state.QuestionRequest, width)
 	case state.SelectionRequest != nil:
 		title := strings.TrimSpace(state.SelectionRequest.Title)
 		if title == "" {
@@ -23,6 +23,23 @@ func renderDialog(state uiState, width int) string {
 	default:
 		return ""
 	}
+}
+
+func renderQuestionDialog(request questionRequestState, width int) string {
+	parts := []string{fmt.Sprintf("Question requested: %d prompt(s)", request.Count)}
+	for _, question := range request.Questions {
+		option, ok := defaultQuestionOption(question.Options)
+		if !ok {
+			continue
+		}
+		label := strings.TrimSpace(option.Label)
+		if label == "" {
+			label = option.Value
+		}
+		parts = append(parts, question.Header+"="+label)
+	}
+	parts = append(parts, "y answer", "n cancel")
+	return dialogStyle.Width(width).Render(strings.Join(parts, " | "))
 }
 
 func renderPermissionDialog(request permissionRequestState, width int) string {
