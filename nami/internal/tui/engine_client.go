@@ -104,6 +104,28 @@ func makeUserInputMessage(text string) (ipc.ClientMessage, error) {
 	}, nil
 }
 
+func makePermissionResponseMessage(requestID, decision string) (ipc.ClientMessage, error) {
+	payload, err := json.Marshal(ipc.PermissionResponsePayload{
+		RequestID: requestID,
+		Decision:  decision,
+	})
+	if err != nil {
+		return ipc.ClientMessage{}, fmt.Errorf("marshal permission response: %w", err)
+	}
+	return ipc.ClientMessage{Type: ipc.MsgPermissionResponse, Payload: payload}, nil
+}
+
+func makeArtifactReviewResponseMessage(requestID, decision string) (ipc.ClientMessage, error) {
+	payload, err := json.Marshal(ipc.ArtifactReviewResponsePayload{
+		RequestID: requestID,
+		Decision:  decision,
+	})
+	if err != nil {
+		return ipc.ClientMessage{}, fmt.Errorf("marshal artifact review response: %w", err)
+	}
+	return ipc.ClientMessage{Type: ipc.MsgArtifactReviewResponse, Payload: payload}, nil
+}
+
 func summarizeEvent(event ipc.StreamEvent) string {
 	switch event.Type {
 	case ipc.EventReady:

@@ -89,6 +89,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.handleSearchKey(msg)
 			return m, nil
 		}
+		if hasActionableDialog(m.state) {
+			if handled, cmd := m.handleDialogKey(msg); handled {
+				return m, cmd
+			}
+		}
 		switch {
 		case key.Matches(msg, m.keymap.Help):
 			m.help.ShowAll = !m.help.ShowAll
@@ -150,6 +155,50 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m.transcript, cmd = m.transcript.Update(msg)
 	cmds = append(cmds, cmd)
 	return m, tea.Batch(cmds...)
+}
+
+func (m *model) handleDialogKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
+	if request := m.state.PermissionRequest; request != nil {
+		switch {
+		case key.Matches(msg, m.keymap.Approve):
+			return true, m.sendPermissionResponse(request.RequestID, "allow")
+		case key.Matches(msg, m.keymap.Always):
+			return true, m.sendPermissionResponse(request.RequestID, "always_allow")
+		case key.Matches(msg, m.keymap.Deny), key.Matches(msg, m.keymap.Quit):
+			return true, m.sendPermissionResponse(request.RequestID, "deny")
+		}
+	}
+	if review := m.state.ArtifactReview; review != nil {
+		switch {
+		case key.Matches(msg, m.keymap.Approve):
+			return true, m.sendArtifactReviewResponse(review.RequestID, "approve")
+		case key.Matches(msg, m.keymap.Revise):
+			return true, m.sendArtifactReviewResponse(review.RequestID, "revise")
+		case key.Matches(msg, m.keymap.Deny), key.Matches(msg, m.keymap.Quit):
+			return true, m.sendArtifactReviewResponse(review.RequestID, "cancel")
+		}
+	}
+	return false, nil
+}
+
+func (m *model) sendPermissionResponse(requestID, decision string) tea.Cmd {
+	msg, err := makePermissionResponseMessage(requestID, decision)
+	if err != nil {
+		m.state.ErrorMessage = err.Error()
+		return nil
+	}
+	m.state = m.state.clearPermissionRequest()
+	return m.engine.send(msg)
+}
+
+func (m *model) sendArtifactReviewResponse(requestID, decision string) tea.Cmd {
+	msg, err := makeArtifactReviewResponseMessage(requestID, decision)
+	if err != nil {
+		m.state.ErrorMessage = err.Error()
+		return nil
+	}
+	m.state = m.state.clearArtifactReview()
+	return m.engine.send(msg)
 }
 
 func (m *model) recordPromptHistory(text string) {

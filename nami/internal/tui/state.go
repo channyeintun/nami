@@ -127,3 +127,13 @@ func (s uiState) stopEngine(err error) uiState {
 	}
 	return s.appendLine("engine stopped")
 }
+
+func (s uiState) clearPermissionRequest() uiState {
+	s.PermissionRequest = nil
+	return s
+}
+
+func (s uiState) clearArtifactReview() uiState {
+	s.ArtifactReview = nil
+	return s
+}

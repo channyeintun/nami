@@ -14,6 +14,10 @@ type keyMap struct {
 	PageUp      key.Binding
 	PageDown    key.Binding
 	FollowTail  key.Binding
+	Approve     key.Binding
+	Deny        key.Binding
+	Always      key.Binding
+	Revise      key.Binding
 }
 
 func defaultKeyMap() keyMap {
@@ -61,6 +65,22 @@ func defaultKeyMap() keyMap {
 		FollowTail: key.NewBinding(
 			key.WithKeys("end"),
 			key.WithHelp("end", "tail"),
+		),
+		Approve: key.NewBinding(
+			key.WithKeys("y"),
+			key.WithHelp("y", "approve"),
+		),
+		Deny: key.NewBinding(
+			key.WithKeys("n"),
+			key.WithHelp("n", "deny"),
+		),
+		Always: key.NewBinding(
+			key.WithKeys("a"),
+			key.WithHelp("a", "always"),
+		),
+		Revise: key.NewBinding(
+			key.WithKeys("r"),
+			key.WithHelp("r", "revise"),
 		),
 	}
 }
