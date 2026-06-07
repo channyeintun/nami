@@ -77,6 +77,18 @@ type permissionRequestState struct {
 type questionRequestState struct {
 	RequestID string
 	Count     int
+	Questions []questionPromptState
+}
+
+type questionPromptState struct {
+	Header  string
+	Options []questionOptionState
+}
+
+type questionOptionState struct {
+	Label       string
+	Value       string
+	Recommended bool
 }
 
 type selectionRequestState struct {
@@ -157,5 +169,10 @@ func (s uiState) clearArtifactReview() uiState {
 
 func (s uiState) clearSelectionRequest() uiState {
 	s.SelectionRequest = nil
+	return s
+}
+
+func (s uiState) clearQuestionRequest() uiState {
+	s.QuestionRequest = nil
 	return s
 }

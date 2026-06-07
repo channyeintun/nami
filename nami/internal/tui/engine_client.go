@@ -174,6 +174,45 @@ func makeSelectionResponseMessage(request selectionRequestState, option selectio
 	}
 }
 
+func makeQuestionResponseMessage(request questionRequestState, cancel bool) (ipc.ClientMessage, error) {
+	payload := ipc.AskUserQuestionResponsePayload{
+		RequestID: request.RequestID,
+		Status:    "cancelled",
+	}
+	if !cancel {
+		payload.Status = "answered"
+		payload.Answers = make([]ipc.AskUserQuestionAnswerPayload, 0, len(request.Questions))
+		for _, question := range request.Questions {
+			option, ok := defaultQuestionOption(question.Options)
+			if !ok {
+				return ipc.ClientMessage{}, fmt.Errorf("question %q has no selectable option", question.Header)
+			}
+			payload.Answers = append(payload.Answers, ipc.AskUserQuestionAnswerPayload{
+				Header:         question.Header,
+				SelectedValues: []string{option.Value},
+				RawAnswer:      option.Value,
+			})
+		}
+	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return ipc.ClientMessage{}, fmt.Errorf("marshal question response: %w", err)
+	}
+	return ipc.ClientMessage{Type: ipc.MsgAskUserQuestionResponse, Payload: data}, nil
+}
+
+func defaultQuestionOption(options []questionOptionState) (questionOptionState, bool) {
+	for _, option := range options {
+		if option.Recommended {
+			return option, true
+		}
+	}
+	if len(options) == 0 {
+		return questionOptionState{}, false
+	}
+	return options[0], true
+}
+
 func summarizeEvent(event ipc.StreamEvent) string {
 	switch event.Type {
 	case ipc.EventReady:

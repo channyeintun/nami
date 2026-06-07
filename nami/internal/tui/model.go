@@ -251,6 +251,14 @@ func (m *model) handleDialogKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 			return true, m.sendArtifactReviewResponse(review.RequestID, "cancel")
 		}
 	}
+	if question := m.state.QuestionRequest; question != nil {
+		switch {
+		case key.Matches(msg, m.keymap.Approve):
+			return true, m.sendQuestionResponse(false)
+		case key.Matches(msg, m.keymap.Deny), key.Matches(msg, m.keymap.Quit):
+			return true, m.sendQuestionResponse(true)
+		}
+	}
 	return false, nil
 }
 
@@ -271,6 +279,19 @@ func (m *model) sendArtifactReviewResponse(requestID, decision string) tea.Cmd {
 		return nil
 	}
 	m.state = m.state.clearArtifactReview()
+	return m.engine.send(msg)
+}
+
+func (m *model) sendQuestionResponse(cancel bool) tea.Cmd {
+	if m.state.QuestionRequest == nil {
+		return nil
+	}
+	msg, err := makeQuestionResponseMessage(*m.state.QuestionRequest, cancel)
+	if err != nil {
+		m.state.ErrorMessage = err.Error()
+		return nil
+	}
+	m.state = m.state.clearQuestionRequest()
 	return m.engine.send(msg)
 }
 

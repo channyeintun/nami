@@ -163,6 +163,7 @@ func applyEvent(state uiState, event ipc.StreamEvent) uiState {
 		state.QuestionRequest = &questionRequestState{
 			RequestID: strings.TrimSpace(payload.RequestID),
 			Count:     len(payload.Questions),
+			Questions: questionPrompts(payload.Questions),
 		}
 	case ipc.EventModelSelectionRequested:
 		payload, err := decodePayload[ipc.ModelSelectionRequestedPayload](event)
@@ -292,6 +293,36 @@ func applyEvent(state uiState, event ipc.StreamEvent) uiState {
 		return state.appendTranscript(transcriptKindForEvent(event.Type), summary)
 	}
 	return state
+}
+
+func questionPrompts(payload []ipc.AskUserQuestionPromptPayload) []questionPromptState {
+	questions := make([]questionPromptState, 0, len(payload))
+	for _, prompt := range payload {
+		header := strings.TrimSpace(prompt.Header)
+		if header == "" {
+			continue
+		}
+		options := make([]questionOptionState, 0, len(prompt.Options))
+		for _, option := range prompt.Options {
+			value := strings.TrimSpace(option.Value)
+			if value == "" {
+				value = strings.TrimSpace(option.Label)
+			}
+			if value == "" {
+				continue
+			}
+			options = append(options, questionOptionState{
+				Label:       strings.TrimSpace(option.Label),
+				Value:       value,
+				Recommended: option.Recommended,
+			})
+		}
+		questions = append(questions, questionPromptState{
+			Header:  header,
+			Options: options,
+		})
+	}
+	return questions
 }
 
 func modelSelectionOptions(payload []ipc.ModelSelectionOptionPayload) []selectionOptionState {

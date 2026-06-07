@@ -10,7 +10,7 @@ func renderDialog(state uiState, width int) string {
 	case state.PermissionRequest != nil:
 		return renderPermissionDialog(*state.PermissionRequest, width)
 	case state.QuestionRequest != nil:
-		return dialogStyle.Width(width).Render(fmt.Sprintf("Question requested: %d prompt(s)", state.QuestionRequest.Count))
+		return dialogStyle.Width(width).Render(fmt.Sprintf("Question requested: %d prompt(s) | y answer recommended | n cancel", state.QuestionRequest.Count))
 	case state.SelectionRequest != nil:
 		title := strings.TrimSpace(state.SelectionRequest.Title)
 		if title == "" {
@@ -41,7 +41,7 @@ func renderPermissionDialog(request permissionRequestState, width int) string {
 }
 
 func hasActionableDialog(state uiState) bool {
-	return state.PermissionRequest != nil || state.ArtifactReview != nil
+	return state.PermissionRequest != nil || state.ArtifactReview != nil || state.QuestionRequest != nil
 }
 
 func dialogHeight(state uiState, width int) int {
