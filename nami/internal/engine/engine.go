@@ -46,6 +46,11 @@ func RunStdioEngine(ctx context.Context, cfg config.Config) error {
 	return runEngine(ctx, cfg, bridge, time.Now())
 }
 
+func RunEmbeddedEngine(ctx context.Context, cfg config.Config, messages <-chan ipc.ClientMessage, events chan<- ipc.StreamEvent) error {
+	transport := ipc.NewChannelTransport(messages, events)
+	return runEngine(ctx, cfg, transport, time.Now())
+}
+
 func runEngine(ctx context.Context, cfg config.Config, bridge engineTransport, engineStartedAt time.Time) error {
 	registry := toolpkg.NewRegistry()
 	startupSelection := resolveStartupProviderSelection(cfg)
