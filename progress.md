@@ -55,12 +55,13 @@ The migration is not complete.
 - 2026-06-08: Fixed release packaging to build the full Cobra CLI package as `nami`, preserving `--stdio`, and bumped the source-build requirement to Go 1.26.4 after `govulncheck` flagged standard-library vulnerabilities in Go 1.26.3.
 - 2026-06-08: Completed automated final checks: `go build ./...`, `make release`, archive single-binary inspection, `nami --help` without Node on `PATH`, stdio `shutdown` smoke, and `govulncheck`.
 - 2026-06-08: Removed the explicit website prerequisite note about JavaScript runtime requirements from the docs page.
+- 2026-06-08: Ran an interactive Bubble Tea TUI smoke in a PTY; the initial screen rendered ready state and Ctrl-C exited cleanly.
 
 ## Next Task
 
 Start Phase 7 by collapsing packaging and CLI:
 
-- run a manual interactive Bubble Tea TUI smoke in a real terminal and resolve any remaining parity gaps
+- run a final completion audit against `plan.md` and current repo state
 - keep the no-tests constraint while porting reducer logic
 
 Done:
@@ -105,6 +106,7 @@ Done:
 - update docs and website install instructions for the single executable
 - remove legacy JS TUI sources and npm package metadata
 - run final release, stdio, vulnerability, and no-JS-runtime verification
+- run manual interactive Bubble Tea TUI smoke
 - keep the stdio wrapper behavior unchanged
 - keep `nami --stdio` behavior unchanged
 
