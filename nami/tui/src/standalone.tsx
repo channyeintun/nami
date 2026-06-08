@@ -5,7 +5,7 @@
  */
 import { dirname, join } from "node:path";
 import { existsSync } from "node:fs";
-import { detectTerminalCaps, ThemeProvider } from "silvery";
+import { createTerminalProfile, ThemeProvider } from "silvery";
 import { createApp } from "silvery/runtime";
 import { createTheme } from "silvery/theme";
 import React from "react";
@@ -38,7 +38,7 @@ const theme = createTheme()
   .color("selectionBackground", "#4A4C53")
   .color("selectionForeground", "#E2E2E3")
   .build();
-const caps = detectTerminalCaps();
+const profile = createTerminalProfile();
 
 const args = process.argv.slice(2);
 for (let i = 0; i < args.length; i++) {
@@ -66,9 +66,9 @@ const handle = await app.run(
     <App enginePath={enginePath} model={model} mode={mode} autoMode={autoMode} />
   </ThemeProvider>,
   {
-    caps,
+    profile,
     alternateScreen: true,
-    kitty: caps.kittyKeyboard,
+    kitty: profile.caps.kittyKeyboard,
     focusReporting: true,
     textSizing: "auto",
     widthDetection: "auto",
