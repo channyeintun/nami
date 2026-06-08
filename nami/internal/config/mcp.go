@@ -262,18 +262,3 @@ func walkUpDirs(start string) []string {
 	}
 	return dirs
 }
-
-//go:fix inline
-func stringPtr(value string) *string {
-	return new(value)
-}
-
-//go:fix inline
-func boolPtr(value bool) *bool {
-	return new(value)
-}
-
-//go:fix inline
-func intPtr(value int) *int {
-	return new(value)
-}

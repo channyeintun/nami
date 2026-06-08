@@ -566,13 +566,3 @@ func formatSortedKeyValue(values map[string]string, format string) []string {
 	}
 	return lines
 }
-
-//go:fix inline
-func stringPtr(value string) *string {
-	return new(value)
-}
-
-//go:fix inline
-func intPtr(value int) *int {
-	return new(value)
-}
