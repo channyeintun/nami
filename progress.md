@@ -54,6 +54,7 @@ The migration is not complete.
 - 2026-06-08: Removed the legacy Silvery/React TUI source tree and stale npm package files now that release packaging uses the Go executable.
 - 2026-06-08: Fixed release packaging to build the full Cobra CLI package as `nami`, preserving `--stdio`, and bumped the source-build requirement to Go 1.26.4 after `govulncheck` flagged standard-library vulnerabilities in Go 1.26.3.
 - 2026-06-08: Completed automated final checks: `go build ./...`, `make release`, archive single-binary inspection, `nami --help` without Node on `PATH`, stdio `shutdown` smoke, and `govulncheck`.
+- 2026-06-08: Removed the explicit website prerequisite note about JavaScript runtime requirements from the docs page.
 
 ## Next Task
 
