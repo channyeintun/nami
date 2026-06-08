@@ -32,6 +32,7 @@ const handle = await app.run(
     alternateScreen: true,
     kitty: profile.caps.kittyKeyboard,
     focusReporting: true,
+    handleTabCycling: false,
     textSizing: "auto",
     widthDetection: "auto",
   },
