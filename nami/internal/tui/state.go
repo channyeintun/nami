@@ -126,7 +126,6 @@ func newUIState() uiState {
 		Artifacts:          make(map[string]artifactState),
 		BackgroundCommands: make(map[string]backgroundCommandState),
 		BackgroundAgents:   make(map[string]backgroundAgentState),
-		Transcript:         []transcriptEntry{{Kind: "system", Text: "Nami Bubble Tea shell starting..."}},
 	}
 }
 

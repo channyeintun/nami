@@ -41,7 +41,7 @@ type model struct {
 func newModel(ctx context.Context, cfg config.Config) model {
 	prompt := textarea.New()
 	prompt.Placeholder = "Ask Nami"
-	prompt.Prompt = "> "
+	prompt.Prompt = promptMarkerStyle.Render("> ")
 	prompt.ShowLineNumbers = false
 	prompt.SetHeight(3)
 	prompt.SetWidth(80)
@@ -49,7 +49,7 @@ func newModel(ctx context.Context, cfg config.Config) model {
 
 	transcript := viewport.New()
 	transcript.SoftWrap = true
-	transcript.SetContent("Nami Bubble Tea shell starting...")
+	transcript.SetContent(renderTranscript(nil))
 	selection := list.New(nil, list.NewDefaultDelegate(), 80, 5)
 	selection.SetShowStatusBar(false)
 	selection.SetFilteringEnabled(false)
@@ -445,6 +445,8 @@ func (m *model) resize() {
 
 	statusHeight := 1
 	promptHeight := promptHeightFor(m.height)
+	promptChromeHeight := 1
+	transcriptChromeHeight := 2
 	footerHeight := lipgloss.Height(m.help.View(m.keymap))
 	if footerHeight < 1 {
 		footerHeight = 1
@@ -458,7 +460,7 @@ func (m *model) resize() {
 	if m.state.SelectionRequest != nil {
 		selectionHeight = 6
 	}
-	transcriptHeight := m.height - promptHeight - statusHeight - footerHeight - errorHeight - dialogHeight - selectionHeight
+	transcriptHeight := m.height - promptHeight - promptChromeHeight - transcriptChromeHeight - statusHeight - footerHeight - errorHeight - dialogHeight - selectionHeight
 	if transcriptHeight < 1 {
 		transcriptHeight = 1
 	}
@@ -502,7 +504,7 @@ func (m model) content() string {
 	footer := footerStyle.Width(width).Render(m.help.View(m.keymap))
 	parts := []string{
 		status,
-		m.transcript.View(),
+		transcriptPanelStyle.Width(width).Render(m.transcript.View()),
 	}
 	if dialog := renderDialog(m.state, width); strings.TrimSpace(dialog) != "" {
 		parts = append(parts, dialog)
@@ -510,79 +512,89 @@ func (m model) content() string {
 	if m.state.SelectionRequest != nil {
 		parts = append(parts, m.selection.View())
 	}
-	parts = append(parts, m.prompt.View())
+	parts = append(parts, promptPanelStyle.Width(width).Render(m.prompt.View()))
 	if strings.TrimSpace(m.state.ErrorMessage) != "" {
 		parts = append(parts, errorStyle.Width(width).Render(m.state.ErrorMessage))
 	}
 	parts = append(parts, footer)
-	return lipgloss.JoinVertical(lipgloss.Left, parts...)
+	return appBackgroundStyle.Width(width).Render(lipgloss.JoinVertical(lipgloss.Left, parts...))
 }
 
 func (m model) statusLine() string {
-	parts := []string{"nami", m.state.Status}
+	parts := []string{
+		statusReadyStyle.Render(m.state.Status),
+		statusMutedStyle.Render("nami"),
+	}
 	if m.state.Mode != "" {
-		parts = append(parts, "mode "+m.state.Mode)
+		parts = append(parts, statusModeStyle.Render("["+strings.ToUpper(m.state.Mode)+"]"))
 	}
 	if m.state.Model != "" {
-		model := "model " + m.state.Model
+		model := m.state.Model
 		if m.state.Reasoning != "" {
-			model += " " + m.state.Reasoning
+			model += " [" + m.state.Reasoning + "]"
 		}
-		parts = append(parts, model)
+		parts = append(parts, statusModelStyle.Render(model))
 	}
 	if m.state.ContextMax > 0 {
-		parts = append(parts, fmt.Sprintf("ctx %d/%d", m.state.ContextUsage, m.state.ContextMax))
+		parts = append(parts, statusMutedStyle.Render(fmt.Sprintf("ctx %d/%d", m.state.ContextUsage, m.state.ContextMax)))
 	} else if m.state.ContextUsage > 0 {
-		parts = append(parts, fmt.Sprintf("ctx %d", m.state.ContextUsage))
+		parts = append(parts, statusMutedStyle.Render(fmt.Sprintf("ctx %d", m.state.ContextUsage)))
 	}
 	if m.state.TotalUSD > 0 {
-		parts = append(parts, fmt.Sprintf("$%.4f", m.state.TotalUSD))
+		parts = append(parts, statusMutedStyle.Render(fmt.Sprintf("$%.4f", m.state.TotalUSD)))
 	}
 	if m.state.RateLimit != "" {
-		parts = append(parts, "limit "+m.state.RateLimit)
+		parts = append(parts, statusMutedStyle.Render("limit "+m.state.RateLimit))
 	}
 	if m.state.SessionTitle != "" {
-		parts = append(parts, "session "+m.state.SessionTitle)
+		parts = append(parts, statusMutedStyle.Render("session "+m.state.SessionTitle))
 	} else if m.state.SessionID != "" {
-		parts = append(parts, "session "+m.state.SessionID)
+		parts = append(parts, statusMutedStyle.Render("session "+shortID(m.state.SessionID)))
 	}
 	if m.state.MemoryCount > 0 {
-		parts = append(parts, fmt.Sprintf("memory %d", m.state.MemoryCount))
+		parts = append(parts, statusMutedStyle.Render(fmt.Sprintf("memory %d", m.state.MemoryCount)))
 	}
 	if m.state.RetrievalSummary != "" {
-		parts = append(parts, "retrieval "+m.state.RetrievalSummary)
+		parts = append(parts, statusMutedStyle.Render("retrieval "+m.state.RetrievalSummary))
 	}
 	if m.state.Compacting {
-		parts = append(parts, "compacting")
+		parts = append(parts, statusMutedStyle.Render("compacting"))
 	} else if m.state.CompactSummary != "" {
-		parts = append(parts, "compact "+m.state.CompactSummary)
+		parts = append(parts, statusMutedStyle.Render("compact "+m.state.CompactSummary))
 	}
 	if m.state.LastTiming != "" {
-		parts = append(parts, "timing "+m.state.LastTiming)
+		parts = append(parts, statusMutedStyle.Render("timing "+m.state.LastTiming))
 	}
 	if m.searchActive || m.searchQuery != "" {
-		parts = append(parts, fmt.Sprintf("search %q %d", m.searchQuery, m.searchMatches))
+		parts = append(parts, statusMutedStyle.Render(fmt.Sprintf("search %q %d", m.searchQuery, m.searchMatches)))
 	}
 	if len(m.state.Artifacts) > 0 {
-		parts = append(parts, fmt.Sprintf("artifacts %d", len(m.state.Artifacts)))
+		parts = append(parts, statusMutedStyle.Render(fmt.Sprintf("artifacts %d", len(m.state.Artifacts))))
 	}
 	if len(m.state.BackgroundCommands) > 0 {
-		parts = append(parts, fmt.Sprintf("bg cmd %d", len(m.state.BackgroundCommands)))
+		parts = append(parts, statusMutedStyle.Render(fmt.Sprintf("bg cmd %d", len(m.state.BackgroundCommands))))
 	}
 	if len(m.state.BackgroundAgents) > 0 {
-		parts = append(parts, fmt.Sprintf("agents %d", len(m.state.BackgroundAgents)))
+		parts = append(parts, statusMutedStyle.Render(fmt.Sprintf("agents %d", len(m.state.BackgroundAgents))))
 	}
 	if m.state.ArtifactReview != nil {
-		parts = append(parts, "review "+m.state.ArtifactReview.Artifact.Title)
+		parts = append(parts, statusMutedStyle.Render("review "+m.state.ArtifactReview.Artifact.Title))
 	}
 	if m.state.PermissionRequest != nil {
-		parts = append(parts, "permission "+m.state.PermissionRequest.Tool)
+		parts = append(parts, statusMutedStyle.Render("permission "+m.state.PermissionRequest.Tool))
 	}
 	if m.state.QuestionRequest != nil {
-		parts = append(parts, fmt.Sprintf("questions %d", m.state.QuestionRequest.Count))
+		parts = append(parts, statusMutedStyle.Render(fmt.Sprintf("questions %d", m.state.QuestionRequest.Count)))
 	}
 	if m.state.SelectionRequest != nil {
-		parts = append(parts, fmt.Sprintf("%s options %d", m.state.SelectionRequest.Kind, m.state.SelectionRequest.Count))
+		parts = append(parts, statusMutedStyle.Render(fmt.Sprintf("%s options %d", m.state.SelectionRequest.Kind, m.state.SelectionRequest.Count)))
 	}
-	return strings.Join(parts, " | ")
+	return strings.Join(parts, statusMutedStyle.Render("  .  "))
+}
+
+func shortID(id string) string {
+	if len(id) <= 8 {
+		return id
+	}
+	return id[:8]
 }

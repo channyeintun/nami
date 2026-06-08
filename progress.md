@@ -56,12 +56,13 @@ The migration is not complete.
 - 2026-06-08: Completed automated final checks: `go build ./...`, `make release`, archive single-binary inspection, `nami --help` without Node on `PATH`, stdio `shutdown` smoke, and `govulncheck`.
 - 2026-06-08: Removed the explicit website prerequisite note about JavaScript runtime requirements from the docs page.
 - 2026-06-08: Ran an interactive Bubble Tea TUI smoke in a PTY; the initial screen rendered ready state and Ctrl-C exited cleanly.
+- 2026-06-08: Added a visual polish pass for the Bubble Tea TUI: graphite app surface, segmented status bar, branded empty state, styled transcript rows, framed dialogs, prompt divider, and cleaner short help.
 
 ## Next Task
 
 Start Phase 7 by collapsing packaging and CLI:
 
-- run a final completion audit against `plan.md` and current repo state
+- continue the final completion audit and close remaining parity gaps found in Bubble Tea dialogs/background task actions
 - keep the no-tests constraint while porting reducer logic
 
 Done:
@@ -107,6 +108,7 @@ Done:
 - remove legacy JS TUI sources and npm package metadata
 - run final release, stdio, vulnerability, and no-JS-runtime verification
 - run manual interactive Bubble Tea TUI smoke
+- restore a more professional Bubble Tea visual treatment after the Silvery removal
 - keep the stdio wrapper behavior unchanged
 - keep `nami --stdio` behavior unchanged
 

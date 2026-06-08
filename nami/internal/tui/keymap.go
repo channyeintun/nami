@@ -86,7 +86,7 @@ func defaultKeyMap() keyMap {
 }
 
 func (k keyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Submit, k.Complete, k.HistoryPrev, k.Search, k.PageUp, k.FollowTail, k.Cancel, k.Quit, k.Help}
+	return []key.Binding{k.Submit, k.Complete, k.HistoryPrev, k.Search, k.FollowTail, k.Cancel, k.Help}
 }
 
 func (k keyMap) FullHelp() [][]key.Binding {
