@@ -17,18 +17,18 @@
   },
   "dependencies": {
     "cli-highlight": "^2.1.11",
-    "silvery": "^0.19.2",
     "marked": "^15.0.12",
     "react": "^19.2.5",
-    "react-devtools-core": "^7.0.1"
+    "react-devtools-core": "^7.0.1",
+    "silvery": "^0.21.0"
   },
   "overrides": {
     "@chenglou/pretext": "0.0.7"
   },
   "devDependencies": {
-    "@typescript/native-preview": "7.0.0-dev.20260522.1",
     "@types/node": "^24.7.2",
     "@types/react": "^19.2.14",
+    "@typescript/native-preview": "7.0.0-dev.20260522.1",
     "vite-plus": "^0.1.22"
   }
 }
