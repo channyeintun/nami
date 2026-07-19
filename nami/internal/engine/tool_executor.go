@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/channyeintun/nami/internal/agent"
 	"github.com/channyeintun/nami/internal/api"
@@ -28,12 +29,13 @@ func executeToolCalls(
 	artifactManager *artifactspkg.Manager,
 	hookRunner *hooks.Runner,
 	sessionID string,
+	sessionDir string,
 	maxOutputTokens int,
 	turnMetrics *timing.CheckpointRecorder,
 	turnStats *turnExecutionStats,
 	calls []api.ToolCall,
 ) ([]api.ToolResult, error) {
-	execState := newToolExecutionState(calls, maxOutputTokens, turnStats)
+	execState := newToolExecutionState(calls, sessionDir, maxOutputTokens, turnStats)
 	if err := prepareToolCalls(ctx, bridge, router, registry, permissionCtx, planner, hookRunner, sessionID, calls, execState); err != nil {
 		return nil, err
 	}
@@ -56,8 +58,11 @@ type toolExecutionState struct {
 	planSavedThisTurn  bool
 }
 
-func newToolExecutionState(calls []api.ToolCall, maxOutputTokens int, turnStats *turnExecutionStats) *toolExecutionState {
-	budget := toolpkg.DefaultResultBudgetForModel(filepath.Join(os.TempDir(), "nami-session"), maxOutputTokens)
+func newToolExecutionState(calls []api.ToolCall, sessionDir string, maxOutputTokens int, turnStats *turnExecutionStats) *toolExecutionState {
+	if strings.TrimSpace(sessionDir) == "" {
+		sessionDir = filepath.Join(os.TempDir(), "nami-session")
+	}
+	budget := toolpkg.DefaultResultBudgetForModel(sessionDir, maxOutputTokens)
 	aggregateBudget := toolpkg.NewAggregateResultBudget(budget)
 	if turnStats != nil {
 		turnStats.AggregateBudgetChars = aggregateBudget.MaxChars()
@@ -120,7 +125,7 @@ func prepareToolCall(
 			state.pauseForPlanReview = true
 			return false, nil
 		}
-		return true, nil
+		return false, err
 	}
 	if !allowed {
 		return true, nil

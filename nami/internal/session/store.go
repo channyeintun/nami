@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/channyeintun/nami/internal/api"
@@ -32,6 +33,9 @@ type Metadata struct {
 // Store handles session transcript persistence.
 type Store struct {
 	baseDir string
+	// metadataMu serializes metadata read-modify-write cycles so concurrent
+	// writers (e.g. the async title generator) cannot drop each other's fields.
+	metadataMu sync.Mutex
 }
 
 // NewStore creates a session store at the given base directory.
@@ -51,6 +55,25 @@ func (s *Store) SessionDir(sessionID string) string {
 
 // SaveMetadata persists session metadata.
 func (s *Store) SaveMetadata(meta Metadata) error {
+	s.metadataMu.Lock()
+	defer s.metadataMu.Unlock()
+	return s.saveMetadataLocked(meta)
+}
+
+// UpdateMetadata loads the existing metadata (a zero value with SessionID set
+// when none exists), applies update, and persists the result as one atomic
+// read-modify-write cycle.
+func (s *Store) UpdateMetadata(sessionID string, update func(Metadata) Metadata) error {
+	s.metadataMu.Lock()
+	defer s.metadataMu.Unlock()
+	existing, err := s.LoadMetadata(sessionID)
+	if err != nil {
+		existing = Metadata{SessionID: sessionID}
+	}
+	return s.saveMetadataLocked(update(existing))
+}
+
+func (s *Store) saveMetadataLocked(meta Metadata) error {
 	dir := s.SessionDir(meta.SessionID)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("create session dir: %w", err)

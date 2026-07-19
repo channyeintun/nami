@@ -473,26 +473,23 @@ func persistSessionState(store *session.Store, params sessionStateParams) error 
 		totalCost = params.Tracker.Snapshot().TotalCostUSD
 	}
 
-	title := ""
-	subagentModel := strings.TrimSpace(params.SubagentModel)
-	if existing, err := store.LoadMetadata(params.SessionID); err == nil {
-		title = existing.Title
+	return store.UpdateMetadata(params.SessionID, func(existing session.Metadata) session.Metadata {
+		subagentModel := strings.TrimSpace(params.SubagentModel)
 		if subagentModel == "" {
 			subagentModel = strings.TrimSpace(existing.SubagentModel)
 		}
-	}
-
-	return store.SaveMetadata(session.Metadata{
-		SessionID:     params.SessionID,
-		CreatedAt:     params.CreatedAt,
-		UpdatedAt:     time.Now(),
-		Mode:          string(params.Mode),
-		Model:         params.Model,
-		SubagentModel: subagentModel,
-		CWD:           params.CWD,
-		Branch:        params.Branch,
-		TotalCostUSD:  totalCost,
-		Title:         title,
+		return session.Metadata{
+			SessionID:     params.SessionID,
+			CreatedAt:     params.CreatedAt,
+			UpdatedAt:     time.Now(),
+			Mode:          string(params.Mode),
+			Model:         params.Model,
+			SubagentModel: subagentModel,
+			CWD:           params.CWD,
+			Branch:        params.Branch,
+			TotalCostUSD:  totalCost,
+			Title:         existing.Title,
+		}
 	})
 }
 

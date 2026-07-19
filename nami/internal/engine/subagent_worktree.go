@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/channyeintun/nami/internal/swarm"
 	toolpkg "github.com/channyeintun/nami/internal/tools"
@@ -90,6 +91,22 @@ func createDelegatedWorktree(ctx context.Context, req toolpkg.AgentRunRequest, i
 		Branch:     branch,
 		Created:    true,
 	}, nil
+}
+
+// cleanupDelegatedWorktree removes a worktree (and its branch) that was
+// created for a child agent which never ran, so early setup failures do not
+// leave orphaned checkouts behind. Only safe before the child has done any
+// work: the branch still points at HEAD with no commits of its own.
+func cleanupDelegatedWorktree(workspace delegatedWorkspace) {
+	if !workspace.Created {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if _, err := runGitWorktreeCommand(ctx, workspace.Repository, "worktree", "remove", "--force", workspace.Path); err != nil {
+		return
+	}
+	_, _ = runGitWorktreeCommand(ctx, workspace.Repository, "branch", "-D", workspace.Branch)
 }
 
 func withDelegatedWorkspace(workspace delegatedWorkspace, run func(string) (toolpkg.AgentRunResult, error)) (toolpkg.AgentRunResult, error) {

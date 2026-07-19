@@ -99,6 +99,36 @@ func getBackgroundTeam(teamID string) (*backgroundTeam, error) {
 	return team, nil
 }
 
+func scheduleBackgroundTeamCleanup(team *backgroundTeam) {
+	time.AfterFunc(backgroundAgentRetention, func() {
+		if teamHasRunningMembers(team) {
+			scheduleBackgroundTeamCleanup(team)
+			return
+		}
+		backgroundTeamsMu.Lock()
+		defer backgroundTeamsMu.Unlock()
+		if current, ok := backgroundTeams[team.id]; ok && current == team {
+			delete(backgroundTeams, team.id)
+		}
+	})
+}
+
+func teamHasRunningMembers(team *backgroundTeam) bool {
+	for _, member := range team.members {
+		bg, ok := findBackgroundAgent(member.agentID)
+		if !ok {
+			continue
+		}
+		bg.mu.Lock()
+		running := bg.running
+		bg.mu.Unlock()
+		if running {
+			return true
+		}
+	}
+	return false
+}
+
 func scheduleBackgroundAgentCleanup(bg *backgroundAgent) {
 	time.AfterFunc(backgroundAgentRetention, func() {
 		backgroundAgentsMu.Lock()
@@ -247,8 +277,9 @@ func firstNonEmpty(values ...string) string {
 	return ""
 }
 
+// launchBackgroundAgent runs the child on a detached context so it outlives
+// the parent turn; cancellation happens only via stopControl or agent_stop.
 func launchBackgroundAgent(
-	parentCtx context.Context,
 	bridge *ipc.Bridge,
 	description string,
 	role string,
@@ -318,13 +349,6 @@ func launchBackgroundAgent(
 		bg.result = withChildMetadata(result, bg.description, bg.role)
 		writeBackgroundAgentResultFile(bg.result)
 		emitBackgroundAgentUpdated(bridge, bg, bg.result)
-	}()
-
-	go func() {
-		select {
-		case <-parentCtx.Done():
-		case <-bg.done:
-		}
 	}()
 
 	return toolpkg.AgentRunResult{
@@ -473,6 +497,7 @@ func launchBackgroundTeam(ctx context.Context, runner toolpkg.AgentRunner, req t
 		results = append(results, result)
 	}
 	registerBackgroundTeam(team)
+	scheduleBackgroundTeamCleanup(team)
 	return toolpkg.AgentTeamLaunchResult{Status: "async_launched", TeamID: teamID, Description: req.Description, Agents: results}, nil
 }
 

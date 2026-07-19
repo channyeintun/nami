@@ -189,9 +189,6 @@ func (t *userTurnContext) runPlannerTurn(ctx context.Context, availableSkills []
 	if err != nil {
 		return false, err
 	}
-	if queryResult.Completed {
-		return false, nil
-	}
 	if queryResult.Stopped {
 		return false, nil
 	}
@@ -215,8 +212,7 @@ func (t *userTurnContext) runPlannerTurn(ctx context.Context, availableSkills []
 }
 
 type queryRunResult struct {
-	Completed bool
-	Stopped   bool
+	Stopped bool
 }
 
 func (t *userTurnContext) beginPlannerTurn(ctx context.Context, planner *agent.Planner) error {
@@ -382,27 +378,15 @@ func (t *userTurnContext) maybeGenerateSessionTitle() {
 	t.state.titleGenerated = true
 	titleClient := t.state.client
 	titleSessionID := t.state.sessionID
-	titleStartedAt := t.state.startedAt
-	titleMode := t.state.mode
-	titleModelID := t.state.activeModelID
-	titleCWD := t.state.cwd
-	titleBranch := agent.LoadTurnContext().GitBranch
 	titleMessages := api.DeepCopyMessages(t.state.messages)
 	go func() {
 		modelRouter := localmodel.NewRouter(titleClient)
 		title := session.GenerateTitle(modelRouter, titleClient, titleMessages)
 		if title != "" {
-			_ = t.deps.sessionStore.SaveMetadata(session.Metadata{
-				SessionID:     titleSessionID,
-				CreatedAt:     titleStartedAt,
-				UpdatedAt:     time.Now(),
-				Mode:          string(titleMode),
-				Model:         titleModelID,
-				SubagentModel: t.deps.subagentModelState.Get(),
-				CWD:           titleCWD,
-				Branch:        titleBranch,
-				TotalCostUSD:  t.deps.tracker.Snapshot().TotalCostUSD,
-				Title:         title,
+			_ = t.deps.sessionStore.UpdateMetadata(titleSessionID, func(existing session.Metadata) session.Metadata {
+				existing.Title = title
+				existing.UpdatedAt = time.Now()
+				return existing
 			})
 			_ = emitSessionUpdated(t.deps.bridge, titleSessionID, title)
 		}
@@ -435,7 +419,7 @@ func (t *userTurnContext) newQueryDeps(planner *agent.Planner) agent.QueryDeps {
 			return trackModelStream(callCtx, t.deps.bridge, t.deps.tracker, t.state.client, req)
 		},
 		ExecuteToolBatch: func(callCtx context.Context, calls []api.ToolCall) ([]api.ToolResult, error) {
-			return executeToolCalls(callCtx, t.deps.bridge, t.deps.router, t.deps.registry, t.deps.permissionCtx, t.deps.tracker, planner, t.deps.artifactManager, t.deps.hookRunner, t.state.sessionID, t.state.client.Capabilities().MaxOutputTokens, t.turnMetrics, t.turnStats, calls)
+			return executeToolCalls(callCtx, t.deps.bridge, t.deps.router, t.deps.registry, t.deps.permissionCtx, t.deps.tracker, planner, t.deps.artifactManager, t.deps.hookRunner, t.state.sessionID, t.state.sessionDir, t.state.client.Capabilities().MaxOutputTokens, t.turnMetrics, t.turnStats, calls)
 		},
 		CompactMessages: func(callCtx context.Context, current []api.Message, reason agent.CompactReason) (compact.CompactResult, error) {
 			sessionMemory, _ := loadSessionMemorySnapshot(callCtx, t.deps.artifactManager, t.state.sessionID)

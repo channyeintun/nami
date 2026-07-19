@@ -168,7 +168,7 @@ func makeSubagentRunner(
 			return executeSubagent(runCtx, req, subagentType, invocationID, bridge, registry, permissionCtx, parentTracker, sessionStore, artifactManager, hookRunner, childClient, childActiveModelID, currentCWD, rolePolicy, childToolNames, swarmSessionID, nil, nil)
 		}
 		if req.Background {
-			launch := launchBackgroundAgent(ctx, bridge, strings.TrimSpace(req.Description), strings.TrimSpace(req.Role), subagentType, invocationID, sessionStore, func(runCtx context.Context, stopControl *agent.StopController, reportStatus func(toolpkg.AgentRunResult)) (toolpkg.AgentRunResult, error) {
+			launch := launchBackgroundAgent(bridge, strings.TrimSpace(req.Description), strings.TrimSpace(req.Role), subagentType, invocationID, sessionStore, func(runCtx context.Context, stopControl *agent.StopController, reportStatus func(toolpkg.AgentRunResult)) (toolpkg.AgentRunResult, error) {
 				return executeSubagent(runCtx, req, subagentType, invocationID, bridge, registry, permissionCtx, parentTracker, sessionStore, artifactManager, hookRunner, childClient, childActiveModelID, currentCWD, rolePolicy, childToolNames, swarmSessionID, stopControl, reportStatus)
 			})
 			launch.SubagentType = subagentType
@@ -255,6 +255,14 @@ func executeSubagent(
 	if err != nil {
 		return toolpkg.AgentRunResult{}, err
 	}
+	// Remove a freshly created worktree if setup fails before the child runs;
+	// once the query starts the worktree may hold real work and is kept.
+	setupComplete := false
+	defer func() {
+		if !setupComplete {
+			cleanupDelegatedWorktree(workspace)
+		}
+	}()
 	childCWD := cwd
 	if strings.TrimSpace(workspace.Path) != "" {
 		childCWD = workspace.Path
@@ -393,6 +401,7 @@ func executeSubagent(
 		}
 		return nil
 	}
+	setupComplete = true
 	if workspace.Strategy == swarm.WorkspaceWorktree {
 		if _, err := withDelegatedWorkspace(workspace, func(string) (toolpkg.AgentRunResult, error) {
 			return toolpkg.AgentRunResult{}, runQuery()
