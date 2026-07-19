@@ -595,7 +595,7 @@ function resolveLiveAssistantMessage(
 function ProgressMessage({ progress }: { progress: UIProgressEntry }) {
   return (
     <MessageRow markerColor="$muted" markerDim marginBottom={0}>
-      <Text color="$muted" dimColor wrap="wrap">
+      <Text color="$muted" wrap="wrap">
         {progress.text}
       </Text>
     </MessageRow>
@@ -696,7 +696,7 @@ function renderQueuedPromptMeta(imageCount: number) {
     parts.push(imageCount === 1 ? "1 image" : `${imageCount} images`);
   }
 
-  return <Text dimColor>{parts.join("  ")}</Text>;
+  return <Text color="$muted">{parts.join("  ")}</Text>;
 }
 
 function renderQueuedPromptText(prompt: QueuedPromptPreview): string {

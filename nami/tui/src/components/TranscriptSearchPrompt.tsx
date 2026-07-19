@@ -64,11 +64,11 @@ const TranscriptSearchPrompt: FC<TranscriptSearchPromptProps> = ({
     <Box flexDirection="column">
       <Box borderStyle="round" borderColor="$primary" paddingX={1}>
         <Text color="$primary">Transcript Search</Text>
-        <Text dimColor>{"  "}</Text>
+        <Text color="$muted">{"  "}</Text>
         <Text>{query.length > 0 ? query : "█"}</Text>
       </Box>
       <Box paddingLeft={1} marginTop={1}>
-        <Text dimColor>
+        <Text color="$muted">
           {status} · Enter/Down next · Up previous · Backspace edit · Esc close
         </Text>
       </Box>

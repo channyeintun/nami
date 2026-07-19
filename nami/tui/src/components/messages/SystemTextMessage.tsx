@@ -35,7 +35,7 @@ function renderMetadata(timestamp: string) {
   }
 
   return (
-    <Text dimColor>
+    <Text color="$muted">
       {new Date(timestamp).toLocaleTimeString("en-US", {
         hour: "2-digit",
         minute: "2-digit",

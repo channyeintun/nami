@@ -103,13 +103,13 @@ const ToolProgress: FC<ToolProgressProps> = ({ toolCall }) => {
 
   return (
     <MessageRow marker={marker} markerColor={headerColor} markerDim={isDim}>
-      <Text color={headerColor} dimColor={isDim}>
+      <Text color={isDim ? "$muted" : headerColor}>
         <Text bold>{descriptor.title}</Text>
         {descriptor.summary ? ` (${descriptor.summary})` : ""}
       </Text>
       {response ? (
         <Box flexDirection="row">
-          <Text dimColor>{RESPONSE_PREFIX}</Text>
+          <Text color="$muted">{RESPONSE_PREFIX}</Text>
           <Box flexGrow={1}>{response}</Box>
         </Box>
       ) : null}
@@ -123,7 +123,7 @@ export { describeTool };
 
 function renderResponse(toolCall: UIToolCall) {
   if (toolCall.status === "waiting_permission") {
-    return <Text dimColor>{permissionLabel(toolCall)}</Text>;
+    return <Text color="$muted">{permissionLabel(toolCall)}</Text>;
   }
 
   if (toolCall.status === "running") {
@@ -358,21 +358,21 @@ function renderSuccess(toolCall: UIToolCall) {
     case "file_read":
     case "read_file":
       return (
-        <Text dimColor>
+        <Text color="$muted">
           {summarizeFileRead(toolCall.output, toolCall.truncated)}
         </Text>
       );
     case "grep":
     case "grep_search":
       return (
-        <Text dimColor>
+        <Text color="$muted">
           {summarizeSearchMatches(toolCall.output, toolCall.truncated, "match")}
         </Text>
       );
     case "glob":
     case "file_search":
       return (
-        <Text dimColor>
+        <Text color="$muted">
           {summarizeSearchMatches(toolCall.output, toolCall.truncated, "file")}
         </Text>
       );

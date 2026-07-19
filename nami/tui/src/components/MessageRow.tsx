@@ -31,7 +31,7 @@ const MessageRow: FC<MessageRowProps> = ({
     >
       <Box minWidth={2}>
         {typeof marker === "string" ? (
-          <Text color={markerColor} dimColor={markerDim}>
+          <Text color={markerDim ? "$muted" : markerColor}>
             {marker}
           </Text>
         ) : (

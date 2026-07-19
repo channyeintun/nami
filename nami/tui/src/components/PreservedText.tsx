@@ -4,14 +4,12 @@ import { Box, Text } from "silvery";
 interface PreservedTextProps {
   text: string;
   color?: ComponentProps<typeof Text>["color"];
-  dimColor?: boolean;
   bold?: boolean;
 }
 
 const PreservedText: FC<PreservedTextProps> = ({
   text,
   color,
-  dimColor,
   bold,
 }) => {
   const lines = text.replace(/\r\n/g, "\n").split("\n");
@@ -22,7 +20,6 @@ const PreservedText: FC<PreservedTextProps> = ({
         <Text
           key={`line-${index}`}
           color={color}
-          dimColor={dimColor}
           bold={bold}
           wrap="wrap"
         >

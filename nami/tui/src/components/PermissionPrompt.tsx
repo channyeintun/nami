@@ -201,7 +201,7 @@ const PermissionPrompt: FC<PermissionPromptProps> = ({
         <Text color="$muted">{detailLabel}</Text>
         <Text wrap="truncate-end">{detailPreview.line}</Text>
         {detailPreview.truncated ? (
-          <Text dimColor>Preview truncated to one line.</Text>
+          <Text color="$muted">Preview truncated to one line.</Text>
         ) : null}
       </Box>
       <Box
@@ -219,7 +219,7 @@ const PermissionPrompt: FC<PermissionPromptProps> = ({
                 bold={isSelected}
               >
                 {isSelected ? "›" : " "} {option.label}{" "}
-                <Text dimColor>[{option.shortcut}]</Text>
+                <Text color="$muted">[{option.shortcut}]</Text>
               </Text>
               <Text color="$muted"> {option.description}</Text>
             </Box>
@@ -227,10 +227,10 @@ const PermissionPrompt: FC<PermissionPromptProps> = ({
         })}
       </Box>
       <Box marginTop={1} flexDirection="column" flexShrink={0}>
-        <Text dimColor>
+        <Text color="$muted">
           Enter confirm · Up/Down change selection · Esc cancel turn
         </Text>
-        <Text dimColor>
+        <Text color="$muted">
           Selected:{" "}
           <Text color={selectedOption.color}>{selectedOption.label}</Text>
         </Text>

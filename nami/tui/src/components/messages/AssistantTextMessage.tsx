@@ -110,5 +110,5 @@ function renderMetadata(message: UIAssistantMessage) {
     return null;
   }
 
-  return <Text dimColor>{parts.join("  ")}</Text>;
+  return <Text color="$muted">{parts.join("  ")}</Text>;
 }

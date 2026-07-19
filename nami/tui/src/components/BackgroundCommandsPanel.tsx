@@ -66,9 +66,9 @@ const BackgroundCommandsPanel: FC<BackgroundCommandsPanelProps> = ({
       ) : null}
 
       {hiddenCount > 0 ? (
-        <Text
-          dimColor
-        >{`+${hiddenCount} more retained background commands`}</Text>
+        <Text color="$muted">
+          {`+${hiddenCount} more retained background commands`}
+        </Text>
       ) : null}
     </Box>
   );
@@ -91,12 +91,12 @@ const CommandRow: FC<CommandRowProps> = ({ command, marginTop }) => {
         <Text bold>{truncate(command.command || command.commandId, 88)}</Text>
       </Box>
       {command.preview ? (
-        <Text dimColor>
+        <Text color="$muted">
           {previewPrefix(command.previewKind, command.unreadBytes)}
           {truncate(command.preview, 120)}
         </Text>
       ) : null}
-      <Text dimColor>{formatMeta(command)}</Text>
+      <Text color="$muted">{formatMeta(command)}</Text>
     </Box>
   );
 };

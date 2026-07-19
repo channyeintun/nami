@@ -50,7 +50,7 @@ const StreamingAssistantMessage: FC<StreamingAssistantMessageProps> = ({
       marginBottom={0}
       meta={
         model ? (
-          <Text dimColor>{stripProviderPrefix(model) ?? model}</Text>
+          <Text color="$muted">{stripProviderPrefix(model) ?? model}</Text>
         ) : null
       }
     >

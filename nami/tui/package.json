@@ -20,7 +20,7 @@
     "marked": "^15.0.12",
     "react": "^19.2.5",
     "react-devtools-core": "^7.0.1",
-    "silvery": "^0.21.0"
+    "silvery": "^0.21.1"
   },
   "overrides": {
     "@chenglou/pretext": "0.0.7"

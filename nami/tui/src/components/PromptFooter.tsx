@@ -76,14 +76,14 @@ const PromptFooter: FC<PromptFooterProps> = ({
         minWidth={0}
       >
         <Text
-          dimColor
+          color="$muted"
           wrap={footerLayout === "row" ? "truncate-end" : undefined}
         >
           {hint}
         </Text>
         {statusDetails ? (
           <Text
-            dimColor
+            color="$muted"
             wrap={footerLayout === "row" ? "truncate-start" : undefined}
           >
             {statusDetails}
