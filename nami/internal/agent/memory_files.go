@@ -276,7 +276,7 @@ func FormatRelevantMemoryPrompt(files []MemoryFile, currentUserPrompt string, re
 		}
 
 		if len(renderedIndexes) > 0 {
-			b.WriteString("Durable preferences/conventions below. Non-derivable user/project guidance: workflow constraints, style decisions. Selectively relevant context, not unconditional instructions. Verify code facts against live repo.\n\n")
+			b.WriteString("Durable memory recalled for this request: non-derivable user/project guidance such as workflow constraints and style decisions. Treat entries as selectively relevant context, not unconditional instructions. Memory reflects what was true when it was written: verify drift-prone facts (file paths, commands, code claims) against the live repo when that is cheap, and if you rely on an unverified memory-derived fact in an answer, say it comes from memory and may be stale.\n\n")
 			for _, section := range renderedIndexes {
 				b.WriteString(section)
 				b.WriteString("\n\n")

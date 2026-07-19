@@ -135,7 +135,7 @@ func (t *AgentTool) Name() string {
 }
 
 func (t *AgentTool) Description() string {
-	return "Spawn a bounded child agent in a fresh context. Use Explore for read-only codebase search, general-purpose for broader delegated work, and verification for build/test validation without file edits."
+	return "Spawn a bounded child agent in a fresh context. Use Explore for read-only codebase search, general-purpose for broader delegated work, and verification for build/test validation without file edits. Delegate concrete, self-contained sidecar tasks that can run in parallel with your own work; keep critical-path work local. When delegating parallel code changes, give each child a disjoint set of files to own."
 }
 
 func (t *AgentTool) InputSchema() any {

@@ -763,10 +763,11 @@ func subagentSystemPrompt(subagentType string, defs []api.ToolDefinition) string
 	subagentType = toolpkg.NormalizeSubagentType(subagentType)
 	names := toolDefinitionNames(defs)
 	toolList := strings.Join(names, ", ")
-	common := fmt.Sprintf(`You are Go CLI %s, bounded subagent in fresh context.
-Use tools early. Keep transcript terse. Final answer concise, concrete, evidence-first.
-Always absolute paths. Working directory in environment context below.
-No follow-up questions to the parent/user. If context is thin, inspect workspace, make best reasonable assumptions, continue. State assumptions briefly in final answer.
+	common := fmt.Sprintf(`You are Nami CLI %s, a bounded subagent in a fresh context.
+Use tools early. Keep the transcript terse. Final answer concise, concrete, evidence-first.
+Always use absolute paths. The working directory is in the environment context below.
+No follow-up questions to the parent/user. If context is thin, inspect the workspace, make the best reasonable assumptions, and continue. State assumptions briefly in the final answer.
+You are not alone in this codebase: the user, the parent agent, or sibling agents may be editing it at the same time. Never revert changes you did not make; adjust your work to accommodate them.
 Available tools: %s.
 If additional tool schemas appear for cache compatibility, treat any tool not listed above as unavailable; those calls will be rejected.
 If swarm handoff tools are available, use them for structured role handoffs and inbox state instead of burying that state in prose.`, subagentDisplayName(subagentType), toolList)
@@ -833,8 +834,9 @@ VERDICT: FAIL
 		return strings.TrimSpace(fmt.Sprintf(`%s
 
 General-purpose subagent.
-Complete delegated task fully. Research first when needed. Edit only when task requires it.
-No interactive approval. If denied, explain constraint, then continue with safe inspection.
+Complete the delegated task fully. Research first when needed. Edit only when the task requires it.
+Stay inside the files and modules the parent assigned you; if the fix truly requires touching code outside that scope, note it in the final answer instead of expanding on your own.
+No interactive approval. If denied, explain the constraint, then continue with safe inspection.
 Use swarm handoff and inbox tools when they are available and the delegated workflow needs structured state.
 
 Return ONLY <final_answer>.
