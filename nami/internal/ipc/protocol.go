@@ -18,6 +18,7 @@ const (
 	EventTokenDelta    EventType = "token_delta"
 	EventThinkingDelta EventType = "thinking_delta"
 	EventProgress      EventType = "progress"
+	EventGoalProgress  EventType = "goal_progress"
 	EventTurnComplete  EventType = "turn_complete"
 
 	// Tool lifecycle
@@ -118,6 +119,14 @@ type TokenDeltaPayload struct {
 type ProgressPayload struct {
 	ID      string `json:"id"`
 	Message string `json:"message"`
+}
+
+// GoalProgressPayload carries the live progress indicator for the current
+// goal, parsed from in-turn ::progress directives in the assistant stream.
+type GoalProgressPayload struct {
+	Goal    string `json:"goal,omitempty"`
+	Percent int    `json:"percent"`
+	Label   string `json:"label,omitempty"`
 }
 
 type TurnCompletePayload struct {

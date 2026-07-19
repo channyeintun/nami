@@ -28,6 +28,7 @@ import type {
   ModeChangedPayload,
   ModelChangedPayload,
   PermissionRequestPayload,
+  GoalProgressPayload,
   ProgressPayload,
   ReasoningSelectionOptionPayload,
   ReasoningSelectionRequestedPayload,
@@ -312,11 +313,18 @@ export type UIActiveTurnStatus =
   | "waiting_permission"
   | "cancelling";
 
+export interface UIGoalProgress {
+  goal: string;
+  percent: number;
+  label: string;
+}
+
 export interface EngineUIState {
   ready: boolean;
   slashCommands: UISlashCommand[];
   messages: UIMessage[];
   progressEntries: UIProgressEntry[];
+  goalProgress: UIGoalProgress | null;
   transcript: UITranscriptEntry[];
   liveAssistantMessageId: string | null;
   liveAssistantBlocks: UIAssistantBlock[];
@@ -388,6 +396,7 @@ const initialState = (model: string, mode: string): EngineUIState => ({
   slashCommands: [],
   messages: [],
   progressEntries: [],
+  goalProgress: null,
   transcript: [],
   liveAssistantMessageId: null,
   liveAssistantBlocks: [],
@@ -662,6 +671,19 @@ export function useEvents(initialModel: string, initialMode: string) {
         }));
         break;
       }
+      case "goal_progress": {
+        const p = event.payload as GoalProgressPayload;
+        const percent = Math.max(0, Math.min(100, Math.round(p.percent ?? 0)));
+        setUIState((s) => ({
+          ...s,
+          goalProgress: {
+            goal: stringOrEmpty(p.goal) || s.goalProgress?.goal || "",
+            percent,
+            label: stringOrEmpty(p.label) || s.goalProgress?.label || "",
+          },
+        }));
+        break;
+      }
       case "turn_complete": {
         const p = event.payload as TurnCompletePayload;
         setUIState((s) => {
@@ -686,6 +708,7 @@ export function useEvents(initialModel: string, initialMode: string) {
               liveAssistantMessageId: null,
               liveAssistantBlocks: [],
               activeTurnStatus: "idle",
+              goalProgress: null,
               pendingPermission: null,
               submittingArtifactReviewRequestId: null,
               isStreaming: false,
@@ -711,6 +734,7 @@ export function useEvents(initialModel: string, initialMode: string) {
             liveAssistantMessageId: null,
             liveAssistantBlocks: [],
             activeTurnStatus: "idle",
+            goalProgress: null,
             submittingArtifactReviewRequestId: null,
             isStreaming: false,
             compact: null,
@@ -1128,6 +1152,7 @@ export function useEvents(initialModel: string, initialMode: string) {
           ...s,
           messages: normalizeHydratedMessages(p.messages),
           progressEntries: normalizeHydratedProgressEntries(p.progress),
+          goalProgress: null,
           toolCalls: normalizeHydratedToolCalls(p.tool_calls),
           transcript: normalizeHydratedTranscriptEntries(p.transcript),
           liveAssistantMessageId: null,
@@ -1443,6 +1468,7 @@ export function useEvents(initialModel: string, initialMode: string) {
           ...s,
           messages: [],
           progressEntries: [],
+          goalProgress: null,
           transcript: [],
           liveAssistantMessageId: null,
           liveAssistantBlocks: [],
@@ -1506,6 +1532,7 @@ export function useEvents(initialModel: string, initialMode: string) {
               ...s,
               messages: [],
               progressEntries: [],
+              goalProgress: null,
               transcript: [],
               liveAssistantMessageId: null,
               liveAssistantBlocks: [],
@@ -1587,6 +1614,7 @@ export function useEvents(initialModel: string, initialMode: string) {
       liveAssistantMessageId: null,
       liveAssistantBlocks: [],
       activeTurnStatus: "idle",
+      goalProgress: null,
       isStreaming: false,
       compact: null,
       pendingModelSelection: null,

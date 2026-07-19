@@ -3,6 +3,7 @@ export type EventType =
   | "token_delta"
   | "thinking_delta"
   | "progress"
+  | "goal_progress"
   | "turn_complete"
   | "tool_start"
   | "tool_progress"
@@ -97,6 +98,12 @@ export interface TokenDeltaPayload {
 export interface ProgressPayload {
   id: string;
   message: string;
+}
+
+export interface GoalProgressPayload {
+  goal?: string;
+  percent: number;
+  label?: string;
 }
 
 export interface TurnCompletePayload {

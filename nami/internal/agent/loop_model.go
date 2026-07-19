@@ -121,6 +121,19 @@ func streamModelTurn(
 	}
 
 	turn := modelTurn{}
+	filter := newProgressDirectiveFilter()
+	emitProgress := func(updates []GoalProgressUpdate) error {
+		for _, update := range updates {
+			payload, changed := state.applyGoalProgress(update)
+			if !changed {
+				continue
+			}
+			if err := yieldEvent(yield, ipc.EventGoalProgress, payload); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
 	for event, streamErr := range stream {
 		if streamErr != nil {
 			return modelTurn{}, streamErr
@@ -128,8 +141,15 @@ func streamModelTurn(
 
 		switch event.Type {
 		case api.ModelEventToken:
-			turn.assistantText += event.Text
-			if err := yieldEvent(yield, ipc.EventTokenDelta, ipc.TokenDeltaPayload{Text: event.Text}); err != nil {
+			visible, updates := filter.Process(event.Text)
+			if err := emitProgress(updates); err != nil {
+				return modelTurn{}, err
+			}
+			if visible == "" {
+				continue
+			}
+			turn.assistantText += visible
+			if err := yieldEvent(yield, ipc.EventTokenDelta, ipc.TokenDeltaPayload{Text: visible}); err != nil {
 				return modelTurn{}, err
 			}
 		case api.ModelEventThinking:
@@ -147,6 +167,17 @@ func streamModelTurn(
 			}
 		case api.ModelEventStop:
 			turn.stopReason = event.StopReason
+		}
+	}
+
+	visible, updates := filter.Flush()
+	if err := emitProgress(updates); err != nil {
+		return modelTurn{}, err
+	}
+	if visible != "" {
+		turn.assistantText += visible
+		if err := yieldEvent(yield, ipc.EventTokenDelta, ipc.TokenDeltaPayload{Text: visible}); err != nil {
+			return modelTurn{}, err
 		}
 	}
 
