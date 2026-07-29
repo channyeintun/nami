@@ -8,6 +8,10 @@ PREFIX      ?= /usr/local/bin
 POSIX_WRAPPER := bin/$(BINARY_NAME)
 WINDOWS_WRAPPER := bin/$(BINARY_NAME).cmd
 LAUNCHER_NORMALIZER := scripts/normalize-launcher-bundle.mjs
+LAUNCHER_BUNDLER_CONFIG := rolldown.config.mjs
+# Native addons the launcher requires at runtime. They stay out of the bundle,
+# so an install has to place them where node can resolve them from the launcher.
+NATIVE_RUNTIME_SCOPES := @napi-rs @resvg
 
 UNIX_PLATFORMS := darwin-arm64 darwin-amd64 linux-amd64 linux-arm64
 WINDOWS_PLATFORMS := windows-amd64 windows-arm64
@@ -40,12 +44,17 @@ release-local: clean build-portable-launcher-bundle
 build-portable-launcher-bundle:
 	@mkdir -p $(BUILD_DIR)
 	vp pack
-	vp dlx rolldown --platform=node --format=esm --no-code-splitting --file=$(BUILD_DIR)/$(LAUNCHER_JS_NAME).raw \
-		bin/nami.js
+	vp dlx rolldown -c $(LAUNCHER_BUNDLER_CONFIG)
 	node $(LAUNCHER_NORMALIZER) \
 		$(BUILD_DIR)/$(LAUNCHER_JS_NAME).raw \
 		$(BUILD_DIR)/$(LAUNCHER_JS_NAME)
 	rm -f $(BUILD_DIR)/$(LAUNCHER_JS_NAME).raw
+	@mkdir -p $(BUILD_DIR)/node_modules
+	@for scope in $(NATIVE_RUNTIME_SCOPES); do \
+		if [ -d node_modules/$$scope ]; then \
+			cp -R node_modules/$$scope $(BUILD_DIR)/node_modules/; \
+		fi; \
+	done
 
 # Build release assets for all platforms.
 release: clean build-portable-launcher-bundle
@@ -99,4 +108,11 @@ install: release-local
 	install -m 755 $(BUILD_DIR)/$(BINARY_NAME) $(PREFIX)/$(BINARY_NAME)
 	install -m 755 $(BUILD_DIR)/$(LAUNCHER_JS_NAME) $(PREFIX)/$(LAUNCHER_JS_NAME)
 	install -m 755 $(BUILD_DIR)/$(ENGINE_NAME) $(PREFIX)/$(ENGINE_NAME)
+	@for scope in $(NATIVE_RUNTIME_SCOPES); do \
+		if [ -d $(BUILD_DIR)/node_modules/$$scope ]; then \
+			rm -rf $(PREFIX)/node_modules/$$scope; \
+			mkdir -p $(PREFIX)/node_modules; \
+			cp -R $(BUILD_DIR)/node_modules/$$scope $(PREFIX)/node_modules/; \
+		fi; \
+	done
 	@echo "Installed to $(PREFIX)/"
