@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	mcppkg "github.com/channyeintun/nami/internal/mcp"
+	"github.com/channyeintun/nami/internal/textutil"
 )
 
 type mcpManagerRuntime struct {
@@ -337,15 +338,8 @@ func summarizeReadMCPResourceContent(content mcppkg.ResourceContent, maxBytes in
 }
 
 func clipMCPText(text string, maxBytes int) string {
-	if maxBytes <= 0 || len([]byte(text)) <= maxBytes {
+	if maxBytes <= 0 || len(text) <= maxBytes {
 		return text
 	}
-	clipped := []byte(text)
-	if len(clipped) > maxBytes {
-		clipped = clipped[:maxBytes]
-		for len(clipped) > 0 && (clipped[len(clipped)-1]&0xC0) == 0x80 {
-			clipped = clipped[:len(clipped)-1]
-		}
-	}
-	return string(clipped) + "\n\n[truncated]"
+	return textutil.TruncateHead(text, maxBytes) + "\n\n[truncated]"
 }

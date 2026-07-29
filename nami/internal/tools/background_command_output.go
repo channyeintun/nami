@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"fmt"
 	"sync"
+
+	"github.com/channyeintun/nami/internal/textutil"
 )
 
 const backgroundCommandMaxOutputBytes = 256 * 1024
@@ -82,7 +84,7 @@ func (b *boundedOutput) unreadSummary(limit int) unreadOutputSummary {
 	previewBytes := unread
 	truncated := false
 	if limit > 0 && len(previewBytes) > limit {
-		previewBytes = previewBytes[len(previewBytes)-limit:]
+		previewBytes = textutil.TruncateTailBytes(previewBytes, limit)
 		truncated = true
 	}
 	preview := string(previewBytes)
@@ -115,7 +117,7 @@ func (b *boundedOutput) tail(limit int) string {
 
 	truncated := false
 	if limit > 0 && len(tail) > limit {
-		tail = tail[len(tail)-limit:]
+		tail = textutil.TruncateTailBytes(tail, limit)
 		truncated = true
 	}
 
