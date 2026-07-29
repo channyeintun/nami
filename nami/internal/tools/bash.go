@@ -1,7 +1,6 @@
 package tools
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -30,9 +29,10 @@ type localShell struct {
 	path   string
 }
 
-var bashReadOnlyPrograms = map[string]struct{}{}
-
-var bashReadOnlyGitSubcommands = map[string]struct{}{}
+// maxForegroundOutputBytes bounds what a single command may return. A runaway
+// command can emit gigabytes before the timeout fires, and buffering all of it
+// would exhaust memory for output that gets truncated downstream anyway.
+const maxForegroundOutputBytes = 4 * 1024 * 1024
 
 // BashTool executes shell commands through the preferred local shell with basic security validation.
 type BashTool struct{}
@@ -166,10 +166,10 @@ func (t *BashTool) Execute(ctx context.Context, input ToolInput) (ToolOutput, er
 	}
 	cmd.Dir = workingDir
 
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
+	stdout := &cappedBuffer{limit: maxForegroundOutputBytes}
+	stderr := &cappedBuffer{limit: maxForegroundOutputBytes}
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
 
 	err = cmd.Run()
 	combined := strings.TrimSpace(joinOutputs(stdout.String(), stderr.String()))

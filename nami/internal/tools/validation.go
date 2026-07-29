@@ -48,12 +48,14 @@ func validateObjectSchema(toolName, path string, params map[string]any, schema m
 		return err
 	}
 
-	for name, value := range params {
+	// Sorted so a call with several bad fields always reports the same one:
+	// map order would make the message, and any test asserting on it, flaky.
+	for _, name := range sortedKeys(params) {
 		propertySchema, ok := properties[name].(map[string]any)
 		if !ok {
 			continue
 		}
-		if err := validatePropertyValue(toolName, joinSchemaPath(path, name), value, propertySchema, false); err != nil {
+		if err := validatePropertyValue(toolName, joinSchemaPath(path, name), params[name], propertySchema, false); err != nil {
 			return err
 		}
 	}

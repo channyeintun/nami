@@ -19,6 +19,13 @@ import (
 
 const backgroundCommandRetention = 5 * time.Minute
 
+// timeoutError matches the read-deadline errors os and net return, which mean
+// "nothing to read yet" rather than "the stream ended".
+type timeoutError interface {
+	error
+	Timeout() bool
+}
+
 type backgroundCommand struct {
 	mu                        sync.Mutex
 	consumeMu                 sync.Mutex
@@ -179,26 +186,34 @@ func startBackgroundPipeCommand(streamCtx context.Context, cancel context.Cancel
 		cancel()
 		return nil, fmt.Errorf("open background command stdin: %w", err)
 	}
-	stdout, err := cmd.StdoutPipe()
+	// Output pipes are created here rather than with cmd.StdoutPipe so that
+	// cmd.Wait does not close them out from under the readers, which would drop
+	// whatever the command wrote just before exiting.
+	stdout, stdoutWriter, err := os.Pipe()
 	if err != nil {
 		cancel()
 		_ = stdin.Close()
 		return nil, fmt.Errorf("open background command stdout: %w", err)
 	}
-	stderr, err := cmd.StderrPipe()
+	stderr, stderrWriter, err := os.Pipe()
 	if err != nil {
 		cancel()
 		_ = stdin.Close()
-		_ = stdout.Close()
+		closeAll(stdout, stdoutWriter)
 		return nil, fmt.Errorf("open background command stderr: %w", err)
 	}
+	cmd.Stdout = stdoutWriter
+	cmd.Stderr = stderrWriter
+
 	if err := cmd.Start(); err != nil {
 		cancel()
 		_ = stdin.Close()
-		_ = stdout.Close()
-		_ = stderr.Close()
+		closeAll(stdout, stdoutWriter, stderr, stderrWriter)
 		return nil, fmt.Errorf("start background command: %w", err)
 	}
+	// The child holds its own descriptors now; the parent's copies of the write
+	// ends must go or the readers never see EOF.
+	closeAll(stdoutWriter, stderrWriter)
 
 	bg := &backgroundCommand{
 		id:        id,
@@ -218,11 +233,18 @@ func startBackgroundPipeCommand(streamCtx context.Context, cancel context.Cancel
 	backgroundCommands[id] = bg
 	backgroundCommandsMu.Unlock()
 
-	go streamBackgroundOutput(streamCtx, bg, bg.output, stdout)
-	go streamBackgroundOutput(streamCtx, bg, bg.output, stderr)
+	for _, reader := range []io.ReadCloser{stdout, stderr} {
+		go streamBackgroundOutput(streamCtx, bg, bg.output, reader)
+	}
 	go waitForBackgroundCommand(bg)
 
 	return bg, nil
+}
+
+func closeAll(files ...*os.File) {
+	for _, file := range files {
+		_ = file.Close()
+	}
 }
 
 func waitForBackgroundCommand(bg *backgroundCommand) {
@@ -244,38 +266,30 @@ func waitForBackgroundCommand(bg *backgroundCommand) {
 
 	bg.running = false
 	bg.updatedAt = time.Now()
+	bg.recordExitLocked(err)
 	notify := !bg.suppressAsyncNotification
-	if err == nil {
-		exitCode := 0
-		bg.exitCode = &exitCode
-		bg.mu.Unlock()
-		close(bg.done)
-		scheduleBackgroundCommandCleanup(bg)
-		if notify {
-			emitBackgroundCommandUpdate(bg.asyncUpdate())
-		}
-		return
-	}
-
-	if exitErr, ok := err.(*exec.ExitError); ok {
-		exitCode := exitErr.ExitCode()
-		bg.exitCode = &exitCode
-		bg.errText = err.Error()
-		bg.mu.Unlock()
-		close(bg.done)
-		scheduleBackgroundCommandCleanup(bg)
-		if notify {
-			emitBackgroundCommandUpdate(bg.asyncUpdate())
-		}
-		return
-	}
-
-	bg.errText = err.Error()
 	bg.mu.Unlock()
+
 	close(bg.done)
 	scheduleBackgroundCommandCleanup(bg)
 	if notify {
 		emitBackgroundCommandUpdate(bg.asyncUpdate())
+	}
+}
+
+// recordExitLocked stores the outcome of cmd.Wait. A non-zero exit is normal
+// for a shell command, so it keeps the code alongside the message; anything
+// else (a signal, a lost process) leaves the exit code unset.
+func (bg *backgroundCommand) recordExitLocked(err error) {
+	if err == nil {
+		exitCode := 0
+		bg.exitCode = &exitCode
+		return
+	}
+	bg.errText = err.Error()
+	if exitErr, ok := errors.AsType[*exec.ExitError](err); ok {
+		exitCode := exitErr.ExitCode()
+		bg.exitCode = &exitCode
 	}
 }
 
@@ -299,7 +313,7 @@ func streamBackgroundOutput(ctx context.Context, bg *backgroundCommand, buffer *
 		if err == nil {
 			continue
 		}
-		if timeoutErr, ok := err.(interface{ Timeout() bool }); ok && timeoutErr.Timeout() {
+		if timeoutErr, ok := errors.AsType[timeoutError](err); ok && timeoutErr.Timeout() {
 			continue
 		}
 		if errors.Is(err, io.EOF) || errors.Is(err, syscall.EIO) {

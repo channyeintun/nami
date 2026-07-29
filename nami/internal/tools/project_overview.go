@@ -348,7 +348,9 @@ func sortLanguageSummaries(counts map[string]int, limit int) []projectLanguageSu
 	return summaries
 }
 
-func sortedKeys(items map[string]struct{}) []string {
+// sortedKeys returns a map's keys in a stable order so rendered output and
+// error messages never depend on map iteration order.
+func sortedKeys[V any](items map[string]V) []string {
 	keys := make([]string, 0, len(items))
 	for key := range items {
 		keys = append(keys, key)
