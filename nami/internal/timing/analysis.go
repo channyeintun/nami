@@ -9,6 +9,8 @@ import (
 	"strings"
 )
 
+const maxTimingLineBytes = 4 * 1024 * 1024
+
 type Summary struct {
 	Path                          string
 	Records                       int
@@ -39,6 +41,9 @@ func SummarizeFile(path string) (Summary, error) {
 	}
 
 	scanner := bufio.NewScanner(file)
+	// Records carry arbitrary metadata, so a single line can exceed the
+	// scanner's 64 KiB default and would otherwise abort the whole summary.
+	scanner.Buffer(make([]byte, 0, 64*1024), maxTimingLineBytes)
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		if line == "" {
@@ -96,8 +101,8 @@ func (s Summary) Render() string {
 	b.WriteString(fmt.Sprintf("records: %d\n", s.Records))
 	b.WriteString(fmt.Sprintf("compactions: %d completed, %d failed\n", s.CompletedCompactions, s.FailedCompactions))
 	b.WriteString(fmt.Sprintf("reasons: auto=%d manual=%d\n", s.AutoCompactions, s.ManualCompactions))
-	b.WriteString(fmt.Sprintf("fresh session memory at compaction: %d/%d\n", s.FreshSessionMemoryCompactions, maxInt(s.Compactions, 1)))
-	b.WriteString(fmt.Sprintf("microcompact applied: %d/%d\n", s.MicrocompactApplied, maxInt(s.CompletedCompactions, 1)))
+	b.WriteString(fmt.Sprintf("fresh session memory at compaction: %d/%d\n", s.FreshSessionMemoryCompactions, max(s.Compactions, 1)))
+	b.WriteString(fmt.Sprintf("microcompact applied: %d/%d\n", s.MicrocompactApplied, max(s.CompletedCompactions, 1)))
 	b.WriteString(fmt.Sprintf("tokens saved: total=%d avg=%d max=%d", s.TotalTokensSaved, safeAverageInt(s.TotalTokensSaved, s.CompletedCompactions), s.MaxTokensSaved))
 	if s.MaxTokensSavedTurn > 0 {
 		b.WriteString(fmt.Sprintf(" (turn %d)", s.MaxTokensSavedTurn))
@@ -162,13 +167,6 @@ func safeAverageInt64(total int64, count int) int64 {
 		return 0
 	}
 	return total / int64(count)
-}
-
-func maxInt(value, minimum int) int {
-	if value < minimum {
-		return minimum
-	}
-	return value
 }
 
 func unmarshalRecord(line string, record *Record) error {

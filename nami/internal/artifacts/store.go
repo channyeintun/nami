@@ -357,9 +357,14 @@ func mergeMetadata(base map[string]any, overrides map[string]any) map[string]any
 	return merged
 }
 
+// generateID returns a random artifact id, falling back to a timestamp when the
+// system entropy source fails. Ignoring that error would hand every artifact
+// the same all-zero id and silently overwrite them.
 func generateID() string {
 	b := make([]byte, 8)
-	rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		return fmt.Sprintf("artifact-%d", time.Now().UnixNano())
+	}
 	return hex.EncodeToString(b)
 }
 
@@ -375,7 +380,9 @@ func sanitizeArtifactID(id string) (string, error) {
 	if cleaned == "." || cleaned == ".." || cleaned != id {
 		return "", fmt.Errorf("invalid artifact id %q", id)
 	}
-	if strings.Contains(id, "/") || strings.Contains(id, `\\`) {
+	// An id becomes a directory name, so any separator — including a backslash,
+	// which is one on Windows — would let it escape the artifact root.
+	if strings.ContainsAny(id, `/\`) {
 		return "", fmt.Errorf("invalid artifact id %q", id)
 	}
 	return id, nil

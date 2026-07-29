@@ -21,6 +21,9 @@ const (
 	defaultCacheTTL    = 24 * time.Hour
 	defaultHTTPTimeout = 30 * time.Second
 	cacheFileName      = "api.json"
+	// maxSnapshotBytes bounds the downloaded catalog so a wrong or hostile
+	// endpoint cannot stream unbounded data into memory.
+	maxSnapshotBytes int64 = 32 * 1024 * 1024
 )
 
 type Client struct {
@@ -249,20 +252,45 @@ func (c *Client) fetch(ctx context.Context) ([]byte, error) {
 		return nil, fmt.Errorf("models.dev request failed with status %s: %s", response.Status, message)
 	}
 
-	data, err := io.ReadAll(response.Body)
+	data, err := io.ReadAll(io.LimitReader(response.Body, maxSnapshotBytes+1))
 	if err != nil {
 		return nil, fmt.Errorf("read models.dev response: %w", err)
+	}
+	if int64(len(data)) > maxSnapshotBytes {
+		return nil, fmt.Errorf("models.dev response exceeded %d bytes", maxSnapshotBytes)
 	}
 	return data, nil
 }
 
+// writeCache replaces the cache file in one step. Writing in place would leave
+// a truncated file behind if the process stopped mid-write, and the next start
+// would fail to parse its own cache.
 func (c *Client) writeCache(data []byte) error {
 	cachePath := c.cachePath()
 	if err := os.MkdirAll(filepath.Dir(cachePath), 0o755); err != nil {
 		return fmt.Errorf("create models.dev cache directory: %w", err)
 	}
-	if err := os.WriteFile(cachePath, data, 0o644); err != nil {
+
+	tmp, err := os.CreateTemp(filepath.Dir(cachePath), "."+filepath.Base(cachePath)+"-*.tmp")
+	if err != nil {
+		return fmt.Errorf("create models.dev cache temp file: %w", err)
+	}
+	tmpName := tmp.Name()
+	defer os.Remove(tmpName)
+
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
 		return fmt.Errorf("write models.dev cache: %w", err)
+	}
+	if err := tmp.Chmod(0o644); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("set models.dev cache permissions: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("close models.dev cache temp file: %w", err)
+	}
+	if err := os.Rename(tmpName, cachePath); err != nil {
+		return fmt.Errorf("replace models.dev cache: %w", err)
 	}
 	return nil
 }

@@ -32,6 +32,10 @@ const (
 	DefaultLocalModel = "gemma4-e4b"
 )
 
+// maxResponseBytes bounds a single generate response so a misbehaving server
+// cannot exhaust memory.
+const maxResponseBytes = 8 * 1024 * 1024
+
 // DetectLocalModel checks if ollama is running and has a suitable model.
 func DetectLocalModel() (*LocalModel, bool) {
 	client := &http.Client{Timeout: 2 * time.Second}
@@ -58,7 +62,8 @@ func DetectLocalModel() (*LocalModel, bool) {
 	preferred := []string{DefaultLocalModel, "gemma3", "llama3", "qwen2"}
 	for _, pref := range preferred {
 		for _, m := range result.Models {
-			if m.Name == pref || len(m.Name) > len(pref) && m.Name[:len(pref)] == pref {
+			// Tags carry a suffix, so "gemma3" matches "gemma3:4b".
+			if strings.HasPrefix(m.Name, pref) {
 				return NewLocalModel(DefaultOllamaURL, m.Name), true
 			}
 		}
@@ -111,7 +116,7 @@ func (m *LocalModel) Query(prompt string, maxTokens int) (string, error) {
 	}
 	defer resp.Body.Close()
 
-	responseBody, err := io.ReadAll(resp.Body)
+	responseBody, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
 	if err != nil {
 		return "", fmt.Errorf("read ollama response: %w", err)
 	}

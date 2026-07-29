@@ -14,14 +14,14 @@ func Resolve(input string, fallbackProvider string, source string) config.Resolv
 	resolved := config.NewModelSelection(provider, model, source, requested.ExplicitProvider)
 	reason := "explicit provider"
 	if provider == "" && model != "" {
+		// Every model a provider accepts also names that provider, so a model
+		// the inference cannot place belongs to no known provider and stays on
+		// whichever one the session is already using.
 		if inferred := InferProviderFromModel(model); inferred != "" {
 			resolved = config.NewModelSelection(inferred, model, source, false)
 			reason = "inferred provider from model"
-		} else if fallback := NormalizeProvider(fallbackProvider); fallback != "" && IsModelCompatibleWithProvider(model, fallback) {
-			resolved = config.NewModelSelection(fallback, model, source, false)
-			reason = "retained compatible provider"
 		} else {
-			resolved = config.NewModelSelection(fallback, model, source, false)
+			resolved = config.NewModelSelection(NormalizeProvider(fallbackProvider), model, source, false)
 			reason = "used fallback provider for unknown model"
 		}
 	}
