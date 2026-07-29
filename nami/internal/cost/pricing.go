@@ -35,14 +35,30 @@ func CalculateUSDCost(model string, usage api.Usage) float64 {
 		(float64(usage.CacheCreationTokens)/1_000_000)*tier.cacheWritePerMTok
 }
 
+// containsVersion reports whether a model id mentions any of the given
+// versions. Model ids spell the separator inconsistently — the canonical
+// Anthropic ids use "-" ("claude-3-5-haiku-20241022") while documentation uses
+// "." — so every variant has to be accepted or the tier silently falls through
+// to the wrong price.
+func containsVersion(model string, versions ...string) bool {
+	for _, version := range versions {
+		for _, separator := range []string{".", "-", "_"} {
+			if strings.Contains(model, strings.ReplaceAll(version, ".", separator)) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func priceTierForModel(model string) (priceTier, bool) {
 	lower := strings.ToLower(strings.TrimSpace(model))
 	switch {
-	case strings.Contains(lower, "haiku") && strings.Contains(lower, "3.5"):
+	case strings.Contains(lower, "haiku") && containsVersion(lower, "3.5"):
 		return haiku35Tier, true
 	case strings.Contains(lower, "haiku"):
 		return haiku45Tier, true
-	case strings.Contains(lower, "opus") && (strings.Contains(lower, "4.5") || strings.Contains(lower, "4-5") || strings.Contains(lower, "4_5") || strings.Contains(lower, "4.6") || strings.Contains(lower, "4-6") || strings.Contains(lower, "4_6") || strings.Contains(lower, "4.7") || strings.Contains(lower, "4-7") || strings.Contains(lower, "4_7")):
+	case strings.Contains(lower, "opus") && containsVersion(lower, "4.5", "4.6", "4.7"):
 		return modernOpusTier, true
 	case strings.Contains(lower, "opus"):
 		return legacyOpusTier, true
