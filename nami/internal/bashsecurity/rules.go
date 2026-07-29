@@ -76,6 +76,42 @@ var readOnlyGitSubcommands = map[string]struct{}{
 	"tag":       {},
 }
 
+// listingGitSubcommands only inspect when they are passed nothing but listing
+// flags. A bare positional argument creates a branch or tag, and the delete,
+// move, copy and force flags rewrite refs, so anything outside
+// readOnlyGitListFlags has to fall through to a permission prompt.
+var listingGitSubcommands = map[string]struct{}{
+	"branch": {},
+	"tag":    {},
+}
+
+var readOnlyGitListFlags = map[string]struct{}{
+	"-a":         {},
+	"--all":      {},
+	"-l":         {},
+	"--list":     {},
+	"-v":         {},
+	"-vv":        {},
+	"--verbose":  {},
+	"--color":    {},
+	"--no-color": {},
+}
+
+// findWritingPredicates delete files or run other programs. find is otherwise
+// an inspection tool, and none of these contain a character the segment
+// splitter rejects, so they have to be named explicitly.
+var findWritingPredicates = map[string]struct{}{
+	"-delete":  {},
+	"-exec":    {},
+	"-execdir": {},
+	"-ok":      {},
+	"-okdir":   {},
+	"-fprint":  {},
+	"-fprint0": {},
+	"-fprintf": {},
+	"-fls":     {},
+}
+
 // ValidateBashSecurity returns a non-empty error description if the command is
 // blocked for security reasons, or empty string if it is safe to execute.
 func ValidateBashSecurity(command string) string {
@@ -221,16 +257,45 @@ func isReadOnlySegment(segment string) bool {
 	}
 
 	program := words[wordIndex]
+	arguments := words[wordIndex+1:]
+
 	if program == "git" {
-		if wordIndex+1 >= len(words) {
+		if len(arguments) == 0 {
 			return false
 		}
-		_, ok := readOnlyGitSubcommands[words[wordIndex+1]]
-		return ok
+		subcommand := arguments[0]
+		if _, ok := readOnlyGitSubcommands[subcommand]; !ok {
+			return false
+		}
+		if _, listing := listingGitSubcommands[subcommand]; listing {
+			return isGitListingOnly(arguments[1:])
+		}
+		return true
 	}
 
-	_, ok := readOnlyPrograms[program]
-	return ok
+	if _, ok := readOnlyPrograms[program]; !ok {
+		return false
+	}
+	if program == "find" {
+		for _, argument := range arguments {
+			if _, writes := findWritingPredicates[argument]; writes {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// isGitListingOnly reports whether the arguments to git branch or git tag only
+// list refs. A positional argument creates one, so nothing outside the listing
+// flag set may appear.
+func isGitListingOnly(arguments []string) bool {
+	for _, argument := range arguments {
+		if _, ok := readOnlyGitListFlags[argument]; !ok {
+			return false
+		}
+	}
+	return true
 }
 
 func shellWords(command string) []string {
