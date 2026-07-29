@@ -8,6 +8,8 @@ import (
 // MessageRouter continuously reads from a Bridge and dispatches messages
 // to the current subscriber. It supports cancellation of in-flight queries
 // while allowing permission prompts and other message types to flow through.
+// The reader goroutine ends when the bridge fails or the router context is
+// cancelled.
 type MessageRouter struct {
 	bridge *Bridge
 	ctx    context.Context
@@ -17,11 +19,10 @@ type MessageRouter struct {
 	pending     []ClientMessage
 	cancelFunc  context.CancelFunc
 	shutdownErr error
-	stopped     bool
 }
 
 // NewMessageRouter creates a router that reads from the bridge in a
-// background goroutine. Call Stop() when done.
+// background goroutine. Cancel ctx to stop it.
 func NewMessageRouter(ctx context.Context, bridge *Bridge) *MessageRouter {
 	r := &MessageRouter{
 		bridge:   bridge,
@@ -36,23 +37,39 @@ func (r *MessageRouter) readLoop() {
 	for {
 		msg, err := r.bridge.ReadMessage(r.ctx)
 		if err != nil {
-			r.mu.Lock()
-			r.stopped = true
-			r.shutdownErr = err
-			r.mu.Unlock()
-			close(r.incoming)
+			r.shutdown(err)
 			return
 		}
 		if msg.Type == MsgCancel {
-			r.mu.Lock()
-			fn := r.cancelFunc
-			r.mu.Unlock()
-			if fn != nil {
-				fn()
-			}
+			r.triggerCancel()
 			continue
 		}
-		r.incoming <- msg
+		// Nothing may consume the buffered channel once the engine is shutting
+		// down, so the send has to lose to context cancellation or this
+		// goroutine outlives the session.
+		select {
+		case r.incoming <- msg:
+		case <-r.ctx.Done():
+			r.shutdown(r.ctx.Err())
+			return
+		}
+	}
+}
+
+func (r *MessageRouter) shutdown(err error) {
+	r.mu.Lock()
+	r.shutdownErr = err
+	r.mu.Unlock()
+	close(r.incoming)
+}
+
+// triggerCancel invokes the registered cancel function, if a query is running.
+func (r *MessageRouter) triggerCancel() {
+	r.mu.Lock()
+	fn := r.cancelFunc
+	r.mu.Unlock()
+	if fn != nil {
+		fn()
 	}
 }
 
@@ -80,17 +97,10 @@ func (r *MessageRouter) Next(ctx context.Context) (ClientMessage, error) {
 				return ClientMessage{}, err
 			}
 
+			// Cancel messages never reach the caller: either they cancel the
+			// active query's context, or there is no query and they are stale.
 			if msg.Type == MsgCancel {
-				r.mu.Lock()
-				fn := r.cancelFunc
-				r.mu.Unlock()
-				if fn != nil {
-					fn()
-					// Don't return the cancel message; the context
-					// cancellation propagates to the caller.
-					continue
-				}
-				// No active query — ignore stale cancel
+				r.triggerCancel()
 				continue
 			}
 			return msg, nil

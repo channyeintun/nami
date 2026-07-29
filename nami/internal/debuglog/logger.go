@@ -241,21 +241,30 @@ func normalizeFields(fields map[string]any) (map[string]any, map[string]any, *Ev
 	metrics := make(map[string]any)
 	var eventErr *EventError
 
+	// error and error_kind both land on the same struct. Assigning fields
+	// rather than replacing it keeps whichever key the map yields second from
+	// discarding the other.
+	errorField := func(assign func(*EventError, string)) func(any) {
+		return func(value any) {
+			text := strings.TrimSpace(fmt.Sprint(value))
+			if text == "" {
+				return
+			}
+			if eventErr == nil {
+				eventErr = &EventError{}
+			}
+			assign(eventErr, text)
+		}
+	}
+	setMessage := errorField(func(e *EventError, text string) { e.Message = text })
+	setKind := errorField(func(e *EventError, text string) { e.Kind = text })
+
 	for key, value := range fields {
 		switch key {
 		case "error":
-			message := strings.TrimSpace(fmt.Sprint(value))
-			if message != "" {
-				eventErr = &EventError{Message: message}
-			}
+			setMessage(value)
 		case "error_kind":
-			kind := strings.TrimSpace(fmt.Sprint(value))
-			if kind != "" {
-				if eventErr == nil {
-					eventErr = &EventError{}
-				}
-				eventErr.Kind = kind
-			}
+			setKind(value)
 		case "bytes", "duration_ms", "duration_ns", "elapsed_ms":
 			metrics[key] = value
 		default:

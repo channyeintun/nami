@@ -153,9 +153,14 @@ func resolveTUIEntry() (string, error) {
 	}
 
 	moduleRoot := filepath.Clean(filepath.Join(filepath.Dir(sourceFile), "..", ".."))
-	tuiEntry := filepath.Join(moduleRoot, "tui", "dist", "index.js")
-	if _, err := os.Stat(tuiEntry); err != nil {
-		return "", fmt.Errorf("TUI bundle not found at %s: %w", tuiEntry, err)
+	distDir := filepath.Join(moduleRoot, "tui", "dist")
+	// The bundler emits an ES module; the .js name is kept as a fallback for
+	// bundles produced before that switch.
+	for _, name := range []string{"index.mjs", "index.js"} {
+		candidate := filepath.Join(distDir, name)
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate, nil
+		}
 	}
-	return tuiEntry, nil
+	return "", fmt.Errorf("TUI bundle not found in %s: run make -C tui release-local, or set NAMI_TUI_ENTRY", distDir)
 }

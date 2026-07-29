@@ -13,6 +13,9 @@ import (
 	"time"
 )
 
+// maxSummaryChars caps the fallback one-line summary of a log entry.
+const maxSummaryChars = 140
+
 type MonitorOptions struct {
 	FilePath  string
 	Level     string
@@ -207,11 +210,7 @@ func summarizeEnvelope(envelope Envelope) string {
 	if envelope.Data != nil {
 		payload, err := json.Marshal(envelope.Data)
 		if err == nil {
-			text := string(payload)
-			if len(text) > 140 {
-				return text[:140] + "..."
-			}
-			return text
+			return Truncate(string(payload), maxSummaryChars)
 		}
 	}
 	return "-"
@@ -229,11 +228,14 @@ func flattenAppleScript(lines []string) []string {
 	return args
 }
 
+// shellQuote wraps a value in single quotes for a POSIX shell. An embedded
+// quote has to close the literal, contribute a double-quoted quote, and reopen
+// it — '"'"' — otherwise the command ends up with an unterminated string.
 func shellQuote(value string) string {
 	if value == "" {
 		return "''"
 	}
-	return "'" + strings.ReplaceAll(value, "'", `"'"'"`) + "'"
+	return "'" + strings.ReplaceAll(value, "'", `'"'"'`) + "'"
 }
 
 func filterValue(value string) string {
