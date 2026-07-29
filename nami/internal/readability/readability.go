@@ -1,4 +1,8 @@
-package tools
+// Package readability extracts the main article content from an HTML
+// document, discarding navigation, advertising and other boilerplate. It is a
+// self-contained scoring algorithm over golang.org/x/net/html with no
+// dependency on how the document was fetched.
+package readability
 
 import (
 	"bytes"
@@ -123,7 +127,10 @@ var webFetchReadabilityTextishTags = map[string]struct{}{
 	"ul":         {},
 }
 
-func extractWebFetchHTMLForMarkdown(body string) string {
+// ExtractHTMLForMarkdown returns the subtree of body most likely to hold the
+// article text, serialized as HTML. The original document is returned
+// unchanged when no better candidate is found.
+func ExtractHTMLForMarkdown(body string) string {
 	document, err := xhtml.Parse(strings.NewReader(body))
 	if err != nil {
 		return body

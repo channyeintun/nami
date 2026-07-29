@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	htmltomarkdown "github.com/JohannesKaufmann/html-to-markdown/v2"
+	"github.com/channyeintun/nami/internal/readability"
 )
 
 func (t *WebFetchTool) getMarkdownContent(ctx context.Context, rawURL string) (webFetchContent, error) {
@@ -98,7 +99,7 @@ func (t *WebFetchTool) toMarkdown(body string, contentType string) (string, erro
 	}
 
 	if strings.Contains(contentType, "text/html") || looksLikeHTML(body) {
-		focusedHTML := extractWebFetchHTMLForMarkdown(body)
+		focusedHTML := readability.ExtractHTMLForMarkdown(body)
 		markdown, err := htmltomarkdown.ConvertString(focusedHTML)
 		if err != nil {
 			return "", fmt.Errorf("convert html to markdown: %w", err)
