@@ -97,6 +97,33 @@ var readOnlyGitListFlags = map[string]struct{}{
 	"--no-color": {},
 }
 
+// inertEnvAssignments are the only variables a segment may set and still count
+// as read-only. An assignment in front of a command is not decoration: the
+// loader honours LD_PRELOAD and DYLD_INSERT_LIBRARIES, git runs GIT_EXTERNAL_DIFF
+// and GIT_SSH_COMMAND as programs, less executes LESSOPEN, and PATH decides
+// which binary "cat" even is. Only variables that change formatting or output
+// selection belong here; everything else falls through to a prompt.
+var inertEnvAssignments = map[string]struct{}{
+	"LANG":           {},
+	"LC_ALL":         {},
+	"LC_COLLATE":     {},
+	"LC_CTYPE":       {},
+	"LC_MESSAGES":    {},
+	"LC_NUMERIC":     {},
+	"LC_TIME":        {},
+	"TZ":             {},
+	"TERM":           {},
+	"COLUMNS":        {},
+	"LINES":          {},
+	"NO_COLOR":       {},
+	"CLICOLOR":       {},
+	"CLICOLOR_FORCE": {},
+	"FORCE_COLOR":    {},
+	"GOFLAGS":        {},
+	"GREP_COLOR":     {},
+	"GREP_COLORS":    {},
+}
+
 // findWritingPredicates delete files or run other programs. find is otherwise
 // an inspection tool, and none of these contain a character the segment
 // splitter rejects, so they have to be named explicitly.
@@ -141,7 +168,16 @@ func CheckDestructive(command string) string {
 	return ""
 }
 
+// IsReadOnlyBashCommand reports whether a command only inspects the machine, so
+// it can be auto-approved and run in parallel with other tool calls.
 func IsReadOnlyBashCommand(command string) bool {
+	// A command the blocking rules reject never runs, so it is never read-only
+	// either. Checking here keeps the two verdicts from disagreeing about
+	// constructs like an escaped backtick.
+	if ValidateBashSecurity(command) != "" {
+		return false
+	}
+
 	segments, ok := splitCommandSegments(command)
 	if !ok || len(segments) == 0 {
 		return false
@@ -202,7 +238,23 @@ func splitCommandSegments(command string) ([]string, bool) {
 			continue
 		}
 
-		if inSingle || inDouble {
+		if inSingle {
+			current.WriteByte(char)
+			continue
+		}
+
+		// Double quotes suppress word splitting but not substitution: the shell
+		// still runs `cmd` and $(cmd) inside them, so a quoted substitution has
+		// to disqualify the command even though the rest of the segment looks
+		// like an inspection command.
+		if char == '`' {
+			return nil, false
+		}
+		if char == '$' && index+1 < len(command) && command[index+1] == '(' {
+			return nil, false
+		}
+
+		if inDouble {
 			current.WriteByte(char)
 			continue
 		}
@@ -224,12 +276,8 @@ func splitCommandSegments(command string) ([]string, bool) {
 				index++
 			}
 			continue
-		case '>', '<', '(', ')', '{', '}', '`':
+		case '>', '<', '(', ')', '{', '}':
 			return nil, false
-		case '$':
-			if index+1 < len(command) && command[index+1] == '(' {
-				return nil, false
-			}
 		}
 
 		current.WriteByte(char)
@@ -250,6 +298,9 @@ func isReadOnlySegment(segment string) bool {
 
 	wordIndex := 0
 	for wordIndex < len(words) && isShellEnvAssignment(words[wordIndex]) {
+		if !isInertEnvAssignment(words[wordIndex]) {
+			return false
+		}
 		wordIndex++
 	}
 	if wordIndex >= len(words) {
@@ -347,6 +398,17 @@ func shellWords(command string) []string {
 	}
 	flush()
 	return words
+}
+
+// isInertEnvAssignment reports whether a leading VAR=value pair is one of the
+// few that cannot change which program runs or make a program execute a hook.
+func isInertEnvAssignment(word string) bool {
+	name, _, ok := strings.Cut(word, "=")
+	if !ok {
+		return false
+	}
+	_, inert := inertEnvAssignments[name]
+	return inert
 }
 
 func isShellEnvAssignment(word string) bool {

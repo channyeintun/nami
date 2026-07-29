@@ -64,14 +64,16 @@ func (c *Context) Check(toolName string, input tools.ToolInput, permLevel tools.
 		return DecisionAllow
 	}
 
-	// Check deny rules first
-	for _, rule := range c.AlwaysDenyRules {
-		if rule.ToolName != "" && rule.ToolName != toolName {
-			continue
-		}
-		if rule.Pattern.MatchString(input.Raw) {
-			return DecisionDeny
-		}
+	// Deny rules win over everything else.
+	if matchesRule(c.AlwaysDenyRules, toolName, input) {
+		return DecisionDeny
+	}
+
+	// Explicit ask rules outrank the blanket shortcuts below. A user who asked
+	// to be prompted for something means it even after turning on
+	// session-wide approval.
+	if matchesRule(c.AlwaysAskRules, toolName, input) {
+		return DecisionAsk
 	}
 
 	if isReadOnlySubagentLaunch(toolName, input) {
@@ -80,31 +82,12 @@ func (c *Context) Check(toolName string, input tools.ToolInput, permLevel tools.
 
 	// Session-wide safe auto-approve: allow normal requests, but keep prompting for
 	// destructive or explicitly sensitive operations.
-	if c.SessionAllowAll {
-		risk := AssessRisk(toolName, input, permLevel)
-		if isSessionSafeAutoApprove(risk) {
-			return DecisionAllow
-		}
+	if c.SessionAllowAll && isSessionSafeAutoApprove(AssessRisk(toolName, input, permLevel)) {
+		return DecisionAllow
 	}
 
-	// Check allow rules
-	for _, rule := range c.AlwaysAllowRules {
-		if rule.ToolName != "" && rule.ToolName != toolName {
-			continue
-		}
-		if rule.Pattern.MatchString(input.Raw) {
-			return DecisionAllow
-		}
-	}
-
-	// Check ask rules
-	for _, rule := range c.AlwaysAskRules {
-		if rule.ToolName != "" && rule.ToolName != toolName {
-			continue
-		}
-		if rule.Pattern.MatchString(input.Raw) {
-			return DecisionAsk
-		}
+	if matchesRule(c.AlwaysAllowRules, toolName, input) {
+		return DecisionAllow
 	}
 
 	if toolName == "bash" && isReadOnlyBashRequest(input) {
@@ -118,6 +101,20 @@ func (c *Context) Check(toolName string, input tools.ToolInput, permLevel tools.
 	default:
 		return DecisionAsk
 	}
+}
+
+// matchesRule reports whether any rule in the set applies to this tool call. A
+// rule with an empty ToolName applies to every tool.
+func matchesRule(rules []Rule, toolName string, input tools.ToolInput) bool {
+	for _, rule := range rules {
+		if rule.ToolName != "" && rule.ToolName != toolName {
+			continue
+		}
+		if rule.Pattern != nil && rule.Pattern.MatchString(input.Raw) {
+			return true
+		}
+	}
+	return false
 }
 
 // AssessRisk returns a coarse risk label and policy notes for a pending tool call.
