@@ -335,10 +335,24 @@ func familyCapabilities(modelID string) (ModelCapabilities, bool) {
 	if family == "" {
 		return ModelCapabilities{}, false
 	}
-	for _, spec := range ModelCatalog {
-		if spec.Family == family {
-			return spec.Capabilities, true
+	// ModelCatalog is a map, so returning whichever member the range reaches
+	// first would resolve differently on every run. Family members differ widely
+	// in context window (the gpt entries span 128k to 400k), and over-promising
+	// a budget the real model cannot honour fails the request, so the smallest
+	// window wins and the model ID breaks ties.
+	best, bestID := ModelCapabilities{}, ""
+	for id, spec := range ModelCatalog {
+		if spec.Family != family {
+			continue
+		}
+		if bestID == "" ||
+			spec.Capabilities.MaxContextWindow < best.MaxContextWindow ||
+			(spec.Capabilities.MaxContextWindow == best.MaxContextWindow && id < bestID) {
+			best, bestID = spec.Capabilities, id
 		}
 	}
-	return ModelCapabilities{}, false
+	if bestID == "" {
+		return ModelCapabilities{}, false
+	}
+	return best, true
 }
