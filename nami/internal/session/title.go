@@ -13,6 +13,7 @@ import (
 
 const (
 	maxTitleConversationChars = 1000
+	maxTitleChars             = 80
 	titlePrompt               = `Generate a short title (3-7 words, sentence case) for the following conversation. Output ONLY the title, nothing else. No quotes.
 
 Conversation:
@@ -99,7 +100,8 @@ func extractConversationText(messages []api.Message) string {
 	}
 	text := b.String()
 	if len(text) > maxTitleConversationChars {
-		text = text[len(text)-maxTitleConversationChars:]
+		// Keeping the tail can start mid-rune; drop the partial leading rune.
+		text = strings.ToValidUTF8(text[len(text)-maxTitleConversationChars:], "")
 	}
 	return text
 }
@@ -116,9 +118,10 @@ func cleanTitle(raw string) string {
 	}
 	title = strings.TrimSpace(title)
 	title = strings.Trim(title, ".,;:- ")
-	// Truncate overly long titles
-	if len(title) > 80 {
-		title = title[:80]
+	// Truncate overly long titles. The cut is by byte, so drop a trailing
+	// partial rune rather than surfacing mojibake in the resume list.
+	if len(title) > maxTitleChars {
+		title = strings.ToValidUTF8(title[:maxTitleChars], "")
 	}
 	return title
 }
