@@ -1,4 +1,4 @@
-package tools
+package lsp
 
 import (
 	"fmt"
@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-type lspServerConfig struct {
+type serverConfig struct {
 	Name       string
 	Command    string
 	Args       []string
@@ -16,7 +16,7 @@ type lspServerConfig struct {
 	Markers    []string
 }
 
-var lspServerConfigs = []lspServerConfig{
+var serverConfigs = []serverConfig{
 	{
 		Name:       "gopls",
 		Command:    "gopls",
@@ -34,35 +34,36 @@ var lspServerConfigs = []lspServerConfig{
 	},
 }
 
-func resolveLSPServerConfig(request lspRequest) (lspServerConfig, string, error) {
+func resolveServerConfig(request Request) (serverConfig, string, error) {
 	if request.FilePath != "" {
 		extension := strings.ToLower(filepath.Ext(request.FilePath))
-		for _, server := range lspServerConfigs {
+		for _, server := range serverConfigs {
 			if _, ok := server.Extensions[extension]; ok {
-				workspaceDir := detectWorkspaceRoot(filepath.Dir(request.FilePath), server.Markers)
-				return server, workspaceDir, nil
+				return server, detectWorkspaceRoot(filepath.Dir(request.FilePath), server.Markers), nil
 			}
 		}
-		return lspServerConfig{}, "", fmt.Errorf("no LSP server configured for files with extension %q", extension)
+		return serverConfig{}, "", fmt.Errorf("no LSP server configured for files with extension %q", extension)
 	}
 
 	searchPath := request.SearchPath
 	if searchPath == "" {
 		cwd, err := os.Getwd()
 		if err != nil {
-			return lspServerConfig{}, "", fmt.Errorf("get working directory: %w", err)
+			return serverConfig{}, "", fmt.Errorf("get working directory: %w", err)
 		}
 		searchPath = cwd
 	}
-	for _, server := range lspServerConfigs {
+	for _, server := range serverConfigs {
 		workspaceDir := detectWorkspaceRoot(searchPath, server.Markers)
 		if containsWorkspaceMarker(workspaceDir, server.Markers) {
 			return server, workspaceDir, nil
 		}
 	}
-	return lspServerConfig{}, "", fmt.Errorf("unable to determine an LSP server for workspace_symbols; provide filePath or use a workspace with known markers")
+	return serverConfig{}, "", fmt.Errorf("unable to determine an LSP server for workspace_symbols; provide filePath or use a workspace with known markers")
 }
 
+// detectWorkspaceRoot walks up from start looking for a project marker, and
+// falls back to start when the filesystem root is reached without a match.
 func detectWorkspaceRoot(start string, markers []string) string {
 	current := start
 	for {
@@ -86,15 +87,14 @@ func containsWorkspaceMarker(dir string, markers []string) bool {
 	return false
 }
 
-func languageIDForPath(path string, server lspServerConfig) string {
-	extension := strings.ToLower(filepath.Ext(path))
-	if server.Name == "typescript-language-server" {
-		switch extension {
-		case ".js", ".jsx", ".mjs", ".cjs":
-			return "javascript"
-		default:
-			return "typescript"
-		}
+func languageIDForPath(path string, server serverConfig) string {
+	if server.Name != "typescript-language-server" {
+		return server.LanguageID
 	}
-	return server.LanguageID
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".js", ".jsx", ".mjs", ".cjs":
+		return "javascript"
+	default:
+		return "typescript"
+	}
 }

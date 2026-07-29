@@ -6,116 +6,20 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"github.com/channyeintun/nami/internal/lsp"
 )
 
-const defaultLSPMaxResults = 100
-
+// LSPTool exposes the internal/lsp client as a tool. It owns parameter parsing
+// and workspace path resolution; the protocol work lives in internal/lsp.
 type LSPTool struct{}
 
-type lspRequest struct {
-	Operation          string
-	FilePath           string
-	Line               int
-	Column             int
-	Query              string
-	IncludeDeclaration bool
-	MaxResults         int
-	SearchPath         string
-}
-
-type lspResponseEnvelope struct {
-	JSONRPC string          `json:"jsonrpc,omitempty"`
-	ID      json.RawMessage `json:"id,omitempty"`
-	Method  string          `json:"method,omitempty"`
-	Params  json.RawMessage `json:"params,omitempty"`
-	Result  json.RawMessage `json:"result,omitempty"`
-	Error   *lspRPCError    `json:"error,omitempty"`
-}
-
-type lspRPCError struct {
-	Code    int             `json:"code"`
-	Message string          `json:"message"`
-	Data    json.RawMessage `json:"data,omitempty"`
-}
-
-type lspPosition struct {
-	Line      int `json:"line"`
-	Character int `json:"character"`
-}
-
-type lspRange struct {
-	Start lspPosition `json:"start"`
-	End   lspPosition `json:"end"`
-}
-
-type lspLocation struct {
-	URI   string   `json:"uri"`
-	Range lspRange `json:"range"`
-}
-
-type lspLocationLink struct {
-	TargetURI            string   `json:"targetUri"`
-	TargetRange          lspRange `json:"targetRange"`
-	TargetSelectionRange lspRange `json:"targetSelectionRange"`
-}
-
-type lspMarkupContent struct {
-	Kind  string `json:"kind"`
-	Value string `json:"value"`
-}
-
-type lspMarkedString struct {
-	Language string `json:"language"`
-	Value    string `json:"value"`
-}
-
-type lspHover struct {
-	Contents any       `json:"contents"`
-	Range    *lspRange `json:"range,omitempty"`
-}
-
-type lspDocumentSymbol struct {
-	Name           string              `json:"name"`
-	Detail         string              `json:"detail,omitempty"`
-	Kind           int                 `json:"kind"`
-	Range          lspRange            `json:"range"`
-	SelectionRange lspRange            `json:"selectionRange"`
-	Children       []lspDocumentSymbol `json:"children,omitempty"`
-}
-
-type lspSymbolInformation struct {
-	Name          string      `json:"name"`
-	Kind          int         `json:"kind"`
-	Location      lspLocation `json:"location"`
-	ContainerName string      `json:"containerName,omitempty"`
-}
-
-type lspWorkspaceFolder struct {
-	URI  string `json:"uri"`
-	Name string `json:"name"`
-}
-
 type lspOutput struct {
-	Operation   string         `json:"operation"`
-	FilePath    string         `json:"filePath,omitempty"`
-	Workspace   string         `json:"workspace,omitempty"`
-	ResultCount int            `json:"resultCount"`
-	Results     []lspResultRow `json:"results"`
-}
-
-type lspResultRow struct {
-	Kind          string `json:"kind"`
-	Name          string `json:"name,omitempty"`
-	Detail        string `json:"detail,omitempty"`
-	SymbolKind    string `json:"symbolKind,omitempty"`
-	FilePath      string `json:"filePath,omitempty"`
-	Line          int    `json:"line,omitempty"`
-	Column        int    `json:"column,omitempty"`
-	EndLine       int    `json:"endLine,omitempty"`
-	EndColumn     int    `json:"endColumn,omitempty"`
-	ContainerName string `json:"containerName,omitempty"`
-	Contents      string `json:"contents,omitempty"`
-	Signature     string `json:"signature,omitempty"`
+	Operation   string          `json:"operation"`
+	FilePath    string          `json:"filePath,omitempty"`
+	Workspace   string          `json:"workspace,omitempty"`
+	ResultCount int             `json:"resultCount"`
+	Results     []lsp.ResultRow `json:"results"`
 }
 
 func NewLSPTool() *LSPTool {
@@ -214,47 +118,40 @@ func (t *LSPTool) Execute(ctx context.Context, input ToolInput) (ToolOutput, err
 	if err != nil {
 		return ToolOutput{}, err
 	}
-	client, err := newLSPClient(ctx, request)
-	if err != nil {
-		return ToolOutput{}, err
-	}
-	defer client.Close()
-
-	rows, err := client.Run(ctx, request)
+	result, err := lsp.Run(ctx, request)
 	if err != nil {
 		return ToolOutput{}, err
 	}
 
-	output := lspOutput{
-		Operation:   request.Operation,
+	encoded, err := json.MarshalIndent(lspOutput{
+		Operation:   string(request.Operation),
 		FilePath:    request.FilePath,
-		Workspace:   client.workspaceDir,
-		ResultCount: len(rows),
-		Results:     rows,
-	}
-	encoded, err := json.MarshalIndent(output, "", "  ")
+		Workspace:   result.Workspace,
+		ResultCount: len(result.Rows),
+		Results:     result.Rows,
+	}, "", "  ")
 	if err != nil {
 		return ToolOutput{}, fmt.Errorf("marshal lsp output: %w", err)
 	}
 	return ToolOutput{Output: string(encoded)}, nil
 }
 
-func parseLSPRequest(params map[string]any) (lspRequest, error) {
+func parseLSPRequest(params map[string]any) (lsp.Request, error) {
 	operation, ok := firstStringParam(params, "operation")
 	if !ok || strings.TrimSpace(operation) == "" {
-		return lspRequest{}, fmt.Errorf("lsp requires operation")
+		return lsp.Request{}, fmt.Errorf("lsp requires operation")
 	}
-	request := lspRequest{
-		Operation:          normalizeLSPOperation(operation),
-		MaxResults:         firstPositiveIntOrDefault(params, defaultLSPMaxResults, "maxResults", "max_results"),
+	request := lsp.Request{
+		Operation:          lsp.NormalizeOperation(operation),
+		MaxResults:         firstPositiveIntOrDefault(params, lsp.DefaultMaxResults, "maxResults", "max_results"),
 		IncludeDeclaration: firstBoolParam(params, "includeDeclaration", "include_declaration"),
 	}
-	if filePath, ok := firstStringParam(params, "filePath"); ok && strings.TrimSpace(filePath) != "" {
+	if filePath, ok := firstStringParam(params, "filePath"); ok {
 		request.FilePath = strings.TrimSpace(filePath)
 	}
-	if pathHint, ok := stringParam(params, "path"); ok && strings.TrimSpace(pathHint) != "" {
+	if pathHint, ok := firstStringParam(params, "path"); ok {
 		trimmedPath := strings.TrimSpace(pathHint)
-		if request.Operation == "workspace_symbols" {
+		if request.Operation == lsp.OperationWorkspaceSymbols {
 			request.SearchPath = trimmedPath
 		} else if request.FilePath == "" {
 			request.FilePath = trimmedPath
@@ -270,67 +167,37 @@ func parseLSPRequest(params map[string]any) (lspRequest, error) {
 		request.Column = column
 	}
 
-	switch request.Operation {
-	case "go_to_definition", "find_references", "hover", "go_to_implementation":
-		if request.FilePath == "" {
-			return lspRequest{}, fmt.Errorf("lsp %s requires filePath", request.Operation)
-		}
-		if request.Line < 1 || request.Column < 1 {
-			return lspRequest{}, fmt.Errorf("lsp %s requires positive line and column", request.Operation)
-		}
-	case "document_symbols":
-		if request.FilePath == "" {
-			return lspRequest{}, fmt.Errorf("lsp document_symbols requires filePath")
-		}
-	case "workspace_symbols":
-		if request.Query == "" {
-			return lspRequest{}, fmt.Errorf("lsp workspace_symbols requires query")
-		}
-	default:
-		return lspRequest{}, fmt.Errorf("unsupported lsp operation %q", operation)
+	if err := lsp.ValidateRequest(request); err != nil {
+		return lsp.Request{}, err
 	}
+	return resolveLSPRequestPaths(request)
+}
 
+// resolveLSPRequestPaths turns workspace-relative paths into absolute ones and
+// verifies the target file exists before a server is launched.
+func resolveLSPRequestPaths(request lsp.Request) (lsp.Request, error) {
 	if request.FilePath != "" {
 		resolvedPath, err := resolveToolPath(request.FilePath)
 		if err != nil {
-			return lspRequest{}, err
+			return lsp.Request{}, err
 		}
 		info, err := os.Stat(resolvedPath)
 		if err != nil {
-			return lspRequest{}, fmt.Errorf("stat file %q: %w", resolvedPath, err)
+			return lsp.Request{}, fmt.Errorf("stat file %q: %w", resolvedPath, err)
 		}
 		if info.IsDir() {
-			return lspRequest{}, fmt.Errorf("%q is a directory", resolvedPath)
+			return lsp.Request{}, fmt.Errorf("%q is a directory", resolvedPath)
 		}
 		request.FilePath = resolvedPath
 	}
 	if request.SearchPath != "" {
 		resolvedSearchPath, err := resolveToolPath(request.SearchPath)
 		if err != nil {
-			return lspRequest{}, err
+			return lsp.Request{}, err
 		}
 		request.SearchPath = resolvedSearchPath
 	}
 	return request, nil
-}
-
-func normalizeLSPOperation(value string) string {
-	switch strings.TrimSpace(value) {
-	case "go_to_definition", "goToDefinition":
-		return "go_to_definition"
-	case "find_references", "findReferences":
-		return "find_references"
-	case "hover":
-		return "hover"
-	case "document_symbols", "documentSymbol":
-		return "document_symbols"
-	case "workspace_symbols", "workspaceSymbol":
-		return "workspace_symbols"
-	case "go_to_implementation", "goToImplementation":
-		return "go_to_implementation"
-	default:
-		return strings.TrimSpace(value)
-	}
 }
 
 func firstPositiveIntOrDefault(params map[string]any, fallback int, keys ...string) int {
