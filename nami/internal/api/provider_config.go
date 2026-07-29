@@ -40,7 +40,7 @@ var ProviderSpecs = map[string]ProviderSpec{
 		Protocol:     AnthropicAPI,
 		BaseURL:      "https://api.anthropic.com",
 		EnvKeyVar:    "ANTHROPIC_API_KEY",
-		DefaultModel: "claude-sonnet-4-20250514",
+		DefaultModel: "claude-sonnet-5",
 		Priority:     40,
 	},
 	"openai": {
@@ -134,10 +134,51 @@ var ProviderSpecs = map[string]ProviderSpec{
 	},
 }
 
+// claudeFiveCapabilities is shared by the Claude 5 family: a 1M context window,
+// 128K of output, and the full tool, thinking, vision and caching surface.
+var claudeFiveCapabilities = ModelCapabilities{
+	SupportsToolUse:          true,
+	SupportsExtendedThinking: true,
+	SupportsVision:           true,
+	SupportsCaching:          true,
+	MaxContextWindow:         1000000,
+	MaxOutputTokens:          128000,
+}
+
+// gptFiveSixCapabilities is shared by the GPT 5.6 family. The context window is
+// larger than the usable prompt budget, so MaxPromptTokens carries the real
+// input ceiling.
+var gptFiveSixCapabilities = ModelCapabilities{
+	SupportsToolUse:  true,
+	SupportsVision:   true,
+	SupportsJsonMode: true,
+	MaxContextWindow: 1050000,
+	MaxPromptTokens:  922000,
+	MaxOutputTokens:  128000,
+}
+
 var ModelCatalog = map[string]ModelSpec{
-	"claude-sonnet-4-20250514": {
-		ID:          "claude-sonnet-4-20250514",
-		DisplayName: "Claude Sonnet 4",
+	"claude-fable-5": {
+		ID:           "claude-fable-5",
+		DisplayName:  "Claude Fable 5",
+		Family:       "claude",
+		Capabilities: claudeFiveCapabilities,
+	},
+	"claude-opus-5": {
+		ID:           "claude-opus-5",
+		DisplayName:  "Claude Opus 5",
+		Family:       "claude",
+		Capabilities: claudeFiveCapabilities,
+	},
+	"claude-sonnet-5": {
+		ID:           "claude-sonnet-5",
+		DisplayName:  "Claude Sonnet 5",
+		Family:       "claude",
+		Capabilities: claudeFiveCapabilities,
+	},
+	"claude-haiku-4-5": {
+		ID:          "claude-haiku-4-5",
+		DisplayName: "Claude Haiku 4.5",
 		Family:      "claude",
 		Capabilities: ModelCapabilities{
 			SupportsToolUse:          true,
@@ -145,8 +186,32 @@ var ModelCatalog = map[string]ModelSpec{
 			SupportsVision:           true,
 			SupportsCaching:          true,
 			MaxContextWindow:         200000,
-			MaxOutputTokens:          8192,
+			MaxOutputTokens:          64000,
 		},
+	},
+	"gpt-5.6": {
+		ID:           "gpt-5.6",
+		DisplayName:  "GPT 5.6",
+		Family:       "gpt",
+		Capabilities: gptFiveSixCapabilities,
+	},
+	"gpt-5.6-terra": {
+		ID:           "gpt-5.6-terra",
+		DisplayName:  "GPT 5.6 Terra",
+		Family:       "gpt",
+		Capabilities: gptFiveSixCapabilities,
+	},
+	"gpt-5.6-sol": {
+		ID:           "gpt-5.6-sol",
+		DisplayName:  "GPT 5.6 Sol",
+		Family:       "gpt",
+		Capabilities: gptFiveSixCapabilities,
+	},
+	"gpt-5.6-luna": {
+		ID:           "gpt-5.6-luna",
+		DisplayName:  "GPT 5.6 Luna",
+		Family:       "gpt",
+		Capabilities: gptFiveSixCapabilities,
 	},
 	"gpt-5.4": {
 		ID:          "gpt-5.4",
@@ -156,8 +221,9 @@ var ModelCatalog = map[string]ModelSpec{
 			SupportsToolUse:  true,
 			SupportsVision:   true,
 			SupportsJsonMode: true,
-			MaxContextWindow: 128000,
-			MaxOutputTokens:  16384,
+			MaxContextWindow: 1050000,
+			MaxPromptTokens:  922000,
+			MaxOutputTokens:  128000,
 		},
 	},
 	"gpt-5.5": {
@@ -166,9 +232,10 @@ var ModelCatalog = map[string]ModelSpec{
 		Family:      "gpt",
 		Capabilities: ModelCapabilities{
 			SupportsToolUse:  true,
+			SupportsVision:   true,
 			SupportsJsonMode: true,
-			MaxContextWindow: 400000,
-			MaxPromptTokens:  272000,
+			MaxContextWindow: 1050000,
+			MaxPromptTokens:  922000,
 			MaxOutputTokens:  128000,
 		},
 	},

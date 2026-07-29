@@ -37,7 +37,7 @@ func SupportsOpenAIReasoningEffort(model string) bool {
 
 func SupportsXHighReasoningEffort(model string) bool {
 	lower := normalizeReasoningModelID(model)
-	versions := []string{"gpt-5.2", "gpt-5.3", "gpt-5.4", "gpt-5.5"}
+	versions := []string{"gpt-5.2", "gpt-5.3", "gpt-5.4", "gpt-5.5", "gpt-5.6"}
 	for _, v := range versions {
 		if strings.Contains(lower, v) {
 			return true

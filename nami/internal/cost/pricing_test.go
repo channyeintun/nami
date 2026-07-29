@@ -33,7 +33,9 @@ func TestCalculateUSDCostScalesLinearly(t *testing.T) {
 
 func TestCalculateUSDCostIsZeroForUnknownModels(t *testing.T) {
 	usage := api.Usage{InputTokens: 1_000_000, OutputTokens: 1_000_000}
-	for _, model := range []string{"", "gpt-5.5", "llama-3", "unknown"} {
+	// "gpt-4o" stands in for a GPT generation with no recorded rate: the family
+	// is known but the price is not, and a guess would be worse than nothing.
+	for _, model := range []string{"", "gpt-4o", "llama-3", "unknown"} {
 		if got := CalculateUSDCost(model, usage); got != 0 {
 			t.Errorf("CalculateUSDCost(%q) = %v, want 0 for an unpriced model", model, got)
 		}
