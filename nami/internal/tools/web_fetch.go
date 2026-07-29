@@ -2,51 +2,25 @@ package tools
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"net/http"
 	"strings"
-	"time"
+
+	"github.com/channyeintun/nami/internal/webfetch"
 )
 
-const (
-	defaultWebFetchTimeout         = 60 * time.Second
-	maxWebFetchURLLength           = 2000
-	maxWebFetchContentBytes  int64 = 10 * 1024 * 1024
-	maxWebFetchMarkdownChars       = 100_000
-	maxWebFetchCacheBytes    int64 = 50 * 1024 * 1024
-	webFetchCacheTTL               = 15 * time.Minute
-	maxWebFetchRedirects           = 10
-	webFetchUserAgent              = "nami/0.1 (+https://github.com/channyeintun/nami)"
-)
+// searchReportThreshold is the result size above which a fetch is also saved as
+// a search-report artifact so the model can revisit it without refetching.
+const searchReportThreshold = 4000
 
-type webFetchRespondMode string
-
-const (
-	webFetchRespondModeReport   webFetchRespondMode = "report"
-	webFetchRespondModeMarkdown webFetchRespondMode = "markdown"
-)
-
-// WebFetchTool fetches a URL, converts HTML to markdown, and returns prompt-focused content.
+// WebFetchTool fetches a URL, converts HTML to markdown, and returns
+// prompt-focused content. The transport and rendering live in internal/webfetch.
 type WebFetchTool struct {
-	client *http.Client
-	cache  *webFetchCache
+	fetcher *webfetch.Fetcher
 }
 
 // NewWebFetchTool constructs the web fetch tool.
 func NewWebFetchTool() *WebFetchTool {
-	return &WebFetchTool{
-		client: &http.Client{
-			Timeout: defaultWebFetchTimeout,
-			CheckRedirect: func(req *http.Request, via []*http.Request) error {
-				if len(via) >= maxWebFetchRedirects {
-					return errors.New("stopped after too many redirects")
-				}
-				return http.ErrUseLastResponse
-			},
-		},
-		cache: newWebFetchCache(maxWebFetchCacheBytes, webFetchCacheTTL),
-	}
+	return &WebFetchTool{fetcher: webfetch.New()}
 }
 
 func (t *WebFetchTool) Name() string {
@@ -97,43 +71,43 @@ func (t *WebFetchTool) Execute(ctx context.Context, input ToolInput) (ToolOutput
 	if !ok || strings.TrimSpace(rawURL) == "" {
 		return ToolOutput{}, fmt.Errorf("web_fetch requires url")
 	}
-	respondMode, err := parseWebFetchRespondMode(input.Params)
-	if err != nil {
-		return ToolOutput{}, err
-	}
-	prompt, err := parseWebFetchPrompt(input.Params, respondMode)
+	mode, prompt, err := webFetchRequestOptions(input.Params)
 	if err != nil {
 		return ToolOutput{}, err
 	}
 
-	normalizedURL, err := normalizeWebFetchURL(rawURL)
+	normalizedURL, err := webfetch.NormalizeURL(rawURL)
 	if err != nil {
 		return ToolOutput{}, err
 	}
 
-	content, err := t.getMarkdownContent(ctx, normalizedURL)
+	content, err := t.fetcher.Fetch(ctx, normalizedURL)
 	if err != nil {
 		return ToolOutput{}, err
 	}
 
-	result := buildWebFetchResult(normalizedURL, prompt, respondMode, content)
-
-	// Route substantial fetch results to a search-report artifact.
-	const searchReportThreshold = 4000
-	if respondMode == webFetchRespondModeReport && len(result) >= searchReportThreshold {
+	result := webfetch.Render(normalizedURL, prompt, mode, content)
+	if mode == webfetch.ModeReport && len(result) >= searchReportThreshold {
 		if mutation, ok := saveSearchReportArtifact(ctx, normalizedURL, strings.TrimSpace(prompt), result); ok {
 			return ToolOutput{Output: result, Artifacts: []ArtifactMutation{mutation}}, nil
 		}
 	}
-
 	return ToolOutput{Output: result}, nil
 }
 
-type webFetchContent struct {
-	URL         string
-	StatusCode  int
-	StatusText  string
-	ContentType string
-	Bytes       int
-	Markdown    string
+// webFetchRequestOptions resolves the response mode and the prompt, which is
+// only optional when raw markdown was requested.
+func webFetchRequestOptions(params map[string]any) (webfetch.Mode, string, error) {
+	rawMode, _ := firstStringParam(params, "respond_with", "respondWith")
+	mode, err := webfetch.ParseMode(rawMode)
+	if err != nil {
+		return "", "", err
+	}
+
+	prompt, _ := stringParam(params, "prompt")
+	prompt = strings.TrimSpace(prompt)
+	if mode == webfetch.ModeReport && prompt == "" {
+		return "", "", fmt.Errorf("web_fetch requires prompt")
+	}
+	return mode, prompt, nil
 }
