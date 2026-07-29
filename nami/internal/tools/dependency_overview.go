@@ -26,7 +26,11 @@ var dependencyOverviewManifestNames = map[string]string{
 	"Gemfile":          "Ruby",
 }
 
-var quotedStringPattern = regexp.MustCompile(`"([^"\\]+)"|'([^'\\]+)'`)
+// Empty quoted strings must match as a pair. With a + quantifier "" fails to
+// match, and the engine then pairs its closing quote with the opening quote of
+// the next entry, emitting the separator as a dependency and swallowing the
+// real one. parseQuotedStrings drops the resulting blanks.
+var quotedStringPattern = regexp.MustCompile(`"([^"\\]*)"|'([^'\\]*)'`)
 var gemfileLinePattern = regexp.MustCompile(`^\s*gem\s+["']([^"']+)["']`)
 var pep508NamePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*`)
 
