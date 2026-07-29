@@ -105,11 +105,9 @@ type QueryState struct {
 	SessionMemory SessionMemorySnapshot
 	// AttemptEntries carries recent failed attempts for continuity-aware pressure decisions.
 	AttemptEntries []AttemptEntry
-	// ProgressGoal/ProgressPercent/ProgressLabel hold the monotonic per-turn
-	// state behind the goal progress indicator (see progress_directive.go).
-	ProgressGoal    string
-	ProgressPercent int
-	ProgressLabel   string
+	// GoalProgress holds the monotonic per-turn state behind the goal progress
+	// indicator (see progress_directive.go).
+	GoalProgress GoalProgressState
 }
 
 // NewQueryState creates initial state from a request.

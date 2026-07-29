@@ -670,7 +670,7 @@ The UI shows the user a live progress bar for the current goal. Keep it current 
 ::progress{goal="fix auth token refresh" percent=10 label="reading auth module"}
 - Set goal once when substantial work begins (a short imperative phrase); later updates only need percent and label.
 - Update at meaningful transitions — a phase or subtask finished, roughly every few tool calls. Skip the directive entirely for trivial single-step requests.
-- percent is your honest estimate of completed work toward the goal. The bar never moves backward and only reaches 100 when the turn finishes, so stay at or below 95 while work remains.
+- percent is your honest estimate of completed work toward the goal. The bar never moves backward and stays capped below completion while the turn runs, so stay at or below 95 while work remains.
 - The directive line is stripped from the visible transcript. Never mention it, and never wrap it in code fences.
 
 # Communicating

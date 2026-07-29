@@ -115,28 +115,39 @@ func TestParseProgressDirectiveRejectsGarbage(t *testing.T) {
 	}
 }
 
-func TestApplyGoalProgressClampsMonotonically(t *testing.T) {
-	state := &QueryState{}
+func TestGoalProgressStateApplyClampsMonotonically(t *testing.T) {
+	state := &GoalProgressState{}
 
-	payload, changed := state.applyGoalProgress(GoalProgressUpdate{Goal: "fix auth", Percent: 30, Label: "reading"})
-	if !changed || payload.Percent != 30 || payload.Goal != "fix auth" {
-		t.Fatalf("first apply = %+v changed=%v", payload, changed)
+	if !state.Apply(GoalProgressUpdate{Goal: "fix auth", Percent: 30, Label: "reading"}) {
+		t.Fatal("first apply reported no change")
+	}
+	if state.Goal != "fix auth" || state.Percent != 30 {
+		t.Fatalf("after first apply = %+v", state)
 	}
 
 	// Lower percent must not move the bar backward, but a new label still emits.
-	payload, changed = state.applyGoalProgress(GoalProgressUpdate{Percent: 10, Label: "editing"})
-	if !changed || payload.Percent != 30 || payload.Label != "editing" {
-		t.Fatalf("backward apply = %+v changed=%v", payload, changed)
+	if !state.Apply(GoalProgressUpdate{Percent: 10, Label: "editing"}) {
+		t.Fatal("label-only apply reported no change")
+	}
+	if state.Percent != 30 || state.Label != "editing" {
+		t.Fatalf("after backward apply = %+v", state)
+	}
+
+	// A directive carrying no percent at all leaves the bar where it is.
+	if state.Apply(GoalProgressUpdate{Label: "editing"}) {
+		t.Fatal("percent-less apply reported change")
 	}
 
 	// Identical state emits nothing.
-	if _, changed = state.applyGoalProgress(GoalProgressUpdate{Percent: 30, Label: "editing"}); changed {
+	if state.Apply(GoalProgressUpdate{Percent: 30, Label: "editing"}) {
 		t.Fatal("no-op apply reported change")
 	}
 
 	// Percent caps below completion until the turn actually ends.
-	payload, changed = state.applyGoalProgress(GoalProgressUpdate{Percent: 100})
-	if !changed || payload.Percent != 99 {
-		t.Fatalf("capped apply = %+v changed=%v", payload, changed)
+	if !state.Apply(GoalProgressUpdate{Percent: 100}) {
+		t.Fatal("capped apply reported no change")
+	}
+	if state.Percent != maxInTurnPercent {
+		t.Fatalf("after capped apply = %+v", state)
 	}
 }

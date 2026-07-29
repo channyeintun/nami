@@ -122,17 +122,27 @@ func streamModelTurn(
 
 	turn := modelTurn{}
 	filter := newProgressDirectiveFilter()
-	emitProgress := func(updates []GoalProgressUpdate) error {
+	// emitFiltered surfaces one filtered slice of the stream: goal-progress
+	// events first, then whatever text remains visible.
+	emitFiltered := func(visible string, updates []GoalProgressUpdate) error {
 		for _, update := range updates {
-			payload, changed := state.applyGoalProgress(update)
-			if !changed {
+			if !state.GoalProgress.Apply(update) {
 				continue
+			}
+			payload := ipc.GoalProgressPayload{
+				Goal:    state.GoalProgress.Goal,
+				Percent: state.GoalProgress.Percent,
+				Label:   state.GoalProgress.Label,
 			}
 			if err := yieldEvent(yield, ipc.EventGoalProgress, payload); err != nil {
 				return err
 			}
 		}
-		return nil
+		if visible == "" {
+			return nil
+		}
+		turn.assistantText += visible
+		return yieldEvent(yield, ipc.EventTokenDelta, ipc.TokenDeltaPayload{Text: visible})
 	}
 	for event, streamErr := range stream {
 		if streamErr != nil {
@@ -142,14 +152,7 @@ func streamModelTurn(
 		switch event.Type {
 		case api.ModelEventToken:
 			visible, updates := filter.Process(event.Text)
-			if err := emitProgress(updates); err != nil {
-				return modelTurn{}, err
-			}
-			if visible == "" {
-				continue
-			}
-			turn.assistantText += visible
-			if err := yieldEvent(yield, ipc.EventTokenDelta, ipc.TokenDeltaPayload{Text: visible}); err != nil {
+			if err := emitFiltered(visible, updates); err != nil {
 				return modelTurn{}, err
 			}
 		case api.ModelEventThinking:
@@ -170,15 +173,8 @@ func streamModelTurn(
 		}
 	}
 
-	visible, updates := filter.Flush()
-	if err := emitProgress(updates); err != nil {
+	if err := emitFiltered(filter.Flush()); err != nil {
 		return modelTurn{}, err
-	}
-	if visible != "" {
-		turn.assistantText += visible
-		if err := yieldEvent(yield, ipc.EventTokenDelta, ipc.TokenDeltaPayload{Text: visible}); err != nil {
-			return modelTurn{}, err
-		}
 	}
 
 	return turn, nil

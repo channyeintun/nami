@@ -4,8 +4,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-
-	"github.com/channyeintun/nami/internal/ipc"
 )
 
 const progressDirectivePrefix = "::progress{"
@@ -13,6 +11,10 @@ const progressDirectivePrefix = "::progress{"
 // maxProgressDirectiveHold bounds how much of a candidate line the filter will
 // hold back before giving up and passing it through as normal text.
 const maxProgressDirectiveHold = 256
+
+// maxInTurnPercent caps in-turn progress so the bar never reads complete before
+// the turn actually finishes.
+const maxInTurnPercent = 99
 
 // GoalProgressUpdate is one parsed ::progress directive from the assistant stream.
 type GoalProgressUpdate struct {
@@ -25,55 +27,65 @@ type GoalProgressUpdate struct {
 // streamed assistant text. It holds back only line prefixes that could still
 // become a directive, so ordinary text keeps streaming without buffering.
 type progressDirectiveFilter struct {
-	held        string
-	atLineStart bool
+	// held is the candidate directive line accumulated so far.
+	held string
+	// passingThrough means the current line was already ruled out, so the rest
+	// of it streams straight through until the next newline.
+	passingThrough bool
 }
 
 func newProgressDirectiveFilter() *progressDirectiveFilter {
-	return &progressDirectiveFilter{atLineStart: true}
+	return &progressDirectiveFilter{}
 }
 
 // Process consumes one streamed chunk and returns the text safe to surface now
 // plus any directives completed within it.
 func (f *progressDirectiveFilter) Process(chunk string) (string, []GoalProgressUpdate) {
+	// Fast path: the common mid-line chunk streams through untouched, with no
+	// buffer and no copy.
+	if f.passingThrough && strings.IndexByte(chunk, '\n') < 0 {
+		return chunk, nil
+	}
+
 	var out strings.Builder
 	var updates []GoalProgressUpdate
 
 	for chunk != "" {
-		if !f.atLineStart && f.held == "" {
-			lineEnd := strings.IndexByte(chunk, '\n')
+		lineEnd := strings.IndexByte(chunk, '\n')
+
+		if f.passingThrough {
 			if lineEnd < 0 {
 				out.WriteString(chunk)
-				return out.String(), updates
+				break
 			}
 			out.WriteString(chunk[:lineEnd+1])
 			chunk = chunk[lineEnd+1:]
-			f.atLineStart = true
+			f.passingThrough = false
 			continue
 		}
 
-		lineEnd := strings.IndexByte(chunk, '\n')
+		// Incomplete line: hold it until it completes or stops looking like a
+		// directive.
 		if lineEnd < 0 {
 			f.held += chunk
 			chunk = ""
 			if !couldBeProgressDirective(f.held) {
 				out.WriteString(f.held)
 				f.held = ""
-				f.atLineStart = false
+				f.passingThrough = true
 			}
 			continue
 		}
 
-		f.held += chunk[:lineEnd]
+		line := f.held + chunk[:lineEnd]
 		chunk = chunk[lineEnd+1:]
-		if update, ok := parseProgressDirective(f.held); ok {
-			updates = append(updates, update)
-		} else {
-			out.WriteString(f.held)
-			out.WriteByte('\n')
-		}
 		f.held = ""
-		f.atLineStart = true
+		if update, ok := parseProgressDirective(line); ok {
+			updates = append(updates, update)
+			continue
+		}
+		out.WriteString(line)
+		out.WriteByte('\n')
 	}
 
 	return out.String(), updates
@@ -84,7 +96,7 @@ func (f *progressDirectiveFilter) Process(chunk string) (string, []GoalProgressU
 func (f *progressDirectiveFilter) Flush() (string, []GoalProgressUpdate) {
 	held := f.held
 	f.held = ""
-	f.atLineStart = true
+	f.passingThrough = false
 	if held == "" {
 		return "", nil
 	}
@@ -99,13 +111,13 @@ func couldBeProgressDirective(held string) bool {
 		return false
 	}
 	trimmed := strings.TrimLeft(held, " \t")
-	if len(trimmed) < len(progressDirectivePrefix) {
-		return strings.HasPrefix(progressDirectivePrefix, trimmed)
-	}
-	return strings.HasPrefix(trimmed, progressDirectivePrefix)
+	// Either the line already opens with the directive, or it is still a
+	// partial prefix of one.
+	return strings.HasPrefix(trimmed, progressDirectivePrefix) ||
+		strings.HasPrefix(progressDirectivePrefix, trimmed)
 }
 
-var progressAttrPattern = regexp.MustCompile(`(\w+)=("([^"]*)"|[0-9]+)`)
+var progressAttrPattern = regexp.MustCompile(`(\w+)=(?:"([^"]*)"|(\d+))`)
 
 func parseProgressDirective(line string) (GoalProgressUpdate, bool) {
 	trimmed := strings.TrimSpace(line)
@@ -113,26 +125,30 @@ func parseProgressDirective(line string) (GoalProgressUpdate, bool) {
 		return GoalProgressUpdate{}, false
 	}
 	body := strings.TrimSuffix(strings.TrimPrefix(trimmed, progressDirectivePrefix), "}")
-	update := GoalProgressUpdate{Percent: -1}
+
+	var update GoalProgressUpdate
 	found := false
 	for _, match := range progressAttrPattern.FindAllStringSubmatch(body, -1) {
-		value := match[2]
-		if strings.HasPrefix(value, `"`) {
-			value = match[3]
+		name, quoted, number := match[1], match[2], match[3]
+		value := quoted
+		if number != "" {
+			value = number
 		}
-		switch match[1] {
+		switch name {
 		case "goal":
 			update.Goal = strings.TrimSpace(value)
-			found = true
 		case "label":
 			update.Label = strings.TrimSpace(value)
-			found = true
 		case "percent":
-			if n, err := strconv.Atoi(value); err == nil && n >= 0 {
-				update.Percent = n
-				found = true
+			n, err := strconv.Atoi(value)
+			if err != nil || n < 0 {
+				continue
 			}
+			update.Percent = n
+		default:
+			continue
 		}
+		found = true
 	}
 	if !found {
 		return GoalProgressUpdate{}, false
@@ -140,36 +156,33 @@ func parseProgressDirective(line string) (GoalProgressUpdate, bool) {
 	return update, true
 }
 
-// applyGoalProgress merges a parsed directive into per-turn progress state,
-// clamping so the bar never moves backward and never reads complete before the
-// turn actually finishes. It returns the payload to emit and whether anything
-// changed.
-func (s *QueryState) applyGoalProgress(update GoalProgressUpdate) (ipc.GoalProgressPayload, bool) {
+// GoalProgressState is the monotonic per-turn state behind the goal progress
+// indicator, merged from the ::progress directives seen so far this turn.
+type GoalProgressState struct {
+	Goal    string
+	Percent int
+	Label   string
+}
+
+// Apply merges a parsed directive into the per-turn state, clamping so the bar
+// never moves backward and never reads complete before the turn actually
+// finishes. It reports whether anything changed; mapping the state onto the
+// wire is the streaming layer's job.
+func (s *GoalProgressState) Apply(update GoalProgressUpdate) bool {
 	changed := false
-	if goal := strings.TrimSpace(update.Goal); goal != "" && goal != s.ProgressGoal {
-		s.ProgressGoal = goal
+	if goal := strings.TrimSpace(update.Goal); goal != "" && goal != s.Goal {
+		s.Goal = goal
 		changed = true
 	}
-	if update.Percent >= 0 {
-		percent := update.Percent
-		if percent > 99 {
-			percent = 99
-		}
-		if percent > s.ProgressPercent {
-			s.ProgressPercent = percent
-			changed = true
-		}
-	}
-	if label := strings.TrimSpace(update.Label); label != "" && label != s.ProgressLabel {
-		s.ProgressLabel = label
+	// An absent percent is the zero value, which can never exceed the monotonic
+	// state, so it needs no separate sentinel.
+	if percent := min(update.Percent, maxInTurnPercent); percent > s.Percent {
+		s.Percent = percent
 		changed = true
 	}
-	if !changed {
-		return ipc.GoalProgressPayload{}, false
+	if label := strings.TrimSpace(update.Label); label != "" && label != s.Label {
+		s.Label = label
+		changed = true
 	}
-	return ipc.GoalProgressPayload{
-		Goal:    s.ProgressGoal,
-		Percent: s.ProgressPercent,
-		Label:   s.ProgressLabel,
-	}, true
+	return changed
 }

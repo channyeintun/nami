@@ -315,6 +315,7 @@ export type UIActiveTurnStatus =
 
 export interface UIGoalProgress {
   goal: string;
+  /** Already clamped to 0..100 by the goal_progress reducer. */
   percent: number;
   label: string;
 }
@@ -673,13 +674,15 @@ export function useEvents(initialModel: string, initialMode: string) {
       }
       case "goal_progress": {
         const p = event.payload as GoalProgressPayload;
-        const percent = Math.max(0, Math.min(100, Math.round(p.percent ?? 0)));
+        // The engine merges and clamps this state and sends a fully resolved
+        // snapshot rather than a delta, so there is nothing to carry forward
+        // here — this is only the trust boundary for the untyped payload.
         setUIState((s) => ({
           ...s,
           goalProgress: {
-            goal: stringOrEmpty(p.goal) || s.goalProgress?.goal || "",
-            percent,
-            label: stringOrEmpty(p.label) || s.goalProgress?.label || "",
+            goal: stringOrEmpty(p.goal),
+            percent: Math.max(0, Math.min(100, Math.round(p.percent ?? 0))),
+            label: stringOrEmpty(p.label),
           },
         }));
         break;
@@ -1706,6 +1709,7 @@ export function useEvents(initialModel: string, initialMode: string) {
       activeTurnStatus: "working",
       error: null,
       statusLine: null,
+      goalProgress: null,
       isStreaming: true,
     }));
   }, []);
