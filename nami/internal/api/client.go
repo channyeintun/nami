@@ -10,8 +10,6 @@ import (
 	"reflect"
 	"strings"
 	"time"
-
-	"github.com/channyeintun/nami/internal/ipc"
 )
 
 // streamingHTTPTimeout is the per-request timeout for streaming API calls.
@@ -326,18 +324,6 @@ func (c *capabilitiesOverrideClient) Warmup(ctx context.Context) error {
 		return nil
 	}
 	return warmable.Warmup(ctx)
-}
-
-// StreamEventAdapter converts ModelEvents to IPC StreamEvents.
-func StreamEventAdapter(event ModelEvent) *ipc.StreamEvent {
-	switch event.Type {
-	case ModelEventToken:
-		return nil // caller handles token deltas directly
-	case ModelEventThinking:
-		return nil // caller handles thinking deltas directly
-	default:
-		return nil
-	}
 }
 
 // warnCustomBaseURL prints a security warning when the caller provides a

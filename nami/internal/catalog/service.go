@@ -185,20 +185,6 @@ func (s *Service) Provider(ctx context.Context, cfg config.Config, providerID st
 	return Provider{}, false, nil
 }
 
-func (s *Service) Model(ctx context.Context, cfg config.Config, providerID string, modelID string) (Model, bool, error) {
-	provider, ok, err := s.Provider(ctx, cfg, providerID)
-	if err != nil || !ok {
-		return Model{}, ok, err
-	}
-	modelID = strings.TrimSpace(modelID)
-	for _, model := range provider.Models {
-		if model.ID == modelID {
-			return model, true, nil
-		}
-	}
-	return Model{}, false, nil
-}
-
 func (s *Service) Route(ctx context.Context, cfg config.Config, providerID string, modelID string) (api.ProviderRoute, error) {
 	if normalizeProviderID(providerID) == "codex" {
 		return s.codexRoute(ctx, cfg, modelID)

@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"sort"
 	"strings"
 	"time"
 
@@ -638,71 +637,6 @@ func memoryRecallSummaryTitle(line string) string {
 	return trimmed
 }
 
-func selectRelevantMemoryLines(content, currentUserPrompt string) []string {
-	lines := strings.Split(content, "\n")
-	terms := extractRecallTerms(currentUserPrompt)
-	if len(terms) == 0 {
-		return fallbackMemoryLines(lines)
-	}
-
-	type scoredLine struct {
-		line  string
-		score int
-		idx   int
-	}
-
-	scored := make([]scoredLine, 0, len(lines))
-	for idx, raw := range lines {
-		line := strings.TrimSpace(raw)
-		if line == "" || strings.HasPrefix(line, "[truncated") {
-			continue
-		}
-		score := scoreMemoryLine(line, terms)
-		if score <= 0 {
-			continue
-		}
-		scored = append(scored, scoredLine{line: line, score: score, idx: idx})
-	}
-
-	if len(scored) == 0 {
-		return fallbackMemoryLines(lines)
-	}
-
-	sort.SliceStable(scored, func(i, j int) bool {
-		if scored[i].score != scored[j].score {
-			return scored[i].score > scored[j].score
-		}
-		return scored[i].idx < scored[j].idx
-	})
-
-	limit := min(maxRelevantMemoryLines, len(scored))
-	selected := scored[:limit]
-	sort.SliceStable(selected, func(i, j int) bool {
-		return selected[i].idx < selected[j].idx
-	})
-
-	result := make([]string, 0, limit)
-	for _, item := range selected {
-		result = append(result, item.line)
-	}
-	return result
-}
-
-func fallbackMemoryLines(lines []string) []string {
-	result := make([]string, 0, maxRelevantMemoryLines)
-	for _, raw := range lines {
-		line := strings.TrimSpace(raw)
-		if line == "" || strings.HasPrefix(line, "[truncated") {
-			continue
-		}
-		result = append(result, line)
-		if len(result) >= maxRelevantMemoryLines {
-			break
-		}
-	}
-	return result
-}
-
 func extractRecallTerms(prompt string) []string {
 	matches := recallTokenPattern.FindAllString(strings.ToLower(prompt), -1)
 	if len(matches) == 0 {
@@ -737,23 +671,6 @@ func isLowSignalRecallTerm(term string) bool {
 	default:
 		return false
 	}
-}
-
-func scoreMemoryLine(line string, terms []string) int {
-	lower := strings.ToLower(line)
-	score := 0
-	for _, term := range terms {
-		if strings.Contains(lower, term) {
-			score++
-		}
-	}
-	if strings.HasPrefix(line, "#") && score > 0 {
-		score++
-	}
-	if strings.HasPrefix(line, "-") || strings.HasPrefix(line, "*") {
-		score++
-	}
-	return score
 }
 
 func memoryAgeNote(updatedAt time.Time) string {

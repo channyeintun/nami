@@ -22,20 +22,6 @@ const (
 	MaxReservedOutputTokens = 20_000
 )
 
-// EffectiveContextWindow reserves room for model output before applying any
-// warning or compaction thresholds.
-func EffectiveContextWindow(contextWindow, maxOutputTokens int) int {
-	reserved := max(maxOutputTokens, 0)
-	if reserved > MaxReservedOutputTokens {
-		reserved = MaxReservedOutputTokens
-	}
-	effective := contextWindow - reserved
-	if effective < 0 {
-		return 0
-	}
-	return effective
-}
-
 // AutocompactThreshold returns the token count that triggers auto-compaction.
 func AutocompactThreshold(contextWindow int) int {
 	return contextWindow - AutocompactBufferTokens
@@ -49,15 +35,6 @@ func WarningThreshold(contextWindow int) int {
 // EstimateTokens provides a rough token count (~4 chars per token).
 func EstimateTokens(text string) int {
 	return len(text) / 4
-}
-
-// EstimateMessagesTokens estimates total tokens across messages.
-func EstimateMessagesTokens(messages []string) int {
-	total := 0
-	for _, m := range messages {
-		total += EstimateTokens(m)
-	}
-	return total
 }
 
 // EstimateConversationTokens estimates total tokens across API conversation messages.

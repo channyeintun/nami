@@ -13,12 +13,6 @@ var (
 // Exposed as the concrete struct type expected by tests/callers in this package.
 var DestructiveCommandPatterns = bashsecurity.DestructivePatterns
 
-// ValidateBashSecurity checks a command for security violations.
-// Returns an error message if blocked, empty string if safe.
-func ValidateBashSecurity(command string) string {
-	return bashsecurity.ValidateBashSecurity(command)
-}
-
 // CheckDestructive returns a warning if the command is destructive.
 func CheckDestructive(command string) string {
 	return bashsecurity.CheckDestructive(command)

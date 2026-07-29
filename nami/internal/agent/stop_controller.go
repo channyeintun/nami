@@ -51,12 +51,3 @@ func (c *StopController) Consume() (string, bool) {
 	}
 	return reason, true
 }
-
-func (c *StopController) Pending() bool {
-	if c == nil {
-		return false
-	}
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.pending
-}

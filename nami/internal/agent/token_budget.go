@@ -60,8 +60,3 @@ func (t *ContinuationTracker) Decision() ContinuationDecision {
 
 	return ContinuationDecision{}
 }
-
-// ShouldStop returns true when continuation is no longer useful.
-func (t *ContinuationTracker) ShouldStop() bool {
-	return t.Decision().ShouldStop
-}

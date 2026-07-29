@@ -1,13 +1,7 @@
 package tools
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
-	"fmt"
-	"os"
 	"path/filepath"
-	"strings"
-	"unicode"
 )
 
 const (
@@ -32,11 +26,6 @@ type ResultBudget struct {
 type AggregateResultBudget struct {
 	maxChars  int
 	usedChars int
-}
-
-// DefaultResultBudget returns the standard budget.
-func DefaultResultBudget(sessionDir string) ResultBudget {
-	return DefaultResultBudgetForModel(sessionDir, defaultBudgetScaleTokens)
 }
 
 // DefaultResultBudgetForModel scales tool output budgets to the active model's
@@ -87,14 +76,6 @@ func (b *AggregateResultBudget) MaxChars() int {
 	return b.maxChars
 }
 
-// UsedChars returns the amount of inline budget already consumed.
-func (b *AggregateResultBudget) UsedChars() int {
-	if b == nil {
-		return 0
-	}
-	return b.usedChars
-}
-
 // InlineLimit determines how much output may remain inline for this result.
 // It reports whether the output must spill and whether the aggregate budget forced it.
 func (b *AggregateResultBudget) InlineLimit(outputLen int, budget ResultBudget) (int, bool, bool) {
@@ -139,57 +120,4 @@ func scaleBudget(base, maxOutputTokens, minValue, maxValue int) int {
 		return maxValue
 	}
 	return scaled
-}
-
-// ApplyBudget truncates output if it exceeds the budget, spilling to disk.
-// Returns the (possibly truncated) output and the spill path if any.
-func ApplyBudget(budget ResultBudget, toolID string, output string) (string, string, error) {
-	if len(output) <= budget.MaxChars {
-		return output, "", nil
-	}
-
-	if err := os.MkdirAll(budget.SpillDir, 0o755); err != nil {
-		return output[:budget.MaxChars], "", fmt.Errorf("create spill dir: %w", err)
-	}
-
-	spillPath := filepath.Join(budget.SpillDir, sanitizeToolLogID(toolID)+".log")
-	if err := os.WriteFile(spillPath, []byte(output), 0o644); err != nil {
-		return output[:budget.MaxChars], "", fmt.Errorf("write spill file: %w", err)
-	}
-
-	preview := output[:budget.PreviewLen]
-	truncated := fmt.Sprintf(
-		"%s\n\n[Output truncated. Full result saved to %s (%d chars)]",
-		preview, spillPath, len(output),
-	)
-	return truncated, spillPath, nil
-}
-
-func sanitizeToolLogID(toolID string) string {
-	trimmed := strings.TrimSpace(toolID)
-	if trimmed == "" {
-		return "tool"
-	}
-
-	var builder strings.Builder
-	builder.Grow(len(trimmed))
-	for _, r := range trimmed {
-		switch {
-		case unicode.IsLetter(r), unicode.IsDigit(r), r == '-', r == '_', r == '.':
-			builder.WriteRune(r)
-		default:
-			builder.WriteByte('_')
-		}
-	}
-
-	sanitized := strings.Trim(builder.String(), "._")
-	if sanitized == "" {
-		sanitized = "tool"
-	}
-	if sanitized == trimmed {
-		return sanitized
-	}
-
-	sum := sha256.Sum256([]byte(trimmed))
-	return fmt.Sprintf("%s_%s", sanitized, hex.EncodeToString(sum[:4]))
 }

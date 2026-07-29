@@ -1,7 +1,6 @@
 package swarm
 
 import (
-	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -155,11 +154,4 @@ func JoinPromptSections(sections ...string) string {
 		return ""
 	}
 	return strings.Join(nonEmpty, "\n\n")
-}
-
-func FormatOverlayNotice(overlay PromptOverlay) string {
-	if strings.TrimSpace(overlay.Role) == "" {
-		return ""
-	}
-	return fmt.Sprintf("Loaded swarm prompt overlay for role %q from %d file(s).", overlay.Role, len(overlay.Files))
 }

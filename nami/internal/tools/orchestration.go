@@ -63,40 +63,6 @@ func PartitionBatches(calls []PendingCall) []Batch {
 	return batches
 }
 
-// ExecuteBatch runs a batch of tool calls, concurrently if safe.
-func ExecuteBatch(ctx context.Context, batch Batch) []IndexedResult {
-	results := make([]IndexedResult, len(batch.Calls))
-
-	if !batch.Concurrent || len(batch.Calls) == 1 {
-		for i, call := range batch.Calls {
-			output, err := call.Tool.Execute(ctx, call.Input)
-			results[i] = IndexedResult{Index: call.Index, Output: output, Err: err}
-		}
-		return results
-	}
-
-	batchCtx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
-	maxConc := MaxConcurrency()
-	sem := make(chan struct{}, maxConc)
-	var wg sync.WaitGroup
-
-	for i, call := range batch.Calls {
-		idx := i
-		pendingCall := call
-		wg.Go(func() {
-			sem <- struct{}{}
-			defer func() { <-sem }()
-
-			output, err := pendingCall.Tool.Execute(batchCtx, pendingCall.Input)
-			results[idx] = IndexedResult{Index: pendingCall.Index, Output: output, Err: err}
-		})
-	}
-	wg.Wait()
-	return results
-}
-
 // IndexedResult pairs a tool result with its original call index.
 type IndexedResult struct {
 	Index  int

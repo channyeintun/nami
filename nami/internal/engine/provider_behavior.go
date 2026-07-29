@@ -299,10 +299,6 @@ func isSubagentProviderUsable(cfg config.Config, activeModelID string, providerI
 	return status.Usable
 }
 
-func isModelCompatibleWithProvider(model, provider string) bool {
-	return modelselection.IsModelCompatibleWithProvider(model, provider)
-}
-
 func inferProviderFromModel(model, fallbackProvider string) string {
 	resolved := modelselection.Resolve(model, fallbackProvider, "")
 	return resolved.Resolved.ProviderID

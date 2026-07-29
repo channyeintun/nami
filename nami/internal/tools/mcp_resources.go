@@ -71,12 +71,6 @@ type readMCPResourceContent struct {
 	Summary  string `json:"summary,omitempty"`
 }
 
-func SetGlobalMCPManager(manager *mcppkg.Manager) {
-	globalMCPManagerRuntime.mu.Lock()
-	defer globalMCPManagerRuntime.mu.Unlock()
-	globalMCPManagerRuntime.manager = manager
-}
-
 func getGlobalMCPManager() (*mcppkg.Manager, error) {
 	globalMCPManagerRuntime.mu.RLock()
 	defer globalMCPManagerRuntime.mu.RUnlock()

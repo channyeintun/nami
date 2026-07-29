@@ -88,17 +88,6 @@ func (s *FileReadState) RecordMetric(metric FileReadMetric) {
 	s.mu.Unlock()
 }
 
-func (s *FileReadState) MetricsSnapshot() []FileReadMetric {
-	if s == nil {
-		return nil
-	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	metrics := make([]FileReadMetric, len(s.metrics))
-	copy(metrics, s.metrics)
-	return metrics
-}
-
 var globalFileReadState struct {
 	mu sync.RWMutex
 	s  *FileReadState

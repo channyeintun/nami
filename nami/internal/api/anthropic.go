@@ -42,11 +42,6 @@ func (c *AnthropicClient) SetGitHubCopilotEnterpriseDomain(domain string) {
 	c.enterpriseDomain = strings.TrimSpace(domain)
 }
 
-// NewAnthropicClient constructs a streaming Anthropic client using configured defaults.
-func NewAnthropicClient(model, apiKey, baseURL string) (*AnthropicClient, error) {
-	return NewAnthropicClientForProvider("anthropic", model, apiKey, baseURL)
-}
-
 // NewAnthropicClientForProvider constructs a streaming Anthropic-compatible client
 // using the auth and default settings for the specified provider.
 func NewAnthropicClientForProvider(provider, model, apiKey, baseURL string) (*AnthropicClient, error) {

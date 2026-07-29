@@ -119,19 +119,6 @@ func (e *StreamingExecutor) Wait(ctx context.Context) ([]IndexedResult, error) {
 	}
 }
 
-// Drain waits for all outstanding work and returns results in original order.
-func (e *StreamingExecutor) Drain(ctx context.Context) ([]IndexedResult, error) {
-	var results []IndexedResult
-	for !e.Done() {
-		ready, err := e.Wait(ctx)
-		if err != nil {
-			return results, err
-		}
-		results = append(results, ready...)
-	}
-	return results, nil
-}
-
 // Done reports whether the executor is closed and all calls have been yielded.
 func (e *StreamingExecutor) Done() bool {
 	e.mu.Lock()

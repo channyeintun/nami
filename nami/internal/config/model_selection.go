@@ -54,7 +54,3 @@ func (selection ModelSelection) Ref() string {
 	}
 	return providerID + "/" + modelID
 }
-
-func (selection ModelSelection) IsZero() bool {
-	return strings.TrimSpace(selection.ProviderID) == "" && strings.TrimSpace(selection.ModelID) == ""
-}
