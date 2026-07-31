@@ -37,7 +37,7 @@ func main() {
 		flagStdio bool
 		flagAuto  bool
 	)
-	rootCmd.PersistentFlags().StringVar(&flagModel, "model", "", "Model to use (provider/model format, e.g. github-copilot/gpt-5.4)")
+	rootCmd.PersistentFlags().StringVar(&flagModel, "model", "", "Model to use (provider/model format, e.g. anthropic/claude-sonnet-5)")
 	rootCmd.PersistentFlags().StringVar(&flagMode, "mode", "", "Execution mode: plan or fast")
 	rootCmd.PersistentFlags().BoolVar(&flagStdio, "stdio", false, "Run in stdio mode (NDJSON engine only, no TUI)")
 	rootCmd.PersistentFlags().BoolVar(&flagAuto, "auto-mode", false, "Auto-approve non-destructive tool calls")

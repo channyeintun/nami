@@ -8,7 +8,7 @@ import { installClipboardBridge } from "./utils/clipboardBridge.js";
 installClipboardBridge();
 
 const enginePath = process.env["NAMI_ENGINE_PATH"] ?? "nami-engine";
-const model = process.env["NAMI_MODEL"] ?? "github-copilot/gpt-5.4";
+const model = process.env["NAMI_MODEL"] ?? "anthropic/claude-sonnet-5";
 const mode = process.env["NAMI_MODE"] ?? "plan";
 const autoMode = process.env["NAMI_AUTO_MODE"] === "true";
 const theme = createTheme()

@@ -68,8 +68,8 @@ type ProviderOverride struct {
 // DefaultConfig returns the configuration with sensible defaults.
 func DefaultConfig() Config {
 	return Config{
-		Provider:                "github-copilot",
-		Model:                   "gpt-5.4",
+		Provider:                "anthropic",
+		Model:                   "claude-sonnet-5",
 		ModelSource:             "default",
 		DefaultMode:             "fast",
 		CostWarningThresholdUSD: 5,
