@@ -7,6 +7,7 @@ import (
 	"io"
 	"iter"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -74,10 +75,7 @@ func RunStdioEngine(ctx context.Context, cfg config.Config) error {
 	sessionStore := session.NewStore(session.DefaultBaseDir())
 	artifactStore := artifactspkg.NewLocalStore(config.ArtifactsDir())
 	artifactManager := artifactspkg.NewManager(artifactStore)
-	sessionID, err := newSessionID()
-	if err != nil {
-		return err
-	}
+	sessionID := newSessionID()
 	sessionDir := sessionStore.SessionDir(sessionID)
 	if err := debuglog.ConfigureSession(sessionID, sessionDir); err != nil && debuglog.Enabled {
 		fmt.Fprintf(os.Stderr, "debuglog: configure session %s: %v\n", sessionID, err)
@@ -789,8 +787,7 @@ func sessionStopBlockedFollowUp(reason string) string {
 }
 
 func latestSessionAssistantContent(messages []api.Message) string {
-	for index := len(messages) - 1; index >= 0; index-- {
-		msg := messages[index]
+	for _, msg := range slices.Backward(messages) {
 		if msg.Role != api.RoleAssistant {
 			continue
 		}

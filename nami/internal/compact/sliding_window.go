@@ -1,6 +1,10 @@
 package compact
 
-import "github.com/channyeintun/nami/internal/api"
+import (
+	"slices"
+
+	"github.com/channyeintun/nami/internal/api"
+)
 
 // SlidingWindow identifies the portion of the conversation that can be
 // compacted without re-summarizing already compacted history.
@@ -32,8 +36,8 @@ func SelectPartialWindow(messages []api.Message) (SlidingWindow, bool) {
 }
 
 func findLastSummaryIndex(messages []api.Message) int {
-	for i := len(messages) - 1; i >= 0; i-- {
-		if IsSummaryMessage(messages[i]) {
+	for i, message := range slices.Backward(messages) {
+		if IsSummaryMessage(message) {
 			return i
 		}
 	}

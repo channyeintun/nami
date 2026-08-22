@@ -36,10 +36,10 @@ type backgroundAgent struct {
 var (
 	backgroundAgents   = make(map[string]*backgroundAgent)
 	backgroundAgentsMu sync.RWMutex
-	backgroundAgentCtr uint64
+	backgroundAgentCtr atomic.Uint64
 	backgroundTeams    = make(map[string]*backgroundTeam)
 	backgroundTeamsMu  sync.RWMutex
-	backgroundTeamCtr  uint64
+	backgroundTeamCtr  atomic.Uint64
 )
 
 type backgroundTeam struct {
@@ -55,11 +55,11 @@ type backgroundTeamMember struct {
 }
 
 func newBackgroundAgentID() string {
-	return fmt.Sprintf("agent_%d", atomic.AddUint64(&backgroundAgentCtr, 1))
+	return fmt.Sprintf("agent_%d", backgroundAgentCtr.Add(1))
 }
 
 func newBackgroundTeamID() string {
-	return fmt.Sprintf("team_%d", atomic.AddUint64(&backgroundTeamCtr, 1))
+	return fmt.Sprintf("team_%d", backgroundTeamCtr.Add(1))
 }
 
 func registerBackgroundAgent(bg *backgroundAgent) {

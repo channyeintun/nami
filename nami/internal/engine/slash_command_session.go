@@ -414,11 +414,7 @@ func handleClearSlashCommand(cmd *slashCommandContext) error {
 
 	cmd.state.Messages = cmd.state.Messages[:0]
 	cmd.tracker.Reset()
-	newID, err := newSessionID()
-	if err != nil {
-		return err
-	}
-	cmd.state.SessionID = newID
+	cmd.state.SessionID = newSessionID()
 	cmd.state.StartedAt = time.Now()
 	cmd.state.SubagentModelID = defaultSessionSubagentModel(config.Load(), cmd.state.ActiveModelID)
 	if err := rebindDebugSession(cmd); err != nil && debuglog.IsEnabled() {

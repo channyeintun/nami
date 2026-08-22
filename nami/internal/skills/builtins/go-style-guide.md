@@ -1,7 +1,7 @@
 ---
 name: go-style-guide
-description: Guidance for Go coding tasks covering package design, errors, concurrency, style, tooling, and current Go 1.26 conventions.
-keywords: golang, go, go style, go conventions, idiomatic go, errors.AsType, go error handling, go concurrency, go packages, go tooling
+description: Guidance for Go coding tasks covering package design, errors, concurrency, style, tooling, and current Go 1.27 conventions.
+keywords: golang, go, go style, go conventions, idiomatic go, errors.AsType, strings.CutLast, encoding/json/v2, generic methods, go error handling, go concurrency, go packages, go tooling
 argument-hint: Use for Go or Golang coding tasks, style decisions, refactors, naming, API design, error handling, concurrency, or modernization to current Go idioms.
 ---
 Apply when task is Go or Golang code.
@@ -55,6 +55,7 @@ Data ownership and initialization:
 - Use field names in struct literals when the type is declared elsewhere.
 - Omit zero-value struct fields unless they add meaning.
 - Use `var state T` for zero-value structs and `&T{}` instead of `new(T)` for struct pointers.
+- Use `new(expr)` in Go 1.26+ to take a pointer to any value, replacing hand-written `ptr[T any](T) *T` helpers.
 - Use `defer` to clean up files, locks, tickers, spans, and similar resources unless a proven hot path justifies avoiding it.
 - Avoid `init()` for non-trivial setup. Keep any unavoidable `init()` deterministic and free of I/O or hidden environment dependencies.
 
@@ -79,6 +80,13 @@ Time, performance, and modern Go:
 - Add map and slice capacity hints when the size is known or easy to estimate and the benefit is real enough to keep the code clear.
 - Avoid repeated string or byte-slice conversions in hot paths.
 - Prefer standard library helpers such as `slices`, `maps`, and `cmp` when they make code simpler.
+- Use `slices.Backward` for reverse iteration instead of a manual descending index loop.
+- Use `strings.CutLast` and `bytes.CutLast` in Go 1.27+ instead of `LastIndex` followed by manual slicing.
+- Use the `uuid` package in Go 1.27+ instead of formatting random bytes into a UUID shape by hand.
+- In Go 1.27+, `encoding/json` is backed by `encoding/json/v2`. Stay on v1 unless you need the v2 API;
+  reach for `encoding/json/v2` and `encoding/json/jsontext` for option-driven or token-level processing.
+- Methods may declare their own type parameters in Go 1.27+. Use a generic method when the operation
+  belongs to a type's namespace, but note interface methods still cannot be generic.
 - Keep code compatible with the module's declared Go version even when a newer feature exists.
 
 API patterns and tooling:

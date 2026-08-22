@@ -8,6 +8,15 @@
 - Clear error handling = reliable tools.
 - Use `errors.AsType` [v1.26] instead of `errors.As`
 
+## Standard Library
+
+- Target Go 1.27. Prefer stdlib over hand-rolled equivalents.
+- Use `strings.CutLast` / `bytes.CutLast` [v1.27] instead of `LastIndex` plus manual slicing.
+- Use the `uuid` package [v1.27] instead of formatting random bytes into UUID shapes.
+- Use `slices.Backward` for reverse iteration and the `atomic.Int64`/`atomic.Uint64` types
+  instead of the `atomic.AddT(&x, n)` functions.
+- Run `go fix ./...` after a toolchain bump; it applies the current modernizers.
+
 ## Composability
 
 - Split logic into small, focused functions grouped into packages.

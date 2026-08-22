@@ -65,10 +65,7 @@ func (c ModelCapabilities) PromptTokenBudget() int {
 		return 0
 	}
 
-	reserved := max(c.MaxOutputTokens, 0)
-	if reserved > maxPromptBudgetReservedOutputTokens {
-		reserved = maxPromptBudgetReservedOutputTokens
-	}
+	reserved := min(max(c.MaxOutputTokens, 0), maxPromptBudgetReservedOutputTokens)
 
 	budget -= reserved
 	if budget < 0 {

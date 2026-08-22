@@ -123,9 +123,7 @@ func TestCallMatchesResponseByID(t *testing.T) {
 	c, server := pipeClient(t)
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		request, err := server.readMessage()
 		if err != nil {
 			t.Errorf("server readMessage: %v", err)
@@ -136,7 +134,7 @@ func TestCallMatchesResponseByID(t *testing.T) {
 		_ = server.notify("window/logMessage", map[string]any{"message": "starting"})
 		_ = server.writeMessage(map[string]any{"jsonrpc": "2.0", "id": id + 99, "result": "stale"})
 		_ = server.writeMessage(map[string]any{"jsonrpc": "2.0", "id": id, "result": map[string]any{"value": "fresh"}})
-	}()
+	})
 
 	var result map[string]string
 	if err := c.call(context.Background(), "textDocument/hover", map[string]any{}, &result); err != nil {
@@ -202,11 +200,9 @@ func TestNextRequestIDIsMonotonicUnderConcurrency(t *testing.T) {
 	ids := make(chan int64, workers)
 	var wg sync.WaitGroup
 	for range workers {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			ids <- c.nextRequestID()
-		}()
+		})
 	}
 	wg.Wait()
 	close(ids)

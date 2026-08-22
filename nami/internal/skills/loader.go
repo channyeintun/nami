@@ -179,7 +179,7 @@ func SelectRelevant(available []Skill, userPrompt string) []Skill {
 
 	limit := min(len(scored), maxAutoSelectedSkills)
 	selected := make([]Skill, 0, limit)
-	for i := 0; i < limit; i++ {
+	for i := range limit {
 		selected = append(selected, scored[i].skill)
 	}
 	return selected

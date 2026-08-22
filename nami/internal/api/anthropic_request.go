@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -187,8 +188,8 @@ func applyAnthropicCacheControl(system []anthropicTextBlock, messages []anthropi
 }
 
 func applyAnthropicMessageCacheControl(messages []anthropicMessage) {
-	for i := len(messages) - 1; i >= 0; i-- {
-		blocks, ok := messages[i].Content.([]map[string]any)
+	for _, message := range slices.Backward(messages) {
+		blocks, ok := message.Content.([]map[string]any)
 		if !ok || len(blocks) == 0 {
 			continue
 		}

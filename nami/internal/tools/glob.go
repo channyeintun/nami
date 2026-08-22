@@ -181,12 +181,11 @@ func splitAbsoluteGlobPattern(pattern string) (string, string) {
 	}
 
 	staticPrefix := filepath.ToSlash(cleaned[:index])
-	lastSlash := strings.LastIndex(staticPrefix, "/")
-	if lastSlash == -1 {
+	baseDir, _, ok := strings.CutLast(staticPrefix, "/")
+	if !ok {
 		return string(filepath.Separator), filepath.ToSlash(cleaned)
 	}
 
-	baseDir := staticPrefix[:lastSlash]
 	if baseDir == "" {
 		baseDir = "/"
 	}

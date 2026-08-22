@@ -79,11 +79,9 @@ func TestEmitIsSafeForConcurrentWriters(t *testing.T) {
 
 	var wg sync.WaitGroup
 	for i := range 50 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			_ = bridge.Emit(EventTokenDelta, TokenDeltaPayload{Text: strings.Repeat("x", i+1)})
-		}()
+		})
 	}
 	wg.Wait()
 

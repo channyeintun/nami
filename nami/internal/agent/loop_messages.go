@@ -1,24 +1,25 @@
 package agent
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/channyeintun/nami/internal/api"
 )
 
 func latestUserPrompt(messages []api.Message) string {
-	for i := len(messages) - 1; i >= 0; i-- {
-		if messages[i].Role == api.RoleUser {
-			return messages[i].Content
+	for _, message := range slices.Backward(messages) {
+		if message.Role == api.RoleUser {
+			return message.Content
 		}
 	}
 	return ""
 }
 
 func latestAssistantMessage(messages []api.Message) api.Message {
-	for i := len(messages) - 1; i >= 0; i-- {
-		if messages[i].Role == api.RoleAssistant {
-			return messages[i]
+	for _, message := range slices.Backward(messages) {
+		if message.Role == api.RoleAssistant {
+			return message
 		}
 	}
 	return api.Message{Role: api.RoleAssistant}
@@ -26,8 +27,7 @@ func latestAssistantMessage(messages []api.Message) api.Message {
 
 func latestToolOutput(messages []api.Message) string {
 	var builder strings.Builder
-	for i := len(messages) - 1; i >= 0; i-- {
-		msg := messages[i]
+	for _, msg := range slices.Backward(messages) {
 		if msg.Role != api.RoleTool {
 			break
 		}

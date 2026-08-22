@@ -32,8 +32,9 @@ type TurnContext struct {
 
 // LoadSystemContext gathers session-stable git info and instruction files.
 func LoadSystemContext() SystemContext {
-	ctx := SystemContext{}
-	ctx.MainBranch = gitCommand("rev-parse", "--abbrev-ref", "origin/HEAD")
+	ctx := SystemContext{
+		MainBranch: gitCommand("rev-parse", "--abbrev-ref", "origin/HEAD"),
+	}
 	if ctx.MainBranch == "" {
 		ctx.MainBranch = "main"
 	} else {

@@ -78,12 +78,11 @@ func NewPipeline(contextWindow int, summarizer Summarizer, microcompactEnabled b
 // 3. Partial compaction (if still over budget)
 func (p *Pipeline) Compact(ctx context.Context, messages []api.Message, reason string) (CompactResult, error) {
 	result := CompactResult{
-		Messages:    messages,
-		SummaryMode: SummaryModeNone,
+		Messages:     messages,
+		SummaryMode:  SummaryModeNone,
+		Strategy:     StrategyNone,
+		TokensBefore: EstimateConversationTokens(messages),
 	}
-	result.TokensBefore = EstimateConversationTokens(messages)
-
-	result.Strategy = StrategyNone
 	result.TokensAfter = result.TokensBefore
 
 	// Strategy A: Tool result truncation

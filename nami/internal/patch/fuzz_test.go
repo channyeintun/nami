@@ -86,7 +86,7 @@ func FuzzApply(f *testing.F) {
 
 	f.Fuzz(func(t *testing.T, content, hunkBody string) {
 		hunk := Hunk{}
-		for _, line := range strings.Split(hunkBody, "\n") {
+		for line := range strings.SplitSeq(hunkBody, "\n") {
 			kind, value := classifyHunkLine(line)
 			hunk.Lines = append(hunk.Lines, Line{Kind: kind, Value: value})
 		}

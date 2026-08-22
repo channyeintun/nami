@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"time"
 
@@ -108,8 +109,7 @@ func emitSessionArtifacts(ctx context.Context, bridge *ipc.Bridge, artifactManag
 		}
 	}
 
-	for index := len(artifacts) - 1; index >= 0; index-- {
-		artifact := artifacts[index]
+	for _, artifact := range slices.Backward(artifacts) {
 		if err := emitArtifactCreated(bridge, artifact.Artifact); err != nil {
 			return err
 		}

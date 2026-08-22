@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"slices"
 	"strings"
 )
 
@@ -145,8 +146,7 @@ func buildGeminiContents(modelID, systemPrompt string, messages []Message) ([]ge
 
 func ensureGeminiActiveLoopThoughtSignatures(contents []geminiContent, modelID string) []geminiContent {
 	activeLoopStart := -1
-	for index := len(contents) - 1; index >= 0; index-- {
-		content := contents[index]
+	for index, content := range slices.Backward(contents) {
 		if content.Role != "user" {
 			continue
 		}

@@ -83,11 +83,9 @@ func TestCheckpointRecorderIsSafeForConcurrentMarks(t *testing.T) {
 	recorder := NewCheckpointRecorder(time.Now())
 	var wg sync.WaitGroup
 	for i := range 16 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			recorder.Mark(string(rune('a' + i)))
-		}()
+		})
 	}
 	wg.Wait()
 	if got := len(recorder.Snapshot().Checkpoints); got != 16 {

@@ -19,7 +19,7 @@ func invokeModelWithRecovery(
 ) (modelTurn, error) {
 	toolUseRetryUsed := false
 	const maxAttempts = 3
-	for attempt := 0; attempt < maxAttempts; attempt++ {
+	for attempt := range maxAttempts {
 		turn, err := streamModelTurn(ctx, state, deps, yield)
 		if err == nil {
 			turn.stopReason = normalizeStopReason(turn.stopReason)

@@ -93,7 +93,7 @@ type BackgroundCommandUpdate struct {
 var (
 	backgroundCommands   = make(map[string]*backgroundCommand)
 	backgroundCommandsMu sync.RWMutex
-	backgroundCounter    uint64
+	backgroundCounter    atomic.Uint64
 	backgroundNotifierMu sync.RWMutex
 	backgroundNotifier   func(BackgroundCommandUpdate)
 )
@@ -135,7 +135,7 @@ func listBackgroundCommands(includeCompleted bool) []backgroundCommandSummary {
 }
 
 func startBackgroundShellCommand(command, cwd string) (*backgroundCommand, error) {
-	id := fmt.Sprintf("cmd_%d", atomic.AddUint64(&backgroundCounter, 1))
+	id := fmt.Sprintf("cmd_%d", backgroundCounter.Add(1))
 	cmd, err := shellCommand(command)
 	if err != nil {
 		return nil, err

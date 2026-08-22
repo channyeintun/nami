@@ -77,15 +77,13 @@ func TestCacheIsSafeForConcurrentUse(t *testing.T) {
 	c := newCache(4096, time.Minute)
 	var wg sync.WaitGroup
 	for worker := range 8 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			key := string(rune('a' + worker))
 			for range 100 {
 				c.Set(key, Content{Markdown: strings.Repeat(key, 8)})
 				c.Get(key)
 			}
-		}()
+		})
 	}
 	wg.Wait()
 	if c.usedBytes < 0 {

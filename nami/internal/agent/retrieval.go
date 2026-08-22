@@ -286,8 +286,8 @@ func parseGitStatusPath(line string) string {
 		return ""
 	}
 	path := strings.TrimSpace(line[2:])
-	if idx := strings.LastIndex(path, " -> "); idx >= 0 {
-		path = strings.TrimSpace(path[idx+4:])
+	if _, target, ok := strings.CutLast(path, " -> "); ok {
+		path = strings.TrimSpace(target)
 	}
 	return path
 }
@@ -417,8 +417,8 @@ func readFileSnippet(path string) string {
 	}
 	if len(content) > retrievalMaxSnippetBytes {
 		truncated := content[:retrievalMaxSnippetBytes]
-		if idx := strings.LastIndex(truncated, "\n"); idx > 0 {
-			truncated = truncated[:idx]
+		if head, _, ok := strings.CutLast(truncated, "\n"); ok && head != "" {
+			truncated = head
 		}
 		content = strings.TrimSpace(truncated) + "\n[truncated]"
 	}

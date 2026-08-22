@@ -152,10 +152,7 @@ func makeSubagentRunner(
 			return toolpkg.AgentRunResult{}, fmt.Errorf("agent subagent_type %q is not supported yet", subagentType)
 		}
 
-		invocationID, err := newSessionID()
-		if err != nil {
-			return toolpkg.AgentRunResult{}, err
-		}
+		invocationID := newSessionID()
 
 		currentCWD := currentSubagentCWD(state, fallbackCWD)
 		rolePolicy, childToolNames, err := loadSubagentRolePolicy(currentCWD, req.Role, registry, subagentType)
@@ -877,8 +874,7 @@ func toolDefinitionNames(defs []api.ToolDefinition) []string {
 }
 
 func latestAssistantContent(messages []api.Message) string {
-	for index := len(messages) - 1; index >= 0; index-- {
-		msg := messages[index]
+	for _, msg := range slices.Backward(messages) {
 		if msg.Role != api.RoleAssistant {
 			continue
 		}

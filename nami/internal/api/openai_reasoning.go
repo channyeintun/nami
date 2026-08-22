@@ -101,8 +101,8 @@ func normalizeReasoningModelID(model string) string {
 	if trimmed == "" {
 		return ""
 	}
-	if slash := strings.LastIndex(trimmed, "/"); slash >= 0 && slash < len(trimmed)-1 {
-		return trimmed[slash+1:]
+	if _, name, ok := strings.CutLast(trimmed, "/"); ok && name != "" {
+		return name
 	}
 	return trimmed
 }

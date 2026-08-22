@@ -35,7 +35,7 @@ Nami is built on three core pillars:
 - macOS, Linux, or Windows 11
 - One supported JavaScript runtime to run the `nami` launcher: Node.js, Bun, or Deno. The Windows installer can bootstrap a local Node.js runtime automatically if none is already available.
 - One configured model provider: Anthropic, OpenAI, Google, DeepSeek, Groq, Mistral, Ollama, or GitHub Copilot
-- Go 1.26.3 only if building from source or rebuilding `nami-engine`
+- Go 1.27.0 only if building from source or rebuilding `nami-engine`
 
 ### Install
 
@@ -509,7 +509,7 @@ The launcher shim, `nami.js`, and `nami-engine` should live in the same director
 
 ## Building from Source
 
-Requires: Go 1.26.3 and Vite+ `vp` for local builds
+Requires: Go 1.27.0 and Vite+ `vp` for local builds
 
 ```bash
 cd nami/tui

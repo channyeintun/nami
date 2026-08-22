@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -91,8 +92,7 @@ func LoadMemoryFiles() []MemoryFile {
 	files = appendConfigMemoryIndexes(files, cwd)
 	dirs := walkUpDirs(cwd)
 
-	for i := len(dirs) - 1; i >= 0; i-- {
-		dir := dirs[i]
+	for _, dir := range slices.Backward(dirs) {
 		files = appendProjectFiles(files, dir)
 	}
 
@@ -449,12 +449,12 @@ func parseMemoryIndexEntryLine(line string) (filename, title, noteType string, o
 		return "", "", "", false
 	}
 
-	openTypeIdx := strings.LastIndex(remaining, " (")
-	if openTypeIdx <= 0 {
+	rawTitle, rawNoteType, ok := strings.CutLast(remaining, " (")
+	if !ok {
 		return "", "", "", false
 	}
-	title = strings.TrimSpace(remaining[:openTypeIdx])
-	noteType = strings.TrimSpace(remaining[openTypeIdx+2 : len(remaining)-1])
+	title = strings.TrimSpace(rawTitle)
+	noteType = strings.TrimSpace(strings.TrimSuffix(rawNoteType, ")"))
 	if title == "" || !isKnownMemoryNoteType(noteType) {
 		return "", "", "", false
 	}

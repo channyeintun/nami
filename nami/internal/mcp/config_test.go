@@ -8,21 +8,17 @@ import (
 	configpkg "github.com/channyeintun/nami/internal/config"
 )
 
-func ptr[T any](value T) *T {
-	return &value
-}
-
 func stdioServer() configpkg.MCPServerConfig {
 	return configpkg.MCPServerConfig{
-		Transport: ptr("stdio"),
-		Command:   ptr("my-server"),
+		Transport: new("stdio"),
+		Command:   new("my-server"),
 	}
 }
 
 func httpServer() configpkg.MCPServerConfig {
 	return configpkg.MCPServerConfig{
-		Transport: ptr("http"),
-		URL:       ptr("https://example.com/mcp"),
+		Transport: new("http"),
+		URL:       new("https://example.com/mcp"),
 	}
 }
 
@@ -107,9 +103,9 @@ func TestResolveHTTPDefaults(t *testing.T) {
 
 func TestResolveHonoursExplicitFlags(t *testing.T) {
 	cfg := stdioServer()
-	cfg.Enabled = ptr(false)
-	cfg.Trust = ptr(true)
-	cfg.StartupTimeoutMS = ptr(2500)
+	cfg.Enabled = new(false)
+	cfg.Trust = new(true)
+	cfg.StartupTimeoutMS = new(2500)
 
 	definition, problems := resolveOne(t, "local", cfg)
 	if len(problems) != 0 {
@@ -128,46 +124,46 @@ func TestResolveHonoursExplicitFlags(t *testing.T) {
 
 func TestResolveRejectsInvalidServers(t *testing.T) {
 	cases := map[string]configpkg.MCPServerConfig{
-		"missing transport": {Command: ptr("x")},
-		"unknown transport": {Transport: ptr("carrier-pigeon"), Command: ptr("x")},
+		"missing transport": {Command: new("x")},
+		"unknown transport": {Transport: new("carrier-pigeon"), Command: new("x")},
 		"stdio without command": {
-			Transport: ptr("stdio"),
+			Transport: new("stdio"),
 		},
 		"stdio with url": {
-			Transport: ptr("stdio"), Command: ptr("x"), URL: ptr("https://example.com"),
+			Transport: new("stdio"), Command: new("x"), URL: new("https://example.com"),
 		},
 		"stdio with headers": {
-			Transport: ptr("stdio"), Command: ptr("x"), Headers: map[string]string{"a": "b"},
+			Transport: new("stdio"), Command: new("x"), Headers: map[string]string{"a": "b"},
 		},
 		"http without url": {
-			Transport: ptr("http"),
+			Transport: new("http"),
 		},
 		"http with command": {
-			Transport: ptr("http"), URL: ptr("https://example.com"), Command: ptr("x"),
+			Transport: new("http"), URL: new("https://example.com"), Command: new("x"),
 		},
 		"http with args": {
-			Transport: ptr("http"), URL: ptr("https://example.com"), Args: []string{"a"},
+			Transport: new("http"), URL: new("https://example.com"), Args: []string{"a"},
 		},
 		"http with env": {
-			Transport: ptr("http"), URL: ptr("https://example.com"), Env: map[string]string{"A": "b"},
+			Transport: new("http"), URL: new("https://example.com"), Env: map[string]string{"A": "b"},
 		},
 		"url without scheme": {
-			Transport: ptr("http"), URL: ptr("example.com/mcp"),
+			Transport: new("http"), URL: new("example.com/mcp"),
 		},
 		"startup timeout on http": {
-			Transport: ptr("http"), URL: ptr("https://example.com"), StartupTimeoutMS: ptr(100),
+			Transport: new("http"), URL: new("https://example.com"), StartupTimeoutMS: new(100),
 		},
 		"non-positive startup timeout": {
-			Transport: ptr("stdio"), Command: ptr("x"), StartupTimeoutMS: ptr(0),
+			Transport: new("stdio"), Command: new("x"), StartupTimeoutMS: new(0),
 		},
 		"unsupported tool permission": {
-			Transport:       ptr("stdio"),
-			Command:         ptr("x"),
+			Transport:       new("stdio"),
+			Command:         new("x"),
 			ToolPermissions: map[string]configpkg.MCPPermission{"tool": configpkg.MCPPermission("root")},
 		},
 		"blank tool permission name": {
-			Transport:       ptr("stdio"),
-			Command:         ptr("x"),
+			Transport:       new("stdio"),
+			Command:         new("x"),
 			ToolPermissions: map[string]configpkg.MCPPermission{"  ": configpkg.MCPPermission("read")},
 		},
 	}
@@ -333,8 +329,8 @@ func TestResolveExpandsStdioEnvironment(t *testing.T) {
 	t.Setenv("NAMI_TEST_KEY", "abc123")
 
 	cfg := configpkg.MCPServerConfig{
-		Transport: ptr("stdio"),
-		Command:   ptr("$NAMI_TEST_BIN"),
+		Transport: new("stdio"),
+		Command:   new("$NAMI_TEST_BIN"),
 		Args:      []string{"--key", "$NAMI_TEST_KEY"},
 		Env:       map[string]string{"API_KEY": "$NAMI_TEST_KEY"},
 	}

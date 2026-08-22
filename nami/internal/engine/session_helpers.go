@@ -2,12 +2,11 @@ package engine
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"fmt"
 	"iter"
 	"strings"
 	"time"
+	"uuid"
 
 	"github.com/channyeintun/nami/internal/agent"
 	"github.com/channyeintun/nami/internal/api"
@@ -493,11 +492,6 @@ func persistSessionState(store *session.Store, params sessionStateParams) error 
 	})
 }
 
-func newSessionID() (string, error) {
-	buf := make([]byte, 16)
-	if _, err := rand.Read(buf); err != nil {
-		return "", fmt.Errorf("generate session id: %w", err)
-	}
-	encoded := hex.EncodeToString(buf)
-	return fmt.Sprintf("%s-%s-%s-%s-%s", encoded[0:8], encoded[8:12], encoded[12:16], encoded[16:20], encoded[20:32]), nil
+func newSessionID() string {
+	return uuid.New().String()
 }
