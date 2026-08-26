@@ -64,6 +64,9 @@ const (
 	EventBackgroundCommandUpdated EventType = "background_command_updated"
 	EventBackgroundAgentUpdated   EventType = "background_agent_updated"
 
+	// Workflows
+	EventWorkflowProgress EventType = "workflow_progress"
+
 	// Engine status
 	EventReady           EventType = "ready"
 	EventError           EventType = "error"
@@ -131,6 +134,21 @@ type GoalProgressPayload struct {
 
 type TurnCompletePayload struct {
 	StopReason string `json:"stop_reason"`
+}
+
+// WorkflowProgressPayload reports one node's state transition inside a
+// workflow graph run. One event per transition, never per output token, so a
+// wide graph cannot flood the UI stream.
+type WorkflowProgressPayload struct {
+	RunID       string   `json:"run_id"`
+	Description string   `json:"description,omitempty"`
+	NodeID      string   `json:"node_id"`
+	NodeLabel   string   `json:"node_label,omitempty"`
+	Status      string   `json:"status"`
+	Completed   int      `json:"completed"`
+	Total       int      `json:"total"`
+	DependsOn   []string `json:"depends_on,omitempty"`
+	Message     string   `json:"message,omitempty"`
 }
 
 type ToolStartPayload struct {

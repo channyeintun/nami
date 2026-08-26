@@ -169,6 +169,11 @@ func RunStdioEngine(ctx context.Context, cfg config.Config) error {
 		return launchBackgroundTeam(ctx, runner, req)
 	}))
 	registry.Register(toolpkg.NewAgentTeamStatusTool(lookupBackgroundTeamStatus))
+	registry.Register(toolpkg.NewWorkflowTool(func(ctx context.Context, req toolpkg.WorkflowLaunchRequest) (toolpkg.WorkflowRunResult, error) {
+		runner := makeSubagentRunner(bridge, registry, permissionCtx, tracker, sessionStore, artifactManager, hookRunner, modelState, subagentModelState, loopState, cwd)
+		return launchWorkflow(ctx, runner, bridge, sessionStore.SessionDir(loopState.sessionID), req)
+	}))
+	registry.Register(toolpkg.NewWorkflowStatusTool(lookupWorkflowStatus))
 	registry.Register(toolpkg.NewListMCPResourcesToolWithManager(mcpManager))
 	registry.Register(toolpkg.NewReadMCPResourceToolWithManager(mcpManager))
 	if err := persistSessionState(sessionStore, sessionStateParams{

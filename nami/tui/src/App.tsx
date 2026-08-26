@@ -28,6 +28,7 @@ import ReasoningSelectionPrompt from "./components/ReasoningSelectionPrompt.js";
 import RewindSelectionPrompt from "./components/RewindSelectionPrompt.js";
 import ResumeSelectionPrompt from "./components/ResumeSelectionPrompt.js";
 import GoalProgress from "./components/GoalProgress.js";
+import WorkflowProgress from "./components/WorkflowProgress.js";
 import StreamOutput from "./components/StreamOutput.js";
 import StatusBar from "./components/StatusBar.js";
 import TranscriptSearchPrompt from "./components/TranscriptSearchPrompt.js";
@@ -970,6 +971,9 @@ const App: FC<AppProps> = ({ enginePath, model, mode, autoMode }) => {
             <SafeToastContainer toasts={toasts} />
             {uiState.goalProgress && uiState.isStreaming ? (
               <GoalProgress progress={uiState.goalProgress} />
+            ) : null}
+            {uiState.workflowRun && uiState.isStreaming ? (
+              <WorkflowProgress run={uiState.workflowRun} />
             ) : null}
             {transcriptSearchActive ? (
               <TranscriptSearchPrompt

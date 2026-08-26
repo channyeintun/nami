@@ -40,6 +40,7 @@ export type EventType =
   | "background_agent_detail"
   | "background_command_updated"
   | "background_agent_updated"
+  | "workflow_progress"
   | "ready"
   | "error"
   | "notice"
@@ -108,6 +109,20 @@ export interface GoalProgressPayload {
 
 export interface TurnCompletePayload {
   stop_reason: string;
+}
+
+// One node's state transition inside a workflow graph run. Mirrors
+// ipc.WorkflowProgressPayload.
+export interface WorkflowProgressPayload {
+  run_id: string;
+  description?: string;
+  node_id: string;
+  node_label?: string;
+  status: string;
+  completed: number;
+  total: number;
+  depends_on?: string[];
+  message?: string;
 }
 
 export interface ToolStartPayload {

@@ -49,6 +49,7 @@ import type {
   ToolProgressPayload,
   ToolResultPayload,
   ToolStartPayload,
+  WorkflowProgressPayload,
 } from "../protocol/types.js";
 
 const BEL = "\u0007";
@@ -320,12 +321,29 @@ export interface UIGoalProgress {
   label: string;
 }
 
+export interface UIWorkflowNode {
+  id: string;
+  label: string;
+  status: string;
+}
+
+/** Live state of the workflow graph run in the current turn. */
+export interface UIWorkflowRun {
+  runId: string;
+  description: string;
+  completed: number;
+  total: number;
+  /** In first-seen order, which is the graph's own topological order. */
+  nodes: UIWorkflowNode[];
+}
+
 export interface EngineUIState {
   ready: boolean;
   slashCommands: UISlashCommand[];
   messages: UIMessage[];
   progressEntries: UIProgressEntry[];
   goalProgress: UIGoalProgress | null;
+  workflowRun: UIWorkflowRun | null;
   transcript: UITranscriptEntry[];
   liveAssistantMessageId: string | null;
   liveAssistantBlocks: UIAssistantBlock[];
@@ -398,6 +416,7 @@ const initialState = (model: string, mode: string): EngineUIState => ({
   messages: [],
   progressEntries: [],
   goalProgress: null,
+  workflowRun: null,
   transcript: [],
   liveAssistantMessageId: null,
   liveAssistantBlocks: [],
@@ -687,6 +706,45 @@ export function useEvents(initialModel: string, initialMode: string) {
         }));
         break;
       }
+      case "workflow_progress": {
+        const p = event.payload as WorkflowProgressPayload;
+        const nodeId = stringOrEmpty(p.node_id);
+        setUIState((s) => {
+          // A new run replaces the previous one outright. Two graphs never run
+          // at once — the workflow tool is serial — so merging them would only
+          // ever interleave nodes from a finished run into a live one.
+          const previous =
+            s.workflowRun && s.workflowRun.runId === p.run_id
+              ? s.workflowRun.nodes
+              : [];
+          const seen = previous.some((node) => node.id === nodeId);
+          const nodes = seen
+            ? previous.map((node) =>
+                node.id === nodeId
+                  ? { ...node, status: stringOrEmpty(p.status) }
+                  : node,
+              )
+            : [
+                ...previous,
+                {
+                  id: nodeId,
+                  label: stringOrEmpty(p.node_label),
+                  status: stringOrEmpty(p.status),
+                },
+              ];
+          return {
+            ...s,
+            workflowRun: {
+              runId: stringOrEmpty(p.run_id),
+              description: stringOrEmpty(p.description),
+              completed: Math.max(0, Math.round(p.completed ?? 0)),
+              total: Math.max(0, Math.round(p.total ?? 0)),
+              nodes,
+            },
+          };
+        });
+        break;
+      }
       case "turn_complete": {
         const p = event.payload as TurnCompletePayload;
         setUIState((s) => {
@@ -712,6 +770,7 @@ export function useEvents(initialModel: string, initialMode: string) {
               liveAssistantBlocks: [],
               activeTurnStatus: "idle",
               goalProgress: null,
+              workflowRun: null,
               pendingPermission: null,
               submittingArtifactReviewRequestId: null,
               isStreaming: false,
@@ -738,6 +797,7 @@ export function useEvents(initialModel: string, initialMode: string) {
             liveAssistantBlocks: [],
             activeTurnStatus: "idle",
             goalProgress: null,
+            workflowRun: null,
             submittingArtifactReviewRequestId: null,
             isStreaming: false,
             compact: null,
@@ -1156,6 +1216,7 @@ export function useEvents(initialModel: string, initialMode: string) {
           messages: normalizeHydratedMessages(p.messages),
           progressEntries: normalizeHydratedProgressEntries(p.progress),
           goalProgress: null,
+          workflowRun: null,
           toolCalls: normalizeHydratedToolCalls(p.tool_calls),
           transcript: normalizeHydratedTranscriptEntries(p.transcript),
           liveAssistantMessageId: null,
@@ -1472,6 +1533,7 @@ export function useEvents(initialModel: string, initialMode: string) {
           messages: [],
           progressEntries: [],
           goalProgress: null,
+          workflowRun: null,
           transcript: [],
           liveAssistantMessageId: null,
           liveAssistantBlocks: [],
@@ -1536,6 +1598,7 @@ export function useEvents(initialModel: string, initialMode: string) {
               messages: [],
               progressEntries: [],
               goalProgress: null,
+              workflowRun: null,
               transcript: [],
               liveAssistantMessageId: null,
               liveAssistantBlocks: [],
@@ -1618,6 +1681,7 @@ export function useEvents(initialModel: string, initialMode: string) {
       liveAssistantBlocks: [],
       activeTurnStatus: "idle",
       goalProgress: null,
+      workflowRun: null,
       isStreaming: false,
       compact: null,
       pendingModelSelection: null,
@@ -1710,6 +1774,7 @@ export function useEvents(initialModel: string, initialMode: string) {
       error: null,
       statusLine: null,
       goalProgress: null,
+      workflowRun: null,
       isStreaming: true,
     }));
   }, []);
