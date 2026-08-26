@@ -1120,6 +1120,16 @@ install -m 755 nami-engine "$HOME/.local/bin/nami-engine"</code><button class="c
                   </tr>
                   <tr>
                     <td class="p-4 border-t border-[#1a1a1a]">
+                      <code>/goal [condition|clear]</code>
+                    </td>
+                    <td class="p-4 border-t border-[#1a1a1a]">
+                      Keep working until a condition holds. The turn cannot end
+                      until the goal is judged satisfied against what the
+                      transcript shows happened; it clears itself once met
+                    </td>
+                  </tr>
+                  <tr>
+                    <td class="p-4 border-t border-[#1a1a1a]">
                       <code>/help</code>
                     </td>
                     <td class="p-4 border-t border-[#1a1a1a]">
@@ -1536,6 +1546,52 @@ install -m 755 nami-engine "$HOME/.local/bin/nami-engine"</code><button class="c
                 <strong>Verification:</strong> Builds, tests, and validation without file edits.
               </div>
             </div>
+
+            <h3 class="text-xl font-bold mt-12 mb-4">Dynamic Workflows</h3>
+            <p class="text-sm text-gray-400 mb-6 leading-relaxed">
+              <code>agent_team</code> is for tasks that are genuinely
+              independent. When the work has structure &mdash; some tasks must
+              read what earlier ones produced &mdash; the <code>workflow</code>
+              tool runs it as a dependency graph instead. Each node is one
+              delegated task, and <code>depends_on</code> names the nodes whose
+              results it needs.
+            </p>
+            <p class="text-sm text-gray-400 mb-6 leading-relaxed">
+              A node starts the moment its own dependencies finish, so
+              independent branches never wait on each other. With fixed phases,
+              every branch waits for the slowest member of the current phase,
+              and one slow node stalls work that never needed its result.
+            </p>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+              <div class="p-6 border border-[#1a1a1a] rounded">
+                <strong>Interpolation:</strong>
+                <code>${outputs.&lt;node_id&gt;}</code> passes a dependency&rsquo;s
+                result into a later prompt. The reference must name a declared
+                dependency, so a prompt can never reach a node with an
+                unsubstituted placeholder in it.
+              </div>
+              <div class="p-6 border border-[#1a1a1a] rounded">
+                <strong>Validation first:</strong> unique ids, dependencies that
+                exist, and no cycles are all checked before anything runs, so a
+                malformed graph returns a message to fix rather than a run that
+                starts and then falls over.
+              </div>
+              <div class="p-6 border border-[#1a1a1a] rounded">
+                <strong>Failure containment:</strong> a failed node skips only
+                what depended on it and other branches finish. Set
+                <code>on_node_failure: "abort"</code> to stop the whole run.
+              </div>
+              <div class="p-6 border border-[#1a1a1a] rounded">
+                <strong>Resume:</strong> every run journals its results. Pass a
+                previous <code>run_id</code> as
+                <code>resume_from_run_id</code> to replay the unchanged prefix
+                and re-execute from the first node that changed.
+              </div>
+            </div>
+            <p class="text-sm text-gray-400 mt-6 leading-relaxed">
+              Use <code>workflow_status</code> to inspect a run by id. Live
+              per-node progress appears in the TUI while the graph runs.
+            </p>
           </section>
 
           <section id="edit-logic" class="mb-24">

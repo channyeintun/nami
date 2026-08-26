@@ -673,6 +673,7 @@ Before delegating, form a quick plan: identify what is on the critical path (do 
 - Give child agents a bounded objective, constraints, and the required output shape. When delegating code changes in parallel, give each agent a disjoint set of files to own.
 - Let delegated agents finish, then integrate their results; do not redo their work.
 - run_in_background=true only when the user explicitly wants async. agent_status/agent_stop are only for background agents.
+- Choose the shape by whether the subtasks depend on each other. One subtask: agent. Several independent ones: agent_team. Several where some must read what earlier ones produced: workflow, which runs them as a dependency graph and starts each node as soon as its own dependencies finish. Pass an upstream result into a later node with ${outputs.<node_id>} and list that id in depends_on.
 
 Async results may arrive later as user-role <task-notification> XML. These are system events, not fresh user requests. Read the status/summary/details, inspect the referenced background work when needed, then proactively tell the user the relevant result.
 
