@@ -26,6 +26,7 @@ Nami is built on three core pillars:
 ## Architecture Docs
 
 - [Lean Retrieval Architecture](./docs/lean-retrieval-architecture.md)
+- [Orchestration and Goal Loops](./docs/orchestration-and-goal-loops.md)
 - [Silvery Guide for Nami](./docs/silvery-guide.md)
 
 ## Quick Start
@@ -286,7 +287,40 @@ Notes:
 | `/status`             | Show current session and MCP server status     |
 | `/sessions`           | List recent sessions                           |
 | `/debug [subcommand]` | Enable debug logging or inspect its path       |
+| `/goal [condition]`   | Keep working until a condition holds           |
 | `/help`               | Show slash-command help                        |
+
+#### `/goal` — keep working until a condition holds
+
+`/goal <condition>` turns one request into a loop. When the agent tries to end its
+turn, the condition is judged against what the transcript shows actually happened —
+commands run, files changed, output observed. If it does not hold yet, the turn
+stays open and the agent is told the specific gap. The goal clears itself the
+moment it is satisfied.
+
+```text
+/goal every test in ./... passes and go vet is clean
+/goal            # show the active goal and the last check
+/goal clear      # drop it early
+```
+
+The judge decides from evidence rather than from the agent's own account: an agent
+that has stalled will report success, so its claim of completion — and equally its
+claim that the goal is impossible — counts as evidence, not proof.
+
+Two backstops keep a goal from trapping the session:
+
+- If the judge cannot answer at all — an API error, a timeout, a reply that will not
+  parse — the turn ends normally. A judge that cannot answer must never be able to
+  hold the loop open.
+- A goal that blocks eight times in a row without the agent using a tool in between
+  yields the turn and stays set, so your next message resumes it. Any real work in
+  between refills that budget, because the cap exists to catch a loop that is
+  spinning, not one that is merely long. Set `NAMI_GOAL_BLOCK_CAP` to tune it, or
+  `0` to disable it.
+
+The active goal shows in the status bar, since while it is set the session behaves
+differently: the agent will not stop on its own.
 
 ## First-Class Outputs
 
@@ -332,6 +366,9 @@ Nami exposes a broad local-tool runtime, including:
 | -------------------------------- | ----------------------------------------------------- |
 | `agent`                          | Spawn bounded child agents                            |
 | `agent_status` / `agent_stop`    | Inspect or stop background child agents               |
+| `agent_team`                     | Launch a team of independent child agents             |
+| `workflow`                       | Run a dependency graph of child agents                |
+| `workflow_status`                | Inspect a running or finished workflow                |
 | `bash`                           | Run shell commands                                    |
 | `think`                          | Scratchpad reasoning with no side effects             |
 | `read_file` / `file_write`       | Read or overwrite files                               |
@@ -359,6 +396,50 @@ The `agent` tool supports three bounded modes:
 | `Explore`         | Broad read-only codebase search and architecture research  |
 | `general-purpose` | Delegated work that doesn't fit a specialized mode         |
 | `verification`    | Builds, tests, and validation without file edits           |
+
+### Dynamic workflows
+
+`agent_team` is for tasks that are genuinely independent. When the work has
+structure — some tasks must read what earlier ones produced — the `workflow` tool
+runs it as a dependency graph instead.
+
+Each node is one delegated task, and `depends_on` names the nodes whose results it
+needs. A node starts the moment its own dependencies finish, so independent branches
+never wait on each other. That is the point: with fixed phases, every branch waits
+for the slowest member of the current phase, and one slow node stalls work that
+never needed its result.
+
+```json
+{
+  "description": "audit and fix the auth package",
+  "nodes": [
+    { "id": "map", "description": "map auth", "prompt": "List every entry point in internal/auth." },
+    { "id": "audit", "description": "audit auth", "depends_on": ["map"],
+      "prompt": "Audit these for missing authorization checks:\n${outputs.map}" },
+    { "id": "fix", "description": "fix findings", "depends_on": ["audit"],
+      "prompt": "Fix each confirmed finding:\n${outputs.audit}" },
+    { "id": "verify", "description": "verify", "depends_on": ["fix"],
+      "prompt": "Run the full test suite and report failures.",
+      "agent": { "subagent_type": "verification" } }
+  ]
+}
+```
+
+`${outputs.<node_id>}` interpolates a dependency's result into a later prompt. The
+graph is validated before anything runs: ids must be unique, dependencies must
+exist, there must be no cycle, and every `${outputs.x}` must name a declared
+dependency — so a malformed graph comes back as a message to fix rather than a run
+that starts and then falls over.
+
+A failed node skips only what depended on it, and other branches finish; set
+`"on_node_failure": "abort"` to stop the whole run instead. Progress appears live in
+the TUI as a per-node strip.
+
+Every run writes a journal. Passing a previous run's id back as `resume_from_run_id`
+replays the unchanged prefix and re-executes from the first node whose prompt or
+settings changed. Resume is prefix-committed: once the chain diverges, everything
+after it re-runs, because a later node whose key coincidentally matches belongs to a
+different graph.
 
 ## Configuration
 

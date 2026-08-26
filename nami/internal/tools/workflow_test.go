@@ -216,3 +216,33 @@ func TestWorkflowToolSchemaMatchesTheEngineLimits(t *testing.T) {
 		t.Fatalf("on_node_failure enum = %v", policies)
 	}
 }
+
+// The graph published in the README must validate against the real tool, or the
+// documentation is teaching a shape the engine rejects.
+func TestReadmeWorkflowExampleValidates(t *testing.T) {
+	const example = `{
+  "description": "audit and fix the auth package",
+  "nodes": [
+    { "id": "map", "description": "map auth", "prompt": "List every entry point in internal/auth." },
+    { "id": "audit", "description": "audit auth", "depends_on": ["map"],
+      "prompt": "Audit these for missing authorization checks:\n${outputs.map}" },
+    { "id": "fix", "description": "fix findings", "depends_on": ["audit"],
+      "prompt": "Fix each confirmed finding:\n${outputs.audit}" },
+    { "id": "verify", "description": "verify", "depends_on": ["fix"],
+      "prompt": "Run the full test suite and report failures.",
+      "agent": { "subagent_type": "verification" } }
+  ]
+}`
+
+	var params map[string]any
+	if err := json.Unmarshal([]byte(example), &params); err != nil {
+		t.Fatalf("README example is not valid JSON: %v", err)
+	}
+
+	tool := NewWorkflowTool(func(context.Context, WorkflowLaunchRequest) (WorkflowRunResult, error) {
+		return WorkflowRunResult{}, nil
+	})
+	if err := tool.Validate(ToolInput{Params: params}); err != nil {
+		t.Fatalf("README example fails validation: %v", err)
+	}
+}
