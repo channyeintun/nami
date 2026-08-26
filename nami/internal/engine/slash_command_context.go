@@ -28,6 +28,10 @@ type slashCommandState struct {
 	CWD             string
 	Messages        []api.Message
 	Timeline        *conversationTimeline
+	// FollowUpPrompt lets a handler continue the turn into a user prompt
+	// instead of ending it. A handler that sets this must not also call
+	// emitTextResponse, which closes the turn.
+	FollowUpPrompt string
 }
 
 type slashCommandContext struct {

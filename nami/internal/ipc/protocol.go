@@ -67,6 +67,9 @@ const (
 	// Workflows
 	EventWorkflowProgress EventType = "workflow_progress"
 
+	// Goals
+	EventGoalStateChanged EventType = "goal_state_changed"
+
 	// Engine status
 	EventReady           EventType = "ready"
 	EventError           EventType = "error"
@@ -134,6 +137,18 @@ type GoalProgressPayload struct {
 
 type TurnCompletePayload struct {
 	StopReason string `json:"stop_reason"`
+}
+
+// GoalStateChangedPayload reports the session-scoped stop condition set by
+// /goal. This is the loop's own state and is unrelated to GoalProgressPayload,
+// which drives the in-turn ::progress bar.
+type GoalStateChangedPayload struct {
+	Active     bool   `json:"active"`
+	Met        bool   `json:"met,omitempty"`
+	Failed     bool   `json:"failed,omitempty"`
+	Condition  string `json:"condition,omitempty"`
+	Reason     string `json:"reason,omitempty"`
+	Iterations int    `json:"iterations,omitempty"`
 }
 
 // WorkflowProgressPayload reports one node's state transition inside a

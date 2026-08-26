@@ -433,7 +433,14 @@ func (t *userTurnContext) newQueryDeps(planner *agent.Planner) agent.QueryDeps {
 			return loadSessionMemorySnapshot(callCtx, t.deps.artifactManager, t.state.sessionID)
 		},
 		BeforeStop: func(callCtx context.Context, stopReq agent.StopRequest) (agent.StopDecision, error) {
-			return evaluateSessionStopHooks(callCtx, t.deps.hookRunner, t.state.sessionID, stopReq)
+			// File stop hooks run first: they are user-authored and cost
+			// nothing. Goal evaluation costs a model call, so it only runs when
+			// no hook has already decided to keep the turn open.
+			decision, err := evaluateSessionStopHooks(callCtx, t.deps.hookRunner, t.state.sessionID, stopReq)
+			if err != nil || decision.Continue {
+				return decision, err
+			}
+			return evaluateSessionGoal(callCtx, t.deps.bridge, goalStoreFor(t.state.sessionDir), t.state.client, stopReq)
 		},
 		ApplyResultBudget: func(current []api.Message) []api.Message {
 			return current

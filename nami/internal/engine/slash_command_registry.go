@@ -64,6 +64,15 @@ func slashCommandSpecs() []slashCommandSpec {
 		},
 		{
 			Descriptor: commandspkg.Descriptor{
+				Name:           "goal",
+				Description:    "Keep working until a condition holds",
+				Usage:          "/goal [<condition>|clear]",
+				TakesArguments: true,
+			},
+			Handler: slashCommandHandlerFunc(handleGoalSlashCommand),
+		},
+		{
+			Descriptor: commandspkg.Descriptor{
 				Name:           "help",
 				Description:    "Show the slash-command help text",
 				Usage:          "/help",

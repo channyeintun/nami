@@ -841,6 +841,7 @@ const App: FC<AppProps> = ({ enginePath, model, mode, autoMode }) => {
             backgroundCommands={uiState.backgroundCommands}
             allowedPermissionFileTypes={uiState.allowedPermissionFileTypes}
             rateLimits={uiState.rateLimits}
+            goalCondition={uiState.goalCondition}
           />
         </Box>
 

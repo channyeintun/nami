@@ -339,6 +339,15 @@ func RunStdioEngine(ctx context.Context, cfg config.Config) error {
 				sessionRuntime.Swarm.SessionID = loopState.sessionID
 				sessionRuntime.Swarm.CWD = loopState.cwd
 				toolpkg.InstallSessionRuntime(sessionRuntime)
+				// A command that switched sessions brings that session's own
+				// goal with it, so re-announce it rather than leaving the UI
+				// showing the goal from the session just left.
+				emitCurrentGoalState(bridge, goalStoreFor(loopState.sessionDir))
+				if followUp := strings.TrimSpace(slashState.FollowUpPrompt); followUp != "" {
+					if err := handleUserInputMessageWithSkills(ctx, ipc.UserInputPayload{Text: followUp}, loopDeps, loopState, nil); err != nil {
+						return err
+					}
+				}
 				continue
 			}
 

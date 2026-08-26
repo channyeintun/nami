@@ -11,6 +11,7 @@ import type {
   UIArtifactReview,
   UIBackgroundAgent,
   UIBackgroundCommand,
+  UIGoalCondition,
   UIRateLimits,
 } from "../hooks/useEvents.js";
 
@@ -40,6 +41,7 @@ interface StatusBarProps {
   backgroundCommands: UIBackgroundCommand[];
   allowedPermissionFileTypes: string[];
   rateLimits: UIRateLimits;
+  goalCondition?: UIGoalCondition | null;
 }
 
 const StatusBar: FC<StatusBarProps> = ({
@@ -68,6 +70,7 @@ const StatusBar: FC<StatusBarProps> = ({
   backgroundCommands,
   allowedPermissionFileTypes,
   rateLimits,
+  goalCondition,
 }) => {
   const readinessLabel = ready ? "READY" : "BOOTING";
   const readinessColor = ready ? "$success" : "$warning";
@@ -114,6 +117,7 @@ const StatusBar: FC<StatusBarProps> = ({
   const allowedFileTypeSummary = summarizeAllowedFileTypes(
     allowedPermissionFileTypes,
   );
+  const goalLabel = summarizeGoal(goalCondition);
 
   return (
     <Box
@@ -140,6 +144,14 @@ const StatusBar: FC<StatusBarProps> = ({
           <Text color={modeLabelColor(mode)} bold>
             {formatModeLabel(mode)}
           </Text>
+          {goalLabel ? (
+            <>
+              <Text color="$muted"> · </Text>
+              <Text color="$accent" bold>
+                {goalLabel}
+              </Text>
+            </>
+          ) : null}
           <Text color="$muted"> · </Text>
           <Text backgroundColor="$surface-bg" color="$fg" bold>
             {` ${modelLabel} `}
@@ -235,6 +247,24 @@ const StatusBar: FC<StatusBarProps> = ({
 };
 
 export default StatusBar;
+
+const MAX_GOAL_LABEL_CHARS = 32;
+
+// The active goal belongs on the status bar rather than in the transcript: it
+// outlives every turn, and while it is set the session behaves differently —
+// the agent will not stop on its own.
+function summarizeGoal(goal: UIGoalCondition | null | undefined): string {
+  const condition = goal?.condition?.trim();
+  if (!condition) {
+    return "";
+  }
+  const text =
+    condition.length > MAX_GOAL_LABEL_CHARS
+      ? `${condition.slice(0, MAX_GOAL_LABEL_CHARS - 1)}…`
+      : condition;
+  const checks = goal?.iterations ?? 0;
+  return checks > 0 ? `goal: ${text} (${checks})` : `goal: ${text}`;
+}
 
 function formatModeLabel(mode: string): string {
   return `[${mode.toUpperCase()}]`;

@@ -29,6 +29,7 @@ import type {
   ModelChangedPayload,
   PermissionRequestPayload,
   GoalProgressPayload,
+  GoalStateChangedPayload,
   ProgressPayload,
   ReasoningSelectionOptionPayload,
   ReasoningSelectionRequestedPayload,
@@ -321,6 +322,13 @@ export interface UIGoalProgress {
   label: string;
 }
 
+/** The session-scoped stop condition set by /goal, or null when none is set. */
+export interface UIGoalCondition {
+  condition: string;
+  reason: string;
+  iterations: number;
+}
+
 export interface UIWorkflowNode {
   id: string;
   label: string;
@@ -343,6 +351,7 @@ export interface EngineUIState {
   messages: UIMessage[];
   progressEntries: UIProgressEntry[];
   goalProgress: UIGoalProgress | null;
+  goalCondition: UIGoalCondition | null;
   workflowRun: UIWorkflowRun | null;
   transcript: UITranscriptEntry[];
   liveAssistantMessageId: string | null;
@@ -416,6 +425,7 @@ const initialState = (model: string, mode: string): EngineUIState => ({
   messages: [],
   progressEntries: [],
   goalProgress: null,
+  goalCondition: null,
   workflowRun: null,
   transcript: [],
   liveAssistantMessageId: null,
@@ -703,6 +713,23 @@ export function useEvents(initialModel: string, initialMode: string) {
             percent: Math.max(0, Math.min(100, Math.round(p.percent ?? 0))),
             label: stringOrEmpty(p.label),
           },
+        }));
+        break;
+      }
+      case "goal_state_changed": {
+        const p = event.payload as GoalStateChangedPayload;
+        // The goal outlives a turn — that is the whole point of the loop — so
+        // unlike goalProgress this is only cleared when the engine says the
+        // goal is gone, never on turn boundaries.
+        setUIState((s) => ({
+          ...s,
+          goalCondition: p.active
+            ? {
+                condition: stringOrEmpty(p.condition),
+                reason: stringOrEmpty(p.reason),
+                iterations: Math.max(0, Math.round(p.iterations ?? 0)),
+              }
+            : null,
         }));
         break;
       }
@@ -1217,6 +1244,7 @@ export function useEvents(initialModel: string, initialMode: string) {
           progressEntries: normalizeHydratedProgressEntries(p.progress),
           goalProgress: null,
           workflowRun: null,
+          goalCondition: null,
           toolCalls: normalizeHydratedToolCalls(p.tool_calls),
           transcript: normalizeHydratedTranscriptEntries(p.transcript),
           liveAssistantMessageId: null,
@@ -1534,6 +1562,7 @@ export function useEvents(initialModel: string, initialMode: string) {
           progressEntries: [],
           goalProgress: null,
           workflowRun: null,
+          goalCondition: null,
           transcript: [],
           liveAssistantMessageId: null,
           liveAssistantBlocks: [],
@@ -1599,6 +1628,7 @@ export function useEvents(initialModel: string, initialMode: string) {
               progressEntries: [],
               goalProgress: null,
               workflowRun: null,
+              goalCondition: null,
               transcript: [],
               liveAssistantMessageId: null,
               liveAssistantBlocks: [],

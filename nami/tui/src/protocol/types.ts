@@ -41,6 +41,7 @@ export type EventType =
   | "background_command_updated"
   | "background_agent_updated"
   | "workflow_progress"
+  | "goal_state_changed"
   | "ready"
   | "error"
   | "notice"
@@ -109,6 +110,18 @@ export interface GoalProgressPayload {
 
 export interface TurnCompletePayload {
   stop_reason: string;
+}
+
+// The session-scoped stop condition set by /goal. Mirrors
+// ipc.GoalStateChangedPayload. Unrelated to GoalProgressPayload, which drives
+// the in-turn ::progress bar.
+export interface GoalStateChangedPayload {
+  active: boolean;
+  met?: boolean;
+  failed?: boolean;
+  condition?: string;
+  reason?: string;
+  iterations?: number;
 }
 
 // One node's state transition inside a workflow graph run. Mirrors
