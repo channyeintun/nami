@@ -70,14 +70,28 @@ it were a result.
 
 ### Resume
 
-Every run writes an append-only journal of node results. Each result is keyed by a
-hash chain that commits to the whole prefix of the run — the previous key, the
-node's id, its expanded prompt, and the agent settings that change how it runs.
+Every run writes an append-only journal of node results. A node's key is a hash of
+its *dependencies' keys* plus its own executable identity — id, expanded prompt, and
+the agent settings that change how it runs.
 
-Resuming replays cached results only while the current run matches the recorded one
-exactly. The first miss latches the chain broken, and everything after it
-re-executes. That latch is the point: without it, a later node whose key happens to
-match a recorded one would replay a result computed in a *different graph*.
+Keying on dependency keys rather than on a linear "everything before this node"
+chain is what makes resume work at all for a graph that runs in parallel. Launch
+order is not stable once more than one node is in flight: given two sibling chains,
+whichever root finishes first launches its child first, and that depends on timing.
+A linear chain would therefore produce different keys for identical work and miss on
+every resume. Dependency keys depend only on the graph and the data flowing through
+it, so two runs of the same graph agree regardless of scheduling.
+
+It is also more precise. Because a key transitively commits to the whole ancestry
+that produced it, a match can only happen when that entire ancestry matched — so
+replay is sound without any global "chain broken" latch, and editing one branch
+re-runs that branch alone instead of everything downstream of it in some arbitrary
+order.
+
+The *expanded* prompt is what closes the loop on upstream results. If a dependency
+re-ran and produced different output, any node interpolating that output has a
+different prompt and so a different key; a node that does not interpolate it was
+genuinely unaffected, and replaying it is correct.
 
 Node descriptions are deliberately excluded from the key, so relabeling a node for a
 nicer progress display does not throw away its cached result.

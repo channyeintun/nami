@@ -1584,8 +1584,9 @@ install -m 755 nami-engine "$HOME/.local/bin/nami-engine"</code><button class="c
               <div class="p-6 border border-[#1a1a1a] rounded">
                 <strong>Resume:</strong> every run journals its results. Pass a
                 previous <code>run_id</code> as
-                <code>resume_from_run_id</code> to replay the unchanged prefix
-                and re-execute from the first node that changed.
+                <code>resume_from_run_id</code> to replay what has not changed.
+                A node&rsquo;s key is derived from its dependencies&rsquo; keys, so
+                editing one branch re-runs that branch and leaves the rest cached.
               </div>
             </div>
             <p class="text-sm text-gray-400 mt-6 leading-relaxed">

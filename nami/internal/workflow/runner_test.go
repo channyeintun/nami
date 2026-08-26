@@ -415,3 +415,189 @@ func TestOpenJournalToleratesMissingResumeSource(t *testing.T) {
 		t.Fatalf("Close: %v", err)
 	}
 }
+
+// The key a node records must not depend on the order the scheduler happened to
+// launch things. Two sibling chains launch their second node in whichever order
+// their first node finished, so a key derived from a linear "everything before
+// this" chain would differ between two identical runs and miss on every resume.
+func TestResumeIsStableAcrossParallelRuns(t *testing.T) {
+	dir := t.TempDir()
+	resolved := mustResolve(t, Spec{
+		MaxParallel: 2,
+		Nodes: []NodeSpec{
+			node("a"), node("a_next", "a"),
+			node("b"), node("b_next", "b"),
+		},
+	})
+
+	run := func(path string, resumeFrom string, delays map[string]time.Duration) (Result, []string) {
+		t.Helper()
+		journal, err := OpenJournal(path, resumeFrom)
+		if err != nil {
+			t.Fatalf("OpenJournal: %v", err)
+		}
+		var mu sync.Mutex
+		var executed []string
+		result, err := resolved.Run(t.Context(), Options{
+			Journal: journal,
+			Run: func(_ context.Context, req NodeRequest) (NodeResult, error) {
+				time.Sleep(delays[req.ID])
+				mu.Lock()
+				executed = append(executed, req.ID)
+				mu.Unlock()
+				return NodeResult{Output: "out:" + req.ID}, nil
+			},
+		})
+		if err != nil {
+			t.Fatalf("Run: %v", err)
+		}
+		if err := journal.Close(); err != nil {
+			t.Fatalf("Close: %v", err)
+		}
+		return result, executed
+	}
+
+	// First run: a finishes well before b, so a_next launches third.
+	first := filepath.Join(dir, "first.ndjson")
+	_, executed := run(first, "", map[string]time.Duration{"a": time.Millisecond, "b": 30 * time.Millisecond})
+	if len(executed) != 4 {
+		t.Fatalf("first run executed %v", executed)
+	}
+	if executed[0] != "a" || executed[1] != "a_next" {
+		t.Fatalf("first run order = %v, want a then a_next before b", executed)
+	}
+
+	// Second run: b finishes first, so the launch order is reversed.
+	result, executed := run(
+		filepath.Join(dir, "second.ndjson"),
+		first,
+		map[string]time.Duration{"a": 30 * time.Millisecond, "b": time.Millisecond},
+	)
+	if len(executed) != 0 {
+		t.Fatalf("resume re-executed %v despite an unchanged graph", executed)
+	}
+	if result.Cached != 4 {
+		t.Fatalf("Cached = %d, want 4", result.Cached)
+	}
+}
+
+// Changing one branch must re-run that branch and nothing else. A node's key
+// commits to its own ancestry, so an untouched branch is untouched.
+func TestResumeRerunsOnlyTheAffectedBranch(t *testing.T) {
+	dir := t.TempDir()
+	first := filepath.Join(dir, "first.ndjson")
+	spec := Spec{
+		MaxParallel: 2,
+		Nodes: []NodeSpec{
+			node("left"), node("left_child", "left"),
+			node("right"), node("right_child", "right"),
+		},
+	}
+
+	journal, err := OpenJournal(first, "")
+	if err != nil {
+		t.Fatalf("OpenJournal: %v", err)
+	}
+	if _, err := mustResolve(t, spec).Run(t.Context(), Options{Journal: journal, Run: echoRunner}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if err := journal.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	edited := spec
+	edited.Nodes = slices.Clone(spec.Nodes)
+	edited.Nodes[0] = NodeSpec{ID: "left", Description: "run left", Prompt: "do left differently"}
+
+	resumeJournal, err := OpenJournal(filepath.Join(dir, "second.ndjson"), first)
+	if err != nil {
+		t.Fatalf("OpenJournal: %v", err)
+	}
+	var mu sync.Mutex
+	var executed []string
+	result, err := mustResolve(t, edited).Run(t.Context(), Options{
+		Journal: resumeJournal,
+		Run: func(_ context.Context, req NodeRequest) (NodeResult, error) {
+			mu.Lock()
+			executed = append(executed, req.ID)
+			mu.Unlock()
+			return NodeResult{Output: "out:" + req.ID}, nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if err := resumeJournal.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	sort.Strings(executed)
+	if !slices.Equal(executed, []string{"left", "left_child"}) {
+		t.Fatalf("executed %v, want only the left branch", executed)
+	}
+	for _, id := range []string{"right", "right_child"} {
+		if got := statusOf(result, id).Status; got != StatusCached {
+			t.Fatalf("%s status = %q, want cached", id, got)
+		}
+	}
+}
+
+// A node that interpolates an upstream result must re-run when that result
+// changes, even though its own prompt template is untouched.
+func TestResumeRerunsAConsumerWhenUpstreamOutputChanges(t *testing.T) {
+	dir := t.TempDir()
+	first := filepath.Join(dir, "first.ndjson")
+	resolved := mustResolve(t, Spec{
+		MaxParallel: 1,
+		Nodes: []NodeSpec{
+			node("produce"),
+			{ID: "consume", Description: "consume", Prompt: "use ${outputs.produce}", DependsOn: []string{"produce"}},
+			node("ignore", "produce"),
+		},
+	})
+
+	output := "v1"
+	runner := func(_ context.Context, req NodeRequest) (NodeResult, error) {
+		if req.ID == "produce" {
+			return NodeResult{Output: output}, nil
+		}
+		return NodeResult{Output: "out:" + req.ID}, nil
+	}
+
+	journal, err := OpenJournal(first, "")
+	if err != nil {
+		t.Fatalf("OpenJournal: %v", err)
+	}
+	if _, err := resolved.Run(t.Context(), Options{Journal: journal, Run: runner}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if err := journal.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	// "produce" replays, so its output is stable and both consumers replay too.
+	resumeJournal, err := OpenJournal(filepath.Join(dir, "second.ndjson"), first)
+	if err != nil {
+		t.Fatalf("OpenJournal: %v", err)
+	}
+	var executed []string
+	result, err := resolved.Run(t.Context(), Options{
+		Journal: resumeJournal,
+		Run: func(ctx context.Context, req NodeRequest) (NodeResult, error) {
+			executed = append(executed, req.ID)
+			return runner(ctx, req)
+		},
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if err := resumeJournal.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	if len(executed) != 0 {
+		t.Fatalf("resume executed %v, want nothing", executed)
+	}
+	if got := statusOf(result, "consume").Output; got != "out:consume" {
+		t.Fatalf("consume output = %q", got)
+	}
+}

@@ -436,10 +436,11 @@ A failed node skips only what depended on it, and other branches finish; set
 the TUI as a per-node strip.
 
 Every run writes a journal. Passing a previous run's id back as `resume_from_run_id`
-replays the unchanged prefix and re-executes from the first node whose prompt or
-settings changed. Resume is prefix-committed: once the chain diverges, everything
-after it re-runs, because a later node whose key coincidentally matches belongs to a
-different graph.
+replays what has not changed and re-runs only what has. A node's journal key is
+derived from its dependencies' keys, so it commits to everything that node's result
+actually depended on: editing one branch re-runs that branch and leaves the rest
+cached, and a node that interpolates an upstream result re-runs when that result
+changes even though its own prompt is untouched.
 
 ## Configuration
 

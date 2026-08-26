@@ -8,6 +8,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 )
@@ -20,21 +21,18 @@ type journalRecord struct {
 	Metadata map[string]string `json:"metadata,omitempty"`
 }
 
-// Journal makes a run resumable. It records each node's result against a key
-// that commits to the whole prefix of the run, so replaying a prior journal
-// returns cached results only while the current run matches the recorded one
-// exactly. The first divergence breaks the chain, and everything from there on
-// re-executes — which is the property that makes resume safe after a spec edit.
+// Journal makes a run resumable. Each node's result is recorded under a key
+// derived from its dependencies' keys, so a key transitively commits to
+// everything the node's result actually depended on. Replaying is therefore
+// sound without any global "chain broken" latch: a key can only match when the
+// whole ancestry that produced it matched, and a change re-runs exactly the
+// affected subgraph rather than everything downstream of it in some order.
 //
 // A nil *Journal is usable and does nothing, so callers need no nil checks.
 type Journal struct {
 	mu     sync.Mutex
 	path   string
 	cached map[string]journalRecord
-	// broken latches once a lookup misses. Later keys in a diverged run can
-	// still collide with recorded ones by coincidence; honoring them would mix
-	// results from two different graphs.
-	broken bool
 	file   *os.File
 	writer *bufio.Writer
 }
@@ -105,12 +103,8 @@ func (j *Journal) Replay(key string) (NodeResult, bool) {
 	}
 	j.mu.Lock()
 	defer j.mu.Unlock()
-	if j.broken {
-		return NodeResult{}, false
-	}
 	record, ok := j.cached[key]
 	if !ok {
-		j.broken = true
 		return NodeResult{}, false
 	}
 	// A replayed node is still journaled, so the resumed run's journal is a
@@ -176,14 +170,30 @@ func (j *Journal) Close() error {
 	return err
 }
 
-// chainKey derives a node's journal key from the running chain and the node's
-// executable identity: its expanded prompt and the settings that change how it
+// nodeKey derives a node's journal key from its dependencies' keys plus its own
+// executable identity: the expanded prompt and the settings that change how it
 // runs. Description is deliberately excluded, so relabeling a node for a nicer
 // progress display does not invalidate its cached result.
-func chainKey(previous string, node ResolvedNode, prompt string) string {
+//
+// Keying on dependency keys rather than on a linear "everything before this"
+// chain is what makes resume work for a graph that runs in parallel. Launch
+// order varies between runs once more than one node is in flight, so a linear
+// chain would produce different keys for the same work and miss on every
+// resume. Dependency keys depend only on the graph and the data flowing
+// through it.
+//
+// The expanded prompt is what closes the loop on upstream results: if a
+// dependency re-ran and produced a different output, any node that interpolates
+// that output has a different prompt and so a different key. A node that does
+// not interpolate it was genuinely unaffected, and replaying it is correct.
+func nodeKey(dependencyKeys []string, node ResolvedNode, prompt string) string {
 	digest := sha256.New()
-	digest.Write([]byte(previous))
-	digest.Write([]byte{0})
+	// Sorted so the key does not depend on the order dependencies were declared.
+	ordered := slices.Sorted(slices.Values(dependencyKeys))
+	for _, key := range ordered {
+		digest.Write([]byte(key))
+		digest.Write([]byte{0})
+	}
 	digest.Write([]byte(node.ID))
 	digest.Write([]byte{0})
 	digest.Write([]byte(prompt))

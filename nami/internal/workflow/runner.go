@@ -164,6 +164,7 @@ func (s ResolvedSpec) Run(ctx context.Context, opts Options) (Result, error) {
 		index:   make(map[string]int, len(s.Nodes)),
 		states:  make([]NodeState, len(s.Nodes)),
 		blocked: make([]int, len(s.Nodes)),
+		keys:    make([]string, len(s.Nodes)),
 		outputs: make(map[string]string, len(s.Nodes)),
 	}
 	for i, node := range s.Nodes {
@@ -190,9 +191,9 @@ type runState struct {
 	states  []NodeState
 	blocked []int
 	outputs map[string]string
-	// chain advances once per executed node so a journal entry commits to the
-	// whole prefix of the run, not just its own prompt.
-	chain     string
+	// keys holds each node's journal key once it launches, so a dependent can
+	// derive its own key from the keys of everything it depended on.
+	keys      []string
 	completed int
 	aborted   bool
 }
@@ -291,11 +292,14 @@ func (r *runState) launch(ctx context.Context, wg *sync.WaitGroup, done chan<- c
 	}
 	prompt := ExpandPrompt(node.Prompt, r.outputs)
 
-	// The chain advances here, in the scheduler goroutine, so the key a node
-	// commits to is fixed by its position in a deterministic launch order rather
-	// than by which goroutine happened to reach the journal first.
-	r.chain = chainKey(r.chain, node, prompt)
-	key := r.chain
+	// Derived here, in the scheduler goroutine, where every dependency has
+	// already settled and recorded its own key.
+	dependencyKeys := make([]string, 0, len(node.DependsOn))
+	for _, dep := range node.DependsOn {
+		dependencyKeys = append(dependencyKeys, r.keys[r.index[dep]])
+	}
+	key := nodeKey(dependencyKeys, node, prompt)
+	r.keys[idx] = key
 
 	r.states[idx].Status = StatusRunning
 	r.states[idx].StartedAt = r.clock()
