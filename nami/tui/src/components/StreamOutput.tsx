@@ -5,7 +5,7 @@ import React, {
   useMemo,
   useState,
 } from "react";
-import { Box, ListView, Text, useBoxRect } from "silvery";
+import { Box, ListView, MeasuredBox, Text } from "silvery";
 import { DEFAULT_PROMPT_MARKER } from "../constants/prompt.js";
 import type {
   UIActiveTurnStatus,
@@ -170,8 +170,6 @@ const StreamOutput: FC<StreamOutputProps> = ({
 
     return items;
   }, [isStreaming, queuedPrompts, transcriptBlocks]);
-  const { height: rectHeight } = useBoxRect();
-  const viewportHeight = Math.max(1, rectHeight);
   const searchQuery = transcriptSearchQuery.trim().toLowerCase();
   const searchMatchIndices = useMemo(() => {
     if (!searchQuery) {
@@ -259,7 +257,7 @@ const StreamOutput: FC<StreamOutputProps> = ({
   }
 
   return (
-    <Box
+    <MeasuredBox
       flexDirection="column"
       flexGrow={1}
       flexShrink={1}
@@ -267,65 +265,67 @@ const StreamOutput: FC<StreamOutputProps> = ({
       marginTop={1}
       userSelect="text"
     >
-      <ListView
-        items={displayBlocks}
-        height={viewportHeight}
-        nav
-        cursorKey={cursorIndex}
-        onCursor={handleCursorChange}
-        active={!searchQuery}
-        estimateHeight={(index) =>
-          estimateDisplayBlockHeight(displayBlocks[index])
-        }
-        getKey={(item) => item.key}
-        renderItem={(item, index) => {
-          if (item.kind === "streaming") {
-            return (
-              <StreamingAssistantMessage
-                blocks={liveBlocks}
-                model={model}
-                showThinking={showThinking}
-                thinkingShortcutLabel={thinkingShortcutLabel}
-                statusLabel={activeTurnStatusLabel(
-                  liveBlocks,
-                  activeTurnStatus,
-                )}
-              />
-            );
+      {({ height }) => (
+        <ListView
+          items={displayBlocks}
+          height={Math.max(1, height)}
+          nav
+          cursorKey={cursorIndex}
+          onCursor={handleCursorChange}
+          active={!searchQuery}
+          estimateHeight={(index) =>
+            estimateDisplayBlockHeight(displayBlocks[index])
           }
+          getKey={(item) => item.key}
+          renderItem={(item, index) => {
+            if (item.kind === "streaming") {
+              return (
+                <StreamingAssistantMessage
+                  blocks={liveBlocks}
+                  model={model}
+                  showThinking={showThinking}
+                  thinkingShortcutLabel={thinkingShortcutLabel}
+                  statusLabel={activeTurnStatusLabel(
+                    liveBlocks,
+                    activeTurnStatus,
+                  )}
+                />
+              );
+            }
 
-          if (
-            item.block.kind === "message" &&
-            item.block.message.role === "assistant" &&
-            isStreaming &&
-            liveAssistantMessageId !== null &&
-            item.block.message.id === liveAssistantMessageId
-          ) {
-            return (
-              <StreamingAssistantMessage
-                blocks={liveBlocks}
-                model={model}
-                showThinking={showThinking}
-                thinkingShortcutLabel={thinkingShortcutLabel}
-                statusLabel={activeTurnStatusLabel(
-                  liveBlocks,
-                  activeTurnStatus,
-                )}
-              />
+            if (
+              item.block.kind === "message" &&
+              item.block.message.role === "assistant" &&
+              isStreaming &&
+              liveAssistantMessageId !== null &&
+              item.block.message.id === liveAssistantMessageId
+            ) {
+              return (
+                <StreamingAssistantMessage
+                  blocks={liveBlocks}
+                  model={model}
+                  showThinking={showThinking}
+                  thinkingShortcutLabel={thinkingShortcutLabel}
+                  statusLabel={activeTurnStatusLabel(
+                    liveBlocks,
+                    activeTurnStatus,
+                  )}
+                />
+              );
+            }
+
+            return renderTranscriptBlock(
+              item.block,
+              index,
+              searchMatchIndices,
+              normalizedSearchSelectedIndex,
+              showThinking,
+              thinkingShortcutLabel,
             );
-          }
-
-          return renderTranscriptBlock(
-            item.block,
-            index,
-            searchMatchIndices,
-            normalizedSearchSelectedIndex,
-            showThinking,
-            thinkingShortcutLabel,
-          );
-        }}
-      />
-    </Box>
+          }}
+        />
+      )}
+    </MeasuredBox>
   );
 };
 

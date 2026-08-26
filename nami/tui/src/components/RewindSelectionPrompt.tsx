@@ -1,5 +1,12 @@
 import React, { type FC, useEffect, useState } from "react";
-import { Box, ListView, ModalDialog, Text, useBoxRect, useInput } from "silvery";
+import {
+  Box,
+  ListView,
+  MeasuredBox,
+  ModalDialog,
+  Text,
+  useInput,
+} from "silvery";
 import type { UIRewindSelection } from "../hooks/useEvents.js";
 
 interface RewindSelectionPromptProps {
@@ -122,11 +129,8 @@ const RewindTurnList: FC<RewindTurnListProps> = ({
   onCursor,
   onSelectIndex,
 }) => {
-  const { height: rectHeight } = useBoxRect();
-  const viewportHeight = Math.max(1, rectHeight);
-
   return (
-    <Box
+    <MeasuredBox
       marginTop={1}
       flexDirection="column"
       flexGrow={1}
@@ -135,39 +139,41 @@ const RewindTurnList: FC<RewindTurnListProps> = ({
       minWidth={0}
       overflow="hidden"
     >
-      <ListView
-        items={turns}
-        height={viewportHeight}
-        nav
-        cursorKey={selectedIndex}
-        onCursor={onCursor}
-        onSelect={onSelectIndex}
-        active
-        estimateHeight={2}
-        overflowIndicator
-        getKey={(turn) => `${turn.turnNumber}-${turn.messageIndex}`}
-        renderItem={(turn, _index, meta) => {
-          const isSelected = meta.isCursor;
+      {({ height }) => (
+        <ListView
+          items={turns}
+          height={Math.max(1, height)}
+          nav
+          cursorKey={selectedIndex}
+          onCursor={onCursor}
+          onSelect={onSelectIndex}
+          active
+          estimateHeight={2}
+          overflowIndicator
+          getKey={(turn) => `${turn.turnNumber}-${turn.messageIndex}`}
+          renderItem={(turn, _index, meta) => {
+            const isSelected = meta.isCursor;
 
-          return (
-            <Box
-              key={`${turn.turnNumber}-${turn.messageIndex}`}
-              flexDirection="column"
-              backgroundColor={isSelected ? "$selectionbg" : undefined}
-              paddingX={1}
-              marginBottom={1}
-              minWidth={0}
-            >
-              <Text color={isSelected ? "$selection" : "$fg"} bold={isSelected}>
-                {isSelected ? "›" : " "} Turn {turn.turnNumber}
-              </Text>
-              <Text color={isSelected ? "$selection" : "$muted"}>
-                {turn.preview}
-              </Text>
-            </Box>
-          );
-        }}
-      />
-    </Box>
+            return (
+              <Box
+                key={`${turn.turnNumber}-${turn.messageIndex}`}
+                flexDirection="column"
+                backgroundColor={isSelected ? "$selectionbg" : undefined}
+                paddingX={1}
+                marginBottom={1}
+                minWidth={0}
+              >
+                <Text color={isSelected ? "$selection" : "$fg"} bold={isSelected}>
+                  {isSelected ? "›" : " "} Turn {turn.turnNumber}
+                </Text>
+                <Text color={isSelected ? "$selection" : "$muted"}>
+                  {turn.preview}
+                </Text>
+              </Box>
+            );
+          }}
+        />
+      )}
+    </MeasuredBox>
   );
 };

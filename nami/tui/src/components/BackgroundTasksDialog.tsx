@@ -1,5 +1,12 @@
 import React, { type FC, useEffect, useMemo, useState } from "react";
-import { Box, ListView, ModalDialog, Text, useBoxRect, useInput } from "silvery";
+import {
+  Box,
+  ListView,
+  MeasuredBox,
+  ModalDialog,
+  Text,
+  useInput,
+} from "silvery";
 import type {
   UIBackgroundAgent,
   UIBackgroundCommand,
@@ -346,9 +353,6 @@ const TaskList: FC<TaskListProps> = ({
   onCursor,
   onSelectIndex,
 }) => {
-  const { height: rectHeight } = useBoxRect();
-  const viewportHeight = Math.max(1, rectHeight);
-
   if (items.length === 0) {
     return (
       <Box
@@ -365,7 +369,7 @@ const TaskList: FC<TaskListProps> = ({
   }
 
   return (
-    <Box
+    <MeasuredBox
       marginTop={1}
       flexDirection="column"
       flexGrow={1}
@@ -374,43 +378,45 @@ const TaskList: FC<TaskListProps> = ({
       minWidth={0}
       overflow="hidden"
     >
-      <ListView
-        items={items}
-        height={viewportHeight}
-        nav
-        cursorKey={selectedIndex}
-        onCursor={onCursor}
-        onSelect={onSelectIndex}
-        active
-        estimateHeight={3}
-        overflowIndicator
-        getKey={(item) => item.key}
-        renderItem={(item, _index, meta) => {
-          const isSelected = meta.isCursor;
-          return (
-            <Box
-              key={item.key}
-              flexDirection="column"
-              backgroundColor={isSelected ? "$selectionbg" : undefined}
-              paddingX={1}
-              marginBottom={1}
-              minWidth={0}
-            >
-              {item.section ? (
-                <Text color="$muted" bold>
-                  {item.section}
+      {({ height }) => (
+        <ListView
+          items={items}
+          height={Math.max(1, height)}
+          nav
+          cursorKey={selectedIndex}
+          onCursor={onCursor}
+          onSelect={onSelectIndex}
+          active
+          estimateHeight={3}
+          overflowIndicator
+          getKey={(item) => item.key}
+          renderItem={(item, _index, meta) => {
+            const isSelected = meta.isCursor;
+            return (
+              <Box
+                key={item.key}
+                flexDirection="column"
+                backgroundColor={isSelected ? "$selectionbg" : undefined}
+                paddingX={1}
+                marginBottom={1}
+                minWidth={0}
+              >
+                {item.section ? (
+                  <Text color="$muted" bold>
+                    {item.section}
+                  </Text>
+                ) : null}
+                <Text color={isSelected ? "$selection" : "$fg"} bold={isSelected}>
+                  {isSelected ? "›" : " "} <Text color={statusColor(item.status)}>{statusLabel(item.status)}</Text>{" "}
+                  {truncate(item.title, 84)}
                 </Text>
-              ) : null}
-              <Text color={isSelected ? "$selection" : "$fg"} bold={isSelected}>
-                {isSelected ? "›" : " "} <Text color={statusColor(item.status)}>{statusLabel(item.status)}</Text>{" "}
-                {truncate(item.title, 84)}
-              </Text>
-              <Text color={isSelected ? "$selection" : "$muted"}>{item.meta}</Text>
-            </Box>
-          );
-        }}
-      />
-    </Box>
+                <Text color={isSelected ? "$selection" : "$muted"}>{item.meta}</Text>
+              </Box>
+            );
+          }}
+        />
+      )}
+    </MeasuredBox>
   );
 };
 
