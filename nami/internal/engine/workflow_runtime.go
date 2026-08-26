@@ -307,24 +307,27 @@ func lookupWorkflowStatus(ctx context.Context, req toolpkg.WorkflowStatusRequest
 	if err != nil {
 		return toolpkg.WorkflowRunResult{}, err
 	}
-	if req.WaitMs <= 0 || run.done() {
+	if req.WaitMs <= 0 {
 		return run.snapshot(), nil
 	}
 
 	deadline := time.NewTimer(time.Duration(req.WaitMs) * time.Millisecond)
 	defer deadline.Stop()
 	for {
-		// Re-read the channel each pass: applyProgress swaps in a fresh one, so
-		// holding the old one would only ever observe a single transition.
+		// Take the wake channel BEFORE testing done. Each transition swaps in a
+		// fresh channel, so reading it after the test would hand back the next
+		// one and miss the transition that just happened — including the run's
+		// last, which would wait out the whole timeout on a finished run.
+		wake := run.waitChannel()
+		if run.done() {
+			return run.snapshot(), nil
+		}
 		select {
 		case <-ctx.Done():
 			return run.snapshot(), ctx.Err()
 		case <-deadline.C:
 			return run.snapshot(), nil
-		case <-run.waitChannel():
-			if run.done() {
-				return run.snapshot(), nil
-			}
+		case <-wake:
 		}
 	}
 }

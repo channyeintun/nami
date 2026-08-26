@@ -383,3 +383,57 @@ func TestWorkflowRunIDsAreUnique(t *testing.T) {
 	}
 	_ = fmt.Sprint(len(seen))
 }
+
+// A run that finishes while a status call is waiting must wake it, not leave it
+// sitting out the full timeout.
+func TestWorkflowStatusWaitWakesWhenTheRunFinishes(t *testing.T) {
+	description := "wait-wakes-on-finish-" + newWorkflowRunID()
+	release := make(chan struct{})
+	running := make(chan struct{})
+	runner := func(ctx context.Context, req toolpkg.AgentRunRequest) (toolpkg.AgentRunResult, error) {
+		close(running)
+		select {
+		case <-release:
+		case <-ctx.Done():
+			return toolpkg.AgentRunResult{}, ctx.Err()
+		}
+		return toolpkg.AgentRunResult{Status: "completed", Summary: "done"}, nil
+	}
+
+	done := make(chan toolpkg.WorkflowRunResult, 1)
+	go func() {
+		result, err := launchWorkflow(context.Background(), runner, nil, t.TempDir(), toolpkg.WorkflowLaunchRequest{
+			Spec: workflowpkg.Spec{Description: description, Nodes: []workflowpkg.NodeSpec{workflowNode("only")}},
+		})
+		if err == nil {
+			done <- result
+		}
+		close(done)
+	}()
+
+	<-running
+	run := findWorkflowRunByDescription(description)
+	if run == nil {
+		close(release)
+		t.Fatal("run was never registered")
+	}
+
+	// Let the run finish while the status call is parked on a long wait.
+	go func() {
+		time.Sleep(20 * time.Millisecond)
+		close(release)
+	}()
+
+	started := time.Now()
+	status, err := lookupWorkflowStatus(t.Context(), toolpkg.WorkflowStatusRequest{RunID: run.id, WaitMs: 10_000})
+	if err != nil {
+		t.Fatalf("lookupWorkflowStatus: %v", err)
+	}
+	if elapsed := time.Since(started); elapsed > 5*time.Second {
+		t.Fatalf("waited %v; the finish did not wake the status call", elapsed)
+	}
+	if status.Status != "completed" {
+		t.Fatalf("status = %q, want completed", status.Status)
+	}
+	<-done
+}

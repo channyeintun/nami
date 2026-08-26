@@ -220,3 +220,44 @@ func TestGoalAcknowledgementPromptStartsWorkImmediately(t *testing.T) {
 		}
 	}
 }
+
+// A user who pressed stop has overridden the goal. Blocking there would make
+// cancellation feel broken.
+func TestEvaluateSessionGoalDoesNotOverrideAUserCancel(t *testing.T) {
+	dir := t.TempDir()
+	store := goalStoreFor(dir)
+	if _, err := store.Set("keep going forever"); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+
+	for _, reason := range []string{"cancelled", "Canceled", " interrupted ", "aborted"} {
+		decision, err := evaluateSessionGoal(t.Context(), nil, store, nil, agent.StopRequest{StopReason: reason})
+		if err != nil {
+			t.Fatalf("evaluateSessionGoal(%q): %v", reason, err)
+		}
+		if decision.Continue {
+			t.Fatalf("stop reason %q was overridden by the goal", reason)
+		}
+		// The goal survives a cancel, so the next message resumes the loop.
+		if !store.Active() {
+			t.Fatalf("stop reason %q cleared the goal", reason)
+		}
+		state, _ := store.Snapshot()
+		if state.Iterations != 0 {
+			t.Fatalf("stop reason %q still ran an evaluation: %+v", reason, state)
+		}
+	}
+}
+
+func TestIsCancelledStopReason(t *testing.T) {
+	for _, reason := range []string{"cancelled", "canceled", "CANCEL", " aborted ", "interrupted"} {
+		if !isCancelledStopReason(reason) {
+			t.Fatalf("isCancelledStopReason(%q) = false", reason)
+		}
+	}
+	for _, reason := range []string{"", "end_turn", "stop", "max_tokens", "tool_use"} {
+		if isCancelledStopReason(reason) {
+			t.Fatalf("isCancelledStopReason(%q) = true", reason)
+		}
+	}
+}

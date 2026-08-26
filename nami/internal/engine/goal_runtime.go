@@ -68,6 +68,14 @@ func evaluateSessionGoal(
 		return agent.StopDecision{}, nil
 	}
 
+	// A user who pressed stop has overridden the goal. Blocking here would make
+	// cancellation feel broken, and the goal stays set so their next message
+	// resumes the loop. (The evaluator would also fail open on the cancelled
+	// context, but that is incidental — this is the intent.)
+	if isCancelledStopReason(stopReq.StopReason) {
+		return agent.StopDecision{}, nil
+	}
+
 	// Work done since the last block earns the loop a fresh budget. The cap is
 	// there to catch a loop that is spinning, not one that is merely long.
 	if assistantUsedTools(stopReq.Messages) {
@@ -131,6 +139,15 @@ func evaluateSessionGoal(
 		Reason:          verdict.Reason,
 		FollowUpMessage: goalBlockedFollowUp(state.Condition, verdict.Reason),
 	}, nil
+}
+
+func isCancelledStopReason(reason string) bool {
+	switch strings.ToLower(strings.TrimSpace(reason)) {
+	case "cancelled", "canceled", "cancel", "aborted", "interrupted":
+		return true
+	default:
+		return false
+	}
 }
 
 // assistantUsedTools reports whether the assistant did anything beyond talking
