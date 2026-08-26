@@ -128,14 +128,7 @@ var ErrNoRunner = errors.New("workflow: no node runner configured")
 // Leaving two cores free keeps the scheduler and the rest of the process
 // responsive while a run saturates the machine.
 func ConcurrencyLimit() int {
-	limit := runtime.NumCPU() - 2
-	if limit < 2 {
-		limit = 2
-	}
-	if limit > 16 {
-		limit = 16
-	}
-	return limit
+	return min(max(runtime.NumCPU()-2, 2), 16)
 }
 
 // Run executes the graph, starting each node the moment its dependencies finish
@@ -150,10 +143,7 @@ func (s ResolvedSpec) Run(ctx context.Context, opts Options) (Result, error) {
 		clock = time.Now
 	}
 
-	limit := min(s.MaxParallel, ConcurrencyLimit())
-	if limit < 1 {
-		limit = 1
-	}
+	limit := max(min(s.MaxParallel, ConcurrencyLimit()), 1)
 
 	run := &runState{
 		spec:    s,

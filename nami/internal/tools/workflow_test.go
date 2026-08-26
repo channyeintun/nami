@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"maps"
 	"strings"
 	"testing"
 
@@ -11,9 +12,7 @@ import (
 
 func workflowParams(nodes []any, extra map[string]any) map[string]any {
 	params := map[string]any{"description": "ship it", "nodes": nodes}
-	for key, value := range extra {
-		params[key] = value
-	}
+	maps.Copy(params, extra)
 	return params
 }
 

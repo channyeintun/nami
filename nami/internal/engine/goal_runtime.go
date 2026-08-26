@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -154,8 +155,7 @@ func isCancelledStopReason(reason string) bool {
 // in the tail of the transcript, which is the signal that the loop is still
 // moving rather than restating itself.
 func assistantUsedTools(messages []api.Message) bool {
-	for i := len(messages) - 1; i >= 0; i-- {
-		message := messages[i]
+	for _, message := range slices.Backward(messages) {
 		if message.Role == api.RoleUser {
 			// Reached the start of the current stretch of assistant work.
 			return false
