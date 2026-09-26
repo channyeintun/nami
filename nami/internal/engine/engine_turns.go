@@ -122,7 +122,7 @@ func (t *userTurnContext) prepareClient() (bool, error) {
 	if err != nil {
 		t.markTurnMetric("client_initialization_failed")
 		t.flushTurnMetrics("client_initialization_failed")
-		if emitErr := t.deps.bridge.EmitError(fmt.Sprintf("initialize model %q: %v", t.state.activeModelID, err), true); emitErr != nil {
+		if emitErr := t.abandonTurn(fmt.Sprintf("initialize model %q: %v", t.state.activeModelID, err)); emitErr != nil {
 			return false, emitErr
 		}
 		return false, nil
@@ -138,12 +138,20 @@ func (t *userTurnContext) prepareClient() (bool, error) {
 	if len(t.payload.Images) > 0 && !t.state.client.Capabilities().SupportsVision {
 		t.markTurnMetric("vision_unsupported")
 		t.flushTurnMetrics("vision_unsupported")
-		if err := t.deps.bridge.EmitError(fmt.Sprintf("model %q does not support image input", t.state.activeModelID), true); err != nil {
+		if err := t.abandonTurn(fmt.Sprintf("model %q does not support image input", t.state.activeModelID)); err != nil {
 			return false, err
 		}
 		return false, nil
 	}
 	return true, nil
+}
+
+// abandonTurn reports why a turn could not start. The TUI entered its working
+// state when it sent the input and leaves it only on turn_complete or an
+// unrecoverable error; a recoverable one would leave it spinning, with its
+// stop key reaching an engine that has no query to cancel.
+func (t *userTurnContext) abandonTurn(message string) error {
+	return t.deps.bridge.EmitError(message, false)
 }
 
 func (t *userTurnContext) appendUserMessage() error {

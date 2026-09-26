@@ -1,7 +1,9 @@
 package engine
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"io"
 	"iter"
 	"slices"
@@ -122,11 +124,31 @@ func (echoTool) Execute(context.Context, toolpkg.ToolInput) (toolpkg.ToolOutput,
 	return toolpkg.ToolOutput{Output: "echoed"}, nil
 }
 
+// lockedBuffer collects bridge output, which background goroutines may write.
+type lockedBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *lockedBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *lockedBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
 type turnHarness struct {
 	deps  engineLoopDeps
 	state *engineLoopState
 	// input feeds client messages to the router, as the TUI would.
 	input *io.PipeWriter
+	// output holds every event the engine sent the TUI.
+	output *lockedBuffer
 }
 
 func (h *turnHarness) send(t *testing.T, msgType ipc.ClientMessageType) {
@@ -134,6 +156,20 @@ func (h *turnHarness) send(t *testing.T, msgType ipc.ClientMessageType) {
 	if _, err := io.WriteString(h.input, `{"type":"`+string(msgType)+`"}`+"\n"); err != nil {
 		t.Errorf("send %s: %v", msgType, err)
 	}
+}
+
+// events decodes what the engine has sent the TUI so far.
+func (h *turnHarness) events(t *testing.T) []ipc.StreamEvent {
+	t.Helper()
+	var events []ipc.StreamEvent
+	for line := range strings.Lines(h.output.String()) {
+		var event ipc.StreamEvent
+		if err := json.Unmarshal([]byte(line), &event); err != nil {
+			t.Fatalf("decode event %q: %v", line, err)
+		}
+		events = append(events, event)
+	}
+	return events
 }
 
 // newTurnHarness wires a real engine turn to a scripted model, with every
@@ -148,7 +184,8 @@ func newTurnHarness(t *testing.T, client *scriptedClient, tools ...toolpkg.Tool)
 
 	inputReader, inputWriter := io.Pipe()
 	t.Cleanup(func() { _ = inputWriter.Close() })
-	bridge := ipc.NewBridge(inputReader, io.Discard)
+	output := &lockedBuffer{}
+	bridge := ipc.NewBridge(inputReader, output)
 	routerCtx, cancelRouter := context.WithCancel(context.Background())
 	t.Cleanup(cancelRouter)
 
@@ -183,7 +220,8 @@ func newTurnHarness(t *testing.T, client *scriptedClient, tools ...toolpkg.Tool)
 			timeline:       newConversationTimeline(),
 			titleGenerated: true,
 		},
-		input: inputWriter,
+		input:  inputWriter,
+		output: output,
 	}
 }
 
@@ -461,6 +499,72 @@ func TestAnswerUnfinishedToolCalls(t *testing.T) {
 				if message.ToolResult != nil && message.ToolResult.Output == unfinishedToolCallOutput && !message.ToolResult.IsError {
 					t.Fatal("an unfinished call's result is not marked as an error")
 				}
+			}
+		})
+	}
+}
+
+// turnEndedForTheUI reports whether events include what the TUI needs to
+// leave its working state: turn_complete or an unrecoverable error.
+func turnEndedForTheUI(t *testing.T, events []ipc.StreamEvent) bool {
+	t.Helper()
+	for _, event := range events {
+		switch event.Type {
+		case ipc.EventTurnComplete:
+			return true
+		case ipc.EventError:
+			var payload ipc.ErrorPayload
+			if err := json.Unmarshal(event.Payload, &payload); err != nil {
+				t.Fatalf("decode error payload: %v", err)
+			}
+			if !payload.Recoverable {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// A turn that could not start used to report a recoverable error, which left
+// the TUI spinning, with a stop key that reached no query to cancel.
+func TestATurnThatCannotStartStillEndsInTheUI(t *testing.T) {
+	tests := []struct {
+		name    string
+		setup   func(*turnHarness)
+		payload ipc.UserInputPayload
+	}{
+		{
+			name: "model cannot be initialized",
+			setup: func(h *turnHarness) {
+				// The harness's home holds no Copilot login, so no client can be built.
+				h.state.client = nil
+				h.state.activeModelID = "github-copilot/gpt-5"
+			},
+			payload: ipc.UserInputPayload{Text: "hello"},
+		},
+		{
+			name:  "model cannot read images",
+			setup: func(*turnHarness) {},
+			payload: ipc.UserInputPayload{
+				Text:   "what is in this picture?",
+				Images: []ipc.ImageInputPayload{{ID: 1, Data: "aGk=", MediaType: "image/png"}},
+			},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			client := &scriptedClient{caps: api.ModelCapabilities{SupportsToolUse: true}}
+			h := newTurnHarness(t, client, echoTool{})
+			tc.setup(h)
+
+			if err := handleUserInputMessage(t.Context(), tc.payload, h.deps, h.state); err != nil {
+				t.Fatalf("handleUserInputMessage: %v", err)
+			}
+			if !turnEndedForTheUI(t, h.events(t)) {
+				t.Fatalf("the turn never ended for the TUI; it received:\n%s", h.output.String())
+			}
+			if len(client.mainRequests()) != 0 {
+				t.Fatal("a turn that could not start still called the model")
 			}
 		})
 	}
