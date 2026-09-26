@@ -403,10 +403,11 @@ func runGitCommand(ctx context.Context, workingDir string, args ...string) (stri
 	cmd := exec.CommandContext(ctx, "git", commandArgs...)
 	cmd.Dir = workingDir
 
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
+	// log --stat over a long history can print gigabytes within the timeout.
+	stdout := &cappedBuffer{limit: maxForegroundOutputBytes}
+	stderr := &cappedBuffer{limit: maxForegroundOutputBytes}
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
 
 	err := cmd.Run()
 	output := strings.TrimSpace(joinOutputs(stdout.String(), stderr.String()))

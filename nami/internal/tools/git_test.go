@@ -114,22 +114,27 @@ func TestGitPathspecIsRelativeToTheWorkingDirectory(t *testing.T) {
 	}
 }
 
-func TestGitToolResolvesPathsFromASubdirectory(t *testing.T) {
+// commitTestFiles creates a repository in a new temporary directory holding
+// files, committed with message, and returns the repository root.
+func commitTestFiles(t *testing.T, message string, files map[string]string) string {
+	t.Helper()
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git is not installed")
 	}
 	root := t.TempDir()
-	subdir := filepath.Join(root, "pkg")
-	if err := os.MkdirAll(subdir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(subdir, "main.go"), []byte("package main\n"), 0o644); err != nil {
-		t.Fatal(err)
+	for name, content := range files {
+		path := filepath.Join(root, filepath.FromSlash(name))
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
 	}
 	for _, args := range [][]string{
 		{"init", "--quiet"},
 		{"add", "."},
-		{"-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "--quiet", "-m", "add main"},
+		{"-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "--quiet", "-m", message},
 	} {
 		cmd := exec.Command("git", args...)
 		cmd.Dir = root
@@ -137,6 +142,12 @@ func TestGitToolResolvesPathsFromASubdirectory(t *testing.T) {
 			t.Fatalf("git %v: %v\n%s", args, err, output)
 		}
 	}
+	return root
+}
+
+func TestGitToolResolvesPathsFromASubdirectory(t *testing.T) {
+	root := commitTestFiles(t, "add main", map[string]string{"pkg/main.go": "package main\n"})
+	subdir := filepath.Join(root, "pkg")
 
 	tool := NewGitTool()
 	logged, err := tool.Execute(t.Context(), ToolInput{Params: map[string]any{
@@ -150,6 +161,27 @@ func TestGitToolResolvesPathsFromASubdirectory(t *testing.T) {
 	}})
 	if err != nil || blamed.IsError || !strings.Contains(blamed.Output, "package main") {
 		t.Fatalf("blame from the subdirectory = %+v, %v; want the annotated file", blamed, err)
+	}
+}
+
+// git can print far more than any result can use: log --stat over a long
+// history, or a vendored dependency's diff. Buffering all of it within the
+// timeout could take gigabytes, so the output is capped like bash's.
+func TestGitToolCapsItsOutput(t *testing.T) {
+	large := strings.Repeat("a line of generated text\n", 200_000) // about 5MB
+	root := commitTestFiles(t, "add a large file", map[string]string{"large.txt": large})
+
+	output, err := NewGitTool().Execute(t.Context(), ToolInput{Params: map[string]any{
+		"operation": "show", "cwd": root,
+	}})
+	if err != nil {
+		t.Fatalf("show: %v", err)
+	}
+	if len(output.Output) > maxForegroundOutputBytes+1024 {
+		t.Fatalf("show returned %d bytes, want at most about %d", len(output.Output), maxForegroundOutputBytes)
+	}
+	if !strings.Contains(output.Output, "Output truncated") {
+		t.Fatalf("output does not say it was truncated; ends with %q", lastBytes(output.Output, 120))
 	}
 }
 
