@@ -448,7 +448,9 @@ const Input: FC<InputProps> = ({
             prompt.deleteWordBackward();
             return;
           default:
-            break;
+            // silvery reports an unbound Ctrl chord with its letter as text;
+            // Ctrl+L or Ctrl+R never means "type l" or "type r".
+            return;
         }
       }
       if (text) {
