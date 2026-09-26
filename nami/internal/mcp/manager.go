@@ -508,6 +508,7 @@ func connectSession(ctx context.Context, definition ServerDefinition) (Session, 
 	// functional through the deprecation window, and servers such as the
 	// filesystem server still scope their access by them.
 	if root := rootURI(definition.WorkingDir); root != "" {
+		//lint:ignore SA1019 kept on purpose until servers stop scoping by roots, as explained above.
 		client.AddRoots(&sdkmcp.Root{
 			Name: filepath.Base(definition.WorkingDir),
 			URI:  root,
