@@ -17,4 +17,4 @@ clean:
 	$(MAKE) -C tui clean
 
 build-tui-launcher:
-	$(MAKE) -C tui build-tui-launcher
+	$(MAKE) -C tui build-portable-launcher-bundle
