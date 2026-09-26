@@ -4,6 +4,9 @@ $Repo = "channyeintun/nami"
 $BinaryName = "nami"
 $EngineName = "nami-engine"
 $LauncherJsName = "$BinaryName.js"
+# Silvery, the TUI renderer, needs Node.js 24 or newer. Older releases cannot
+# even parse the launcher bundle, and nami.cmd skips them the same way.
+$MinNodeMajor = 24
 
 function Enable-Tls12OrHigher {
     try {
@@ -36,15 +39,36 @@ function Get-NodeDistArch {
     }
 }
 
+function Test-NodeSupported {
+    param([string]$NodePath)
+
+    try {
+        $version = (& $NodePath --version 2>$null | Out-String).Trim()
+    } catch {
+        return $false
+    }
+
+    if ($version -match '^v(\d+)\.') {
+        return [int]$Matches[1] -ge $MinNodeMajor
+    }
+    return $false
+}
+
 function Get-JavaScriptRuntimeFromPath {
     foreach ($runtime in @("node", "bun", "deno")) {
         $command = Get-Command $runtime -ErrorAction SilentlyContinue
-        if ($command) {
-            return @{
-                Name = $runtime
-                Source = "path"
-                CommandPath = $command.Source
-            }
+        if (-not $command) {
+            continue
+        }
+        if ($runtime -eq "node" -and -not (Test-NodeSupported -NodePath $command.Source)) {
+            Write-Host "Skipping node on PATH: nami needs Node.js $MinNodeMajor or newer."
+            continue
+        }
+
+        return @{
+            Name = $runtime
+            Source = "path"
+            CommandPath = $command.Source
         }
     }
 
@@ -55,6 +79,10 @@ function Get-PortableNodeRuntime {
     param([string]$PortableNodeExe)
 
     if (-not (Test-Path $PortableNodeExe)) {
+        return $null
+    }
+    if (-not (Test-NodeSupported -NodePath $PortableNodeExe)) {
+        Write-Host "The local Node.js runtime is older than $MinNodeMajor and will be replaced."
         return $null
     }
 
@@ -199,9 +227,12 @@ function Test-NamiInstall {
     param([string]$WrapperPath)
 
     Write-Host "Verifying launcher..."
-    & $WrapperPath --help *> $null
+    # Keep the launcher's stderr as text rather than a terminating error: it
+    # is what explains a failed check.
+    $ErrorActionPreference = "Continue"
+    $output = (& $WrapperPath --help 2>&1 | ForEach-Object { "$_" }) -join "`n"
     if ($LASTEXITCODE -ne 0) {
-        throw "Installed launcher did not pass --help verification"
+        throw "Installed launcher did not pass --help verification:`n$output"
     }
 }
 

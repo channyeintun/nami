@@ -117,11 +117,28 @@ function applyOptions(args) {
   }
 }
 
+// Silvery, the TUI renderer, needs Node.js 24 or newer; older releases fail
+// deep inside it with a SyntaxError. The release bundle cannot even be parsed
+// by them, so the bin/nami and nami.cmd wrappers check first; this covers
+// running bin/nami.js directly. Bun and Deno report their own Node
+// compatibility versions, so only real Node is checked.
+function exitIfNodeTooOld() {
+  const major = Number(process.versions.node.split(".")[0]);
+  if (process.versions.bun || process.versions.deno || major >= 24) {
+    return;
+  }
+  console.error(
+    `nami requires Node.js 24 or newer, but this is ${process.version}. Upgrade Node.js, or run nami with Bun or Deno.`,
+  );
+  process.exit(1);
+}
+
 const args = process.argv.slice(2);
 if (engineSubcommands.has(args[0])) {
   runEngine(args);
 } else {
   applyOptions(args);
+  exitIfNodeTooOld();
   // Launch the packed TUI entrypoint.
   await import("../dist/index.mjs");
 }

@@ -3,6 +3,9 @@ set -e
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 LAUNCHER_PATH="$SCRIPT_DIR/nami.js"
+# Silvery, the TUI renderer, needs Node.js 24 or newer. Older releases cannot
+# even parse the launcher bundle, so an older node must not win over bun or deno.
+NODE_VERSION_CHECK='process.exit(Number(process.versions.node.split(".")[0]) >= 24 ? 0 : 1)'
 
 if [ ! -f "$LAUNCHER_PATH" ]; then
 	echo "nami is partially installed: missing launcher bundle at $LAUNCHER_PATH" >&2
@@ -10,7 +13,7 @@ if [ ! -f "$LAUNCHER_PATH" ]; then
 	exit 1
 fi
 
-if command -v node >/dev/null 2>&1; then
+if command -v node >/dev/null 2>&1 && node -e "$NODE_VERSION_CHECK" >/dev/null 2>&1; then
 	exec node "$LAUNCHER_PATH" "$@"
 fi
 
@@ -22,5 +25,8 @@ if command -v deno >/dev/null 2>&1; then
 	exec deno run --allow-env --allow-read --allow-run "$LAUNCHER_PATH" "$@"
 fi
 
-echo "nami requires one of these runtimes on PATH: node, bun, deno." >&2
+echo "nami requires one of these runtimes on PATH: node 24 or newer, bun, deno." >&2
+if command -v node >/dev/null 2>&1; then
+	echo "The node on PATH is $(node --version 2>/dev/null), which is too old." >&2
+fi
 exit 1

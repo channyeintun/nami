@@ -14,6 +14,9 @@ DEFAULT_USER_DIR="${HOME}/.local/bin"
 INSTALL_DIR="${INSTALL_DIR:-}"
 USE_SUDO="false"
 JS_RUNTIME=""
+# Silvery, the TUI renderer, needs Node.js 24 or newer. Older releases cannot
+# even parse the launcher bundle; the installed wrapper skips them the same way.
+NODE_VERSION_CHECK='process.exit(Number(process.versions.node.split(".")[0]) >= 24 ? 0 : 1)'
 
 # Detect OS and architecture
 OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
@@ -66,7 +69,11 @@ requires_bun_runtime() {
 }
 
 detect_supported_runtime() {
-  for runtime in node bun deno; do
+  if command -v node >/dev/null 2>&1 && node -e "$NODE_VERSION_CHECK" >/dev/null 2>&1; then
+    echo "node"
+    return 0
+  fi
+  for runtime in bun deno; do
     if command -v "$runtime" >/dev/null 2>&1; then
       echo "$runtime"
       return 0
@@ -82,10 +89,13 @@ ensure_supported_runtime_available() {
   fi
 
   echo ""
-  echo "Install failed: Nami needs one of these runtimes on PATH: node, bun, or deno."
+  echo "Install failed: Nami needs one of these runtimes on PATH: Node.js 24 or newer, bun, or deno."
+  if command -v node >/dev/null 2>&1; then
+    echo "The node on PATH is $(node --version 2>/dev/null), which is too old."
+  fi
   echo ""
   echo "Install one of the supported runtimes, then rerun this installer:"
-  echo "  Node.js: https://nodejs.org"
+  echo "  Node.js: https://nodejs.org (24 or newer)"
   echo "  Bun:     https://bun.sh"
   echo "  Deno:    https://deno.com"
   echo ""

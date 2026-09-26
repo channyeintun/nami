@@ -38,7 +38,7 @@ release-local: clean build-portable-launcher-bundle
 		echo ""; \
 		echo "Built: $(BUILD_DIR)/$(BINARY_NAME) + $(BUILD_DIR)/$(LAUNCHER_JS_NAME) + $(BUILD_DIR)/$(ENGINE_NAME)"; \
 	fi
-	@echo "The launcher now requires one of these runtimes where it runs: node, bun, or deno."
+	@echo "The launcher requires one of these runtimes where it runs: Node.js 24 or newer, bun, or deno."
 	@echo "Copy the launcher shim, $(LAUNCHER_JS_NAME), and the engine binary to a directory in your PATH to install."
 
 build-portable-launcher-bundle:
