@@ -23,7 +23,7 @@ func (w *IPCWriter) Write(p []byte) (int, error) {
 		raw := string(p[:n])
 		// Try to extract the event type for easier grep.
 		eventType := extractIPCType(raw)
-		logRaw := Truncate(RedactSecrets(raw), 500)
+		logRaw := Redacted(raw, 500)
 		Log("ipc", "emit", map[string]any{
 			"type":  eventType,
 			"bytes": n,
@@ -48,7 +48,7 @@ func (r *IPCReader) Read(p []byte) (int, error) {
 	if n > 0 && IsEnabled() {
 		raw := string(p[:n])
 		msgType := extractIPCType(raw)
-		logRaw := Truncate(RedactSecrets(raw), 500)
+		logRaw := Redacted(raw, 500)
 		Log("ipc", "recv", map[string]any{
 			"type":  msgType,
 			"bytes": n,

@@ -21,7 +21,7 @@ func (r *SSEReaderProxy) Read(p []byte) (int, error) {
 	// and redaction unless the chunk will be logged.
 	if n > 0 && IsEnabled() {
 		raw := string(p[:n])
-		logRaw := Truncate(RedactSecrets(raw), 2048)
+		logRaw := Redacted(raw, 2048)
 		Log("sse", "read", map[string]any{
 			"provider": r.provider,
 			"bytes":    n,

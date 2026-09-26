@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 	"unicode/utf8"
 )
 
@@ -55,6 +56,63 @@ func TestRedactSecretsProducesValidUTF8(t *testing.T) {
 	got := RedactSecrets(input)
 	if !utf8.ValidString(got) {
 		t.Fatalf("redaction produced invalid UTF-8: %q", got)
+	}
+}
+
+// Raw IPC frames carry tool input and output, so secrets arrive in more
+// shapes than a top-level JSON field.
+func TestRedactSecretsCoversCommonShapes(t *testing.T) {
+	const key = "sk-proj-abcdefghijklmnopqrstuvwxyz0123"
+	cases := map[string]string{
+		"escaped JSON in a tool result": `{"type":"tool_result","payload":{"output":"{\"api_key\": \"` + key + `\"}"}}`,
+		"environment assignment":        `export OPENAI_API_KEY=` + key + ` && run`,
+		"flag assignment":               `tool --api-key=` + key,
+		"URL query":                     `https://example.com/cb?access_token=` + key + `&state=1`,
+		"Authorization header":          `curl -H "Authorization: Bearer ` + key + `" https://api.example.com`,
+		"bare bearer token":             `sent bearer ` + key + ` upstream`,
+		"known key format":              `the key is ` + key + ` for now`,
+		"GitHub token":                  `GH ghp_abcdefghijklmnopqrstuvwxyz0123456789 set`,
+		"password field":                `{"password":"correct horse battery staple"}`,
+		"value cut off by truncation":   `{"client_secret":"` + key,
+	}
+	for name, input := range cases {
+		t.Run(name, func(t *testing.T) {
+			got := RedactSecrets(input)
+			for _, secret := range []string{key, "ghp_abcdefghijklmnopqrstuvwxyz0123456789", "correct horse battery staple"} {
+				if strings.Contains(got, secret) {
+					t.Fatalf("secret survived redaction: %s", got)
+				}
+			}
+		})
+	}
+}
+
+func TestRedactSecretsLeavesUsageNumbersAndPlainWordsAlone(t *testing.T) {
+	for _, input := range []string{
+		`{"type":"usage","payload":{"input_tokens":1200,"output_tokens":45,"cache_read_tokens":800}}`,
+		`{"type":"token_delta","payload":{"text":"a basic configuration"}}`,
+		`{"author":"Jane Doe","title":"Bearer of news"}`,
+	} {
+		if got := RedactSecrets(input); got != input {
+			t.Errorf("RedactSecrets(%q) = %q, want it unchanged", input, got)
+		}
+	}
+}
+
+// Frames can be megabytes long; only a little more than the logged prefix
+// may be scanned.
+func TestRedactedScansOnlyAroundTheCut(t *testing.T) {
+	huge := `{"token":"abcdefghijklmnopqrstuvwxyz"}` + strings.Repeat("x", 8<<20)
+	start := time.Now()
+	got := Redacted(huge, 500)
+	if elapsed := time.Since(start); elapsed > 100*time.Millisecond {
+		t.Errorf("Redacted took %v on an 8 MB value", elapsed)
+	}
+	if strings.Contains(got, "abcdefghijklmnopqrstuvwxyz") {
+		t.Fatalf("secret survived redaction: %s", got[:80])
+	}
+	if len(got) > 500+len("...(truncated)") {
+		t.Errorf("Redacted returned %d bytes, want at most the limit plus the marker", len(got))
 	}
 }
 
