@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/channyeintun/nami/internal/api"
 	"github.com/channyeintun/nami/internal/compact"
 	"github.com/channyeintun/nami/internal/ipc"
 )
@@ -60,7 +61,7 @@ func runProactiveCompaction(
 	}
 
 	state.AutoCompactFailures = 0
-	state.Messages = compacted.Messages
+	state.Messages = withConversationTurn(compacted.Messages)
 
 	if err := yieldEvent(yield, ipc.EventCompactEnd, ipc.CompactEndPayload{
 		Strategy:                string(compacted.Strategy),
@@ -75,6 +76,19 @@ func runProactiveCompaction(
 	}
 
 	return nil
+}
+
+// withConversationTurn appends a continuation user turn when compaction kept
+// nothing but summaries, as it does mid-query when the transcript ended on an
+// assistant reply (a max_tokens stop). Providers fold summaries into the
+// system prompt, so the next request would otherwise have no turn at all.
+func withConversationTurn(messages []api.Message) []api.Message {
+	for _, message := range messages {
+		if message.Role != api.RoleSystem {
+			return messages
+		}
+	}
+	return append(messages, api.Message{Role: api.RoleUser, Content: compact.SummaryContinuationPrompt})
 }
 
 func normalizeStopReason(reason string) string {

@@ -49,14 +49,32 @@ func TestSplitMessagesForSummaryPreservesCurrentUserTurn(t *testing.T) {
 	}
 }
 
-func TestSplitMessagesForSummaryRetainsToolResultTurn(t *testing.T) {
+func TestSplitMessagesForSummaryKeepsTheLatestToolExchangeTogether(t *testing.T) {
+	// Compaction mid tool loop must keep the results the model is about to act
+	// on, and a result is only valid next to the call that produced it.
+	messages := []api.Message{
+		{Role: api.RoleUser, Content: "fix the build"},
+		{Role: api.RoleAssistant, ToolCalls: []api.ToolCall{{ID: "call_1", Name: "bash"}, {ID: "call_2", Name: "read_file"}}},
+		{Role: api.RoleTool, ToolResult: &api.ToolResult{ToolCallID: "call_1", Output: "build failed"}},
+		{Role: api.RoleUser, ToolResult: &api.ToolResult{ToolCallID: "call_2", Output: "package main"}},
+	}
+	prefix, retained := SplitMessagesForSummary(messages)
+	if len(prefix) != 1 || prefix[0].Content != "fix the build" {
+		t.Fatalf("prefix = %+v, want only the turns before the tool exchange", prefix)
+	}
+	if len(retained) != 3 || len(retained[0].ToolCalls) != 2 || retained[1].ToolResult == nil || retained[2].ToolResult == nil {
+		t.Fatalf("retained = %+v, want the call message with both of its results", retained)
+	}
+}
+
+func TestSplitMessagesForSummaryNeverKeepsAResultWithoutItsCall(t *testing.T) {
 	messages := []api.Message{
 		{Role: api.RoleAssistant, Content: "calling"},
 		{Role: api.RoleUser, ToolResult: &api.ToolResult{ToolCallID: "call_1", Output: "42"}},
 	}
-	_, retained := SplitMessagesForSummary(messages)
-	if len(retained) != 1 {
-		t.Fatalf("retained = %+v, want the tool result turn kept live", retained)
+	prefix, retained := SplitMessagesForSummary(messages)
+	if len(prefix) != 2 || retained != nil {
+		t.Fatalf("prefix = %+v retained = %+v, want everything summarized", prefix, retained)
 	}
 }
 
@@ -102,6 +120,29 @@ func TestBuildSummaryMessagesMarksTheSummaryTurn(t *testing.T) {
 	}
 	if messages[1].Content != "current" {
 		t.Fatalf("retained turn lost: %+v", messages[1])
+	}
+}
+
+func TestBuildSummaryMessagesOpensAKeptToolExchangeWithAUserTurn(t *testing.T) {
+	// Providers fold the summary into the system prompt; the kept assistant
+	// call would otherwise open the conversation, which Gemini rejects.
+	retained := []api.Message{
+		{Role: api.RoleAssistant, ToolCalls: []api.ToolCall{{ID: "call_1", Name: "bash"}}},
+		{Role: api.RoleTool, ToolResult: &api.ToolResult{ToolCallID: "call_1", Output: "ok"}},
+	}
+	messages := BuildSummaryMessages("the summary", retained)
+
+	if len(messages) != 4 {
+		t.Fatalf("messages = %+v, want summary, continuation, call and result", messages)
+	}
+	if !IsSummaryMessage(messages[0]) {
+		t.Fatalf("first message is not the summary: %+v", messages[0])
+	}
+	if messages[1].Role != api.RoleUser || messages[1].Content != SummaryContinuationPrompt {
+		t.Fatalf("expected a continuation user turn before the kept call, got %+v", messages[1])
+	}
+	if len(messages[2].ToolCalls) != 1 || messages[3].ToolResult == nil {
+		t.Fatalf("kept tool exchange lost: %+v", messages[2:])
 	}
 }
 

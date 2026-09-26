@@ -89,17 +89,51 @@ func NormalizeSummary(raw string) string {
 	return trimmed
 }
 
-// SplitMessagesForSummary preserves the current user turn while summarizing prior context.
+// SummaryContinuationPrompt opens the conversation after a summary when what
+// was kept does not start with a user turn. Providers fold the summary into
+// the system prompt and expect the turns after it to open with the user:
+// Gemini rejects a function call that does not follow a user turn, and a
+// request whose only message was the summary has no turn at all.
+const SummaryContinuationPrompt = "The earlier conversation was compacted into the summary above. Continue the current task from where it left off."
+
+// SplitMessagesForSummary splits the conversation into the part to summarize
+// and the live tail kept verbatim. The tail is the current user turn when the
+// conversation ends on one. When it ends in tool results, the tail is the
+// assistant message that made those calls together with all of its results:
+// the model has yet to act on them, and a provider rejects a tool result
+// whose call was summarized away just as it rejects a call left unanswered.
 func SplitMessagesForSummary(messages []api.Message) ([]api.Message, []api.Message) {
 	if len(messages) == 0 {
 		return nil, nil
 	}
-	last := messages[len(messages)-1]
-	if last.Role == api.RoleUser && (strings.TrimSpace(last.Content) != "" || last.ToolResult != nil) {
-		prefix := append([]api.Message(nil), messages[:len(messages)-1]...)
-		return prefix, []api.Message{last}
+	start := liveTailStart(messages)
+	if start == len(messages) {
+		return append([]api.Message(nil), messages...), nil
 	}
-	return append([]api.Message(nil), messages...), nil
+	return append([]api.Message(nil), messages[:start]...), append([]api.Message(nil), messages[start:]...)
+}
+
+// liveTailStart returns the index where the live tail begins, or len(messages)
+// when there is none.
+func liveTailStart(messages []api.Message) int {
+	last := messages[len(messages)-1]
+	if last.Role == api.RoleUser && last.ToolResult == nil && strings.TrimSpace(last.Content) != "" {
+		return len(messages) - 1
+	}
+	firstResult := len(messages)
+	for firstResult > 0 && messages[firstResult-1].ToolResult != nil {
+		firstResult--
+	}
+	if firstResult == len(messages) || firstResult == 0 {
+		return len(messages)
+	}
+	call := messages[firstResult-1]
+	if call.Role != api.RoleAssistant || len(call.ToolCalls) == 0 {
+		// Results without the call that produced them: keeping them alone
+		// would orphan them, so summarize everything instead.
+		return len(messages)
+	}
+	return firstResult - 1
 }
 
 // BuildSummaryMessages creates the compacted conversation state.
@@ -123,6 +157,9 @@ func BuildSummaryMessagesWithPrefix(prefix []api.Message, summary string, retain
 		Role:    api.RoleSystem,
 		Content: summaryMessagePrefix + "\n\n" + normalized,
 	})
+	if len(retained) > 0 && retained[0].Role != api.RoleUser {
+		messages = append(messages, api.Message{Role: api.RoleUser, Content: SummaryContinuationPrompt})
+	}
 	if len(retained) > 0 {
 		messages = append(messages, retained...)
 	}

@@ -78,7 +78,7 @@ func invokeModelWithRecovery(
 		if compactErr != nil {
 			return modelTurn{}, fmt.Errorf("compact prompt: %w", compactErr)
 		}
-		state.Messages = compacted.Messages
+		state.Messages = withConversationTurn(compacted.Messages)
 		state.AutoCompactFailures = 0
 
 		if err := yieldEvent(yield, ipc.EventCompactEnd, ipc.CompactEndPayload{
