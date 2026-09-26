@@ -51,6 +51,12 @@ function writeToNativeClipboard(text: string): void {
       return;
     }
 
+    // A missing binary is reported asynchronously as an 'error' event, which
+    // the surrounding try cannot catch. Left unhandled it becomes an uncaught
+    // exception, and silvery ends the app on those.
+    proc.on("error", () => {
+      // Native clipboard unavailable — the terminal may still honor OSC 52.
+    });
     proc.stdin.on("error", () => {
       // Ignore clipboard pipe shutdown races.
     });
