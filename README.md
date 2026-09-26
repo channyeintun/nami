@@ -34,7 +34,7 @@ Nami is built on three core pillars:
 ### Prerequisites
 
 - macOS, Linux, or Windows 11
-- One supported JavaScript runtime to run the `nami` launcher: Node.js, Bun, or Deno. The Windows installer can bootstrap a local Node.js runtime automatically if none is already available.
+- One supported JavaScript runtime to run the `nami` launcher: Node.js 24 or newer, Bun, or Deno. The Windows installer can bootstrap a local Node.js runtime automatically if none is already available.
 - One configured model provider: Anthropic, OpenAI, Google, DeepSeek, Groq, Mistral, Ollama, or GitHub Copilot
 - Go 1.27.0 only if building from source or rebuilding `nami-engine`
 
@@ -52,7 +52,7 @@ Current releases install a launcher shim, a portable `nami.js` bundle, and the G
 
 You need one of these runtimes on your `PATH` to run the installed launcher:
 
-- `node`
+- `node` 24 or newer (older releases cannot run the TUI's renderer)
 - `bun`
 - `deno`
 
@@ -81,7 +81,7 @@ Set-ExecutionPolicy -Scope Process Bypass -Force; irm https://raw.githubusercont
 
 This runs in your current PowerShell session, downloads the Windows release archive, installs `nami.cmd`, `nami.js`, and `nami-engine.exe`, and adds the install directory to your user `PATH`.
 
-If `node`, `bun`, or `deno` is already on your `PATH`, the installer reuses it. If not, it downloads a local Node.js runtime automatically and wires `nami` to use it.
+If `node` 24 or newer, `bun`, or `deno` is already on your `PATH`, the installer reuses it. If not, it downloads a local Node.js runtime (the current LTS) automatically and wires `nami` to use it.
 
 Current Windows releases install into:
 
@@ -105,7 +105,7 @@ On Windows, download `nami-windows-amd64.zip` or `nami-windows-arm64.zip` from G
 - `nami.js`
 - `nami-engine.exe`
 
-You also need one supported runtime on your `PATH`: `node`, `bun`, or `deno`.
+You also need one supported runtime on your `PATH`: `node` 24 or newer, `bun`, or `deno`.
 
 If you already have local Unix launcher assets and engine binaries:
 
@@ -591,7 +591,7 @@ The launcher shim, `nami.js`, and `nami-engine` should live in the same director
 
 ## Building from Source
 
-Requires: Go 1.27.0 and Vite+ `vp` for local builds
+Requires: Go 1.27.0, Node.js 24 or newer, and Vite+ `vp` for local builds
 
 ```bash
 cd nami/tui
