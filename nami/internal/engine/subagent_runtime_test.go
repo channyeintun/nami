@@ -269,3 +269,17 @@ func TestWithRolePromptSectionsWithoutSwarmSpec(t *testing.T) {
 		}
 	}
 }
+
+// The subagent runner reads the session's working directory from goroutines
+// the main loop does not wait for: a workflow node, or an agent_team launch
+// the tool executor abandoned when its turn was cancelled. The main loop moves
+// the directory on /resume, so the two must not race. Run with -race.
+func TestSubagentWorkingDirectoryIsReadSafelyWhileTheSessionMoves(t *testing.T) {
+	state := &engineLoopState{cwd: "/before"}
+	read := make(chan string, 1)
+	go func() { read <- currentSubagentCWD(state, "/fallback") }()
+	state.setCWD("/after")
+	if got := <-read; got != "/before" && got != "/after" {
+		t.Fatalf("currentSubagentCWD = %q, want one of the session's directories", got)
+	}
+}

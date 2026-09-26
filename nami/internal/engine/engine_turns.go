@@ -8,6 +8,7 @@ import (
 	"iter"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/channyeintun/nami/internal/agent"
@@ -51,12 +52,31 @@ type engineLoopState struct {
 	mode            agent.ExecutionMode
 	activeModelID   string
 	subagentModelID string
+	// cwdMu guards cwd, which the subagent runner reads from tool and
+	// workflow goroutines. Those can outlive their turn: the tool executor
+	// does not wait for a cancelled turn's tools, so an agent_team launch or
+	// a workflow node can read cwd while the main loop moves it for /resume.
+	// Read and write it through currentCWD and setCWD.
+	cwdMu           sync.RWMutex
 	cwd             string
 	messages        []api.Message
 	timeline        *conversationTimeline
 	titleGenerated  bool
 	queryIndex      int
 	toolUseNoticeID string
+}
+
+// currentCWD is the session's working directory.
+func (s *engineLoopState) currentCWD() string {
+	s.cwdMu.RLock()
+	defer s.cwdMu.RUnlock()
+	return s.cwd
+}
+
+func (s *engineLoopState) setCWD(cwd string) {
+	s.cwdMu.Lock()
+	defer s.cwdMu.Unlock()
+	s.cwd = cwd
 }
 
 type userTurnContext struct {
@@ -186,7 +206,7 @@ func (t *userTurnContext) appendUserMessage() error {
 }
 
 func (t *userTurnContext) run(ctx context.Context) error {
-	availableSkills, err := loadAvailableSkills(t.deps.bridge, t.state.cwd)
+	availableSkills, err := loadAvailableSkills(t.deps.bridge, t.state.currentCWD())
 	if err != nil {
 		return err
 	}
@@ -597,7 +617,7 @@ func (t *userTurnContext) persistCurrentMessages() {
 		Mode:          t.state.mode,
 		Model:         t.state.activeModelID,
 		SubagentModel: t.deps.subagentModelState.Get(),
-		CWD:           t.state.cwd,
+		CWD:           t.state.currentCWD(),
 		Branch:        currentGitBranch(),
 		Tracker:       t.deps.tracker,
 		Messages:      t.state.messages,

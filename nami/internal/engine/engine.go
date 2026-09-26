@@ -322,7 +322,7 @@ func RunStdioEngine(ctx context.Context, cfg config.Config) error {
 				loopState.mode,
 				loopState.activeModelID,
 				loopState.subagentModelID,
-				loopState.cwd,
+				loopState.currentCWD(),
 				loopState.messages,
 				loopState.timeline,
 				registry.Definitions(),
@@ -338,14 +338,14 @@ func RunStdioEngine(ctx context.Context, cfg config.Config) error {
 				loopState.mode = slashState.Mode
 				loopState.activeModelID = slashState.ActiveModelID
 				loopState.subagentModelID = slashState.SubagentModelID
-				loopState.cwd = slashState.CWD
+				loopState.setCWD(slashState.CWD)
 				loopState.messages = slashState.Messages
 				loopState.timeline = slashState.Timeline
 				modelState.Set(loopState.client, loopState.activeModelID)
 				subagentModelState.Set(loopState.subagentModelID)
 				sessionRuntime.SessionArtifacts.SessionID = loopState.sessionID
 				sessionRuntime.Swarm.SessionID = loopState.sessionID
-				sessionRuntime.Swarm.CWD = loopState.cwd
+				sessionRuntime.Swarm.CWD = loopState.currentCWD()
 				toolpkg.InstallSessionRuntime(sessionRuntime)
 				// A command that switched sessions brings that session's own
 				// goal with it, so re-announce it rather than leaving the UI
@@ -359,7 +359,7 @@ func RunStdioEngine(ctx context.Context, cfg config.Config) error {
 				continue
 			}
 
-			skill, ok, skillErr := lookupSlashSkill(loopState.cwd, payload.Command)
+			skill, ok, skillErr := lookupSlashSkill(loopState.currentCWD(), payload.Command)
 			if skillErr != nil {
 				if err := bridge.EmitNotice(fmt.Sprintf("load skills: %v", skillErr)); err != nil {
 					return err
@@ -436,7 +436,7 @@ func RunStdioEngine(ctx context.Context, cfg config.Config) error {
 				Mode:          loopState.mode,
 				Model:         loopState.activeModelID,
 				SubagentModel: loopState.subagentModelID,
-				CWD:           loopState.cwd,
+				CWD:           loopState.currentCWD(),
 				Branch:        currentGitBranch(),
 				Tracker:       tracker,
 				Messages:      loopState.messages,

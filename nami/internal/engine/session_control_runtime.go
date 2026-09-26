@@ -60,11 +60,11 @@ func (r *sessionControlRuntime) EnterWorktree(ctx context.Context, req toolpkg.W
 	if err != nil {
 		return toolpkg.WorktreeControlResult{}, err
 	}
-	previous := r.state.cwd
+	previous := r.state.currentCWD()
 	if err := os.Chdir(targetPath); err != nil {
 		return toolpkg.WorktreeControlResult{}, fmt.Errorf("switch to worktree %q: %w", targetPath, err)
 	}
-	r.state.cwd = targetPath
+	r.state.setCWD(targetPath)
 	if err := r.persist(); err != nil {
 		return toolpkg.WorktreeControlResult{}, err
 	}
@@ -87,14 +87,14 @@ func (r *sessionControlRuntime) ExitWorktree(ctx context.Context) (toolpkg.Workt
 		return toolpkg.WorktreeControlResult{}, fmt.Errorf("no git worktrees found")
 	}
 	targetPath := paths[0]
-	previous := r.state.cwd
+	previous := r.state.currentCWD()
 	if filepath.Clean(previous) == filepath.Clean(targetPath) {
 		return toolpkg.WorktreeControlResult{Path: targetPath, Previous: previous, Repository: repoRoot}, nil
 	}
 	if err := os.Chdir(targetPath); err != nil {
 		return toolpkg.WorktreeControlResult{}, fmt.Errorf("switch to primary worktree %q: %w", targetPath, err)
 	}
-	r.state.cwd = targetPath
+	r.state.setCWD(targetPath)
 	if err := r.persist(); err != nil {
 		return toolpkg.WorktreeControlResult{}, err
 	}
@@ -142,7 +142,7 @@ func (r *sessionControlRuntime) prepareWorktree(ctx context.Context, repoRoot st
 }
 
 func (r *sessionControlRuntime) repoRoot(ctx context.Context) (string, error) {
-	output, err := runGitWorktreeCommand(ctx, r.state.cwd, "rev-parse", "--show-toplevel")
+	output, err := runGitWorktreeCommand(ctx, r.state.currentCWD(), "rev-parse", "--show-toplevel")
 	if err != nil {
 		return "", fmt.Errorf("resolve git repository root: %w", err)
 	}
@@ -175,7 +175,7 @@ func (r *sessionControlRuntime) persist() error {
 		Mode:          r.state.mode,
 		Model:         r.state.activeModelID,
 		SubagentModel: r.state.subagentModelID,
-		CWD:           r.state.cwd,
+		CWD:           r.state.currentCWD(),
 		Branch:        currentGitBranch(),
 		Tracker:       r.tracker,
 		Messages:      r.state.messages,

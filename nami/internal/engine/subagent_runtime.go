@@ -189,7 +189,7 @@ func makeSubagentRunner(
 
 func currentSubagentCWD(state *engineLoopState, fallback string) string {
 	if state != nil {
-		if cwd := strings.TrimSpace(state.cwd); cwd != "" {
+		if cwd := strings.TrimSpace(state.currentCWD()); cwd != "" {
 			return cwd
 		}
 	}
