@@ -141,6 +141,10 @@ export function useEngine(enginePath: string, options: EngineOptions = {}) {
       stopping = true;
       rl.close();
       stderrRl.close();
+      // Closing the readers pauses the pipes. Keep draining them so an engine
+      // that is still writing while it shuts down cannot block on a full pipe.
+      proc.stdout?.resume();
+      proc.stderr?.resume();
 
       if (proc.stdin?.writable) {
         proc.stdin.write(serializeMessage(createMessage("shutdown")));
