@@ -26,15 +26,15 @@ func TestBashTimeoutKillsTheWholeProcessTree(t *testing.T) {
 	dir := t.TempDir()
 
 	start := time.Now()
-	_, err := NewBashTool().Execute(t.Context(), ToolInput{Params: map[string]any{
+	out, err := NewBashTool().Execute(t.Context(), ToolInput{Params: map[string]any{
 		"command":    "(sleep 1; echo alive > survived) & sleep 10",
 		"cwd":        dir,
 		"timeout_ms": 200,
 	}})
 	elapsed := time.Since(start)
 
-	if !errors.Is(err, context.DeadlineExceeded) {
-		t.Fatalf("Execute error = %v, want a deadline error", err)
+	if err != nil || !out.IsError || !strings.Contains(out.Output, "timed out after 200ms") {
+		t.Fatalf("Execute = %+v, %v; want a failed call that says it timed out", out, err)
 	}
 	if elapsed > 5*time.Second {
 		t.Fatalf("Execute returned after %v; the 200ms timeout did not stop the command", elapsed)
@@ -42,6 +42,23 @@ func TestBashTimeoutKillsTheWholeProcessTree(t *testing.T) {
 	time.Sleep(1500 * time.Millisecond)
 	if _, err := os.Stat(filepath.Join(dir, "survived")); err == nil {
 		t.Fatal("a process started by the timed-out command kept running")
+	}
+}
+
+// The output a command printed before it timed out is often what shows why it
+// hung, so it is returned with the failure rather than dropped.
+func TestBashTimeoutKeepsTheOutputSoFar(t *testing.T) {
+	skipWithoutPOSIXShell(t)
+	out, err := NewBashTool().Execute(t.Context(), ToolInput{Params: map[string]any{
+		"command":    "echo 'waiting for the lock'; sleep 10",
+		"cwd":        t.TempDir(),
+		"timeout_ms": 300,
+	}})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if !out.IsError || !strings.Contains(out.Output, "waiting for the lock") {
+		t.Fatalf("Execute = %+v, want the output so far in a failed result", out)
 	}
 }
 

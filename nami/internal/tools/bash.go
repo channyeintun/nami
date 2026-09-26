@@ -161,7 +161,8 @@ func (t *BashTool) Execute(ctx context.Context, input ToolInput) (ToolOutput, er
 		return ToolOutput{Output: result}, nil
 	}
 
-	commandCtx, cancel := context.WithTimeout(ctx, timeoutFromParams(input.Params, defaultBashTimeout))
+	timeout := timeoutFromParams(input.Params, defaultBashTimeout)
+	commandCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	cmd, err := shellCommandContext(commandCtx, command)
@@ -183,8 +184,15 @@ func (t *BashTool) Execute(ctx context.Context, input ToolInput) (ToolOutput, er
 	}
 
 	if err != nil {
+		if ctx.Err() != nil {
+			// The turn was stopped, not just this command.
+			return ToolOutput{}, ctx.Err()
+		}
 		if commandCtx.Err() != nil {
-			return ToolOutput{}, commandCtx.Err()
+			// What the command printed before it ran out of time is often
+			// what shows why: the test that hung, the prompt it waited at.
+			note := fmt.Sprintf("[The command timed out after %s and was stopped. Pass a larger timeout_ms, or use background: true for long-running processes.]", timeout)
+			return ToolOutput{Output: strings.TrimSpace(combined + "\n" + note), IsError: true}, nil
 		}
 		if _, ok := errors.AsType[*exec.ExitError](err); ok {
 			return ToolOutput{Output: combined, IsError: true}, nil
