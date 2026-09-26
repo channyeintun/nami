@@ -1,11 +1,66 @@
 package tools
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
+	"io"
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
+
+func TestReadLineBoundedKeepsAtMostLimitBytes(t *testing.T) {
+	long := strings.Repeat("a", 10_000)
+	reader := bufio.NewReaderSize(strings.NewReader("short\n"+long+"\r\nnext\r\nlast"), 16)
+
+	cases := []struct {
+		want    string
+		wantEOF bool
+	}{
+		{"short\n", false},
+		{long[:32], false}, // the rest of the long line and its newline are skipped
+		{"next\r\n", false},
+		{"last", true},
+		{"", true},
+	}
+	for index, tc := range cases {
+		line, err := readLineBounded(reader, 32)
+		if line != tc.want {
+			t.Fatalf("line %d = %q, want %q", index, line, tc.want)
+		}
+		if gotEOF := errors.Is(err, io.EOF); gotEOF != tc.wantEOF || (err != nil && !gotEOF) {
+			t.Fatalf("line %d err = %v, want EOF %v", index, err, tc.wantEOF)
+		}
+	}
+}
+
+// One huge line must not be loaded whole just to show its first characters,
+// and the lines after it must stay readable.
+func TestFileReadClipsHugeLinesWithoutLoadingThem(t *testing.T) {
+	workspace := inWorkspace(t)
+	huge := "{\"data\": \"" + strings.Repeat("é", 1_000_000) + "\"}"
+	path := writeWorkspaceFile(t, workspace, "dump.json", huge+"\nsecond line\n")
+
+	output, err := NewFileReadTool().Execute(context.Background(), ToolInput{Params: map[string]any{"filePath": path}})
+	if err != nil {
+		t.Fatalf("read_file: %v", err)
+	}
+	lines := strings.Split(output.Output, "\n")
+	if len(lines) != 2 || lines[1] != "2\tsecond line" {
+		t.Fatalf("output lines = %q, want the clipped first line and the second line", lines)
+	}
+	if want := "1\t" + huge[:len("{\"data\": \"")]; !strings.HasPrefix(lines[0], want) || !strings.HasSuffix(lines[0], "...") {
+		t.Fatalf("first line = %.80q..., want it clipped with an ellipsis", lines[0])
+	}
+	if got := utf8.RuneCountInString(strings.TrimPrefix(lines[0], "1\t")); got != fileReadMaxRenderedLineChars {
+		t.Fatalf("first line has %d characters, want %d", got, fileReadMaxRenderedLineChars)
+	}
+	if !output.Truncated {
+		t.Fatal("Truncated = false for a clipped line")
+	}
+}
 
 // writeNotebook writes a notebook whose code cells have the given sources.
 func writeNotebook(t *testing.T, workspace, name string, sources ...[]string) string {

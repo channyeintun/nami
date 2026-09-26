@@ -22,6 +22,12 @@ const fileReadDefaultLimitLines = 2000
 const fileReadMaxLimitLines = 2000
 const fileReadMaxOutputBytes = 50 * 1024
 const fileReadMaxRenderedLineChars = 2000
+
+// fileReadMaxLineBytes is how much of one line read_file keeps: enough for
+// fileReadMaxRenderedLineChars characters of any width plus a CRLF, so lines
+// are clipped exactly as before while the rest of a huge line (minified code,
+// a JSON dump) is skipped instead of loaded into memory.
+const fileReadMaxLineBytes = fileReadMaxRenderedLineChars*utf8.UTFMax + 2
 const fileReadNotebookPreviewLines = 80
 
 // notebookReadReserveBytes is kept free of cell content in a notebook read for
@@ -191,7 +197,7 @@ func (t *FileReadTool) Execute(ctx context.Context, input ToolInput) (ToolOutput
 		default:
 		}
 
-		rawLine, readErr := reader.ReadString('\n')
+		rawLine, readErr := readLineBounded(reader, fileReadMaxLineBytes)
 		if readErr != nil && !errors.Is(readErr, io.EOF) {
 			return ToolOutput{}, fmt.Errorf("read file %q: %w", filePath, readErr)
 		}
@@ -498,6 +504,22 @@ func fileReadRange(params map[string]any) (int, int, error) {
 		limit = min(value, fileReadMaxLimitLines)
 	}
 	return offset, limit, nil
+}
+
+// readLineBounded reads the next line including its newline, keeping at most
+// limit bytes of it and discarding the rest. Like ReadString, it returns the
+// final line with io.EOF when the file does not end in a newline.
+func readLineBounded(reader *bufio.Reader, limit int) (string, error) {
+	var line []byte
+	for {
+		chunk, err := reader.ReadSlice('\n')
+		if room := limit - len(line); room > 0 {
+			line = append(line, chunk[:min(len(chunk), room)]...)
+		}
+		if !errors.Is(err, bufio.ErrBufferFull) {
+			return string(line), err
+		}
+	}
 }
 
 func clipRenderedLine(line string) (string, bool) {
