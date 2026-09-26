@@ -346,6 +346,12 @@ func (g *RetrievalGraph) expandHop(keys []string, scores map[string]int, reasons
 	var newKeys []string
 	for _, key := range keys {
 		for _, edge := range g.Adj[key] {
+			// A file's own symbols say nothing new about the file. Crediting
+			// the file once per symbol it contains would rank candidates by
+			// symbol count instead of by the signals that seeded them.
+			if edge.Kind == EdgeContains {
+				continue
+			}
 			target := edge.Target
 			weight := edge.Weight * weightPercent / 100
 			if weight <= 0 {
@@ -357,12 +363,6 @@ func (g *RetrievalGraph) expandHop(keys []string, scores map[string]int, reasons
 
 			// For symbol/test nodes, also score their containing file.
 			if n, ok := g.Nodes[target]; ok && (n.Kind == NodeSymbol || n.Kind == NodeTest) {
-				for _, e2 := range g.Adj[target] {
-					if e2.Kind == EdgeContains {
-						continue
-					}
-				}
-				// Walk edges from symbol to find its file.
 				g.scoreSymbolFile(target, scores, reasons, weight, reason)
 			}
 
