@@ -153,7 +153,12 @@ func (t *FileReadTool) Execute(ctx context.Context, input ToolInput) (ToolOutput
 	}
 
 	if isNotebookFile(filePath) {
-		return executeNotebookRead(ctx, filePath, offset, limit)
+		output, err := executeNotebookRead(ctx, filePath, offset, limit)
+		if err != nil {
+			return ToolOutput{}, err
+		}
+		output.ReadInfo = info
+		return output, nil
 	}
 
 	file, err := os.Open(filePath)
@@ -241,7 +246,7 @@ func (t *FileReadTool) Execute(ctx context.Context, input ToolInput) (ToolOutput
 	if len(lines) == 0 {
 		message := fmt.Sprintf("%s: no content in requested range", filePath)
 		recordFileReadMetric(FileReadMetric{RequestedOffset: offset, RequestedLimit: limit, BytesReturned: len(message)})
-		return ToolOutput{Output: message, FilePath: filePath, ReadOffset: offset, ReadLimit: limit}, nil
+		return ToolOutput{Output: message, FilePath: filePath, ReadOffset: offset, ReadLimit: limit, ReadInfo: info}, nil
 	}
 
 	output := renderReadOutput(lines, partial, nextOffset, limit)
@@ -250,6 +255,7 @@ func (t *FileReadTool) Execute(ctx context.Context, input ToolInput) (ToolOutput
 	return ToolOutput{
 		Output:     output,
 		Truncated:  partial || lineClipped,
+		ReadInfo:   info,
 		FilePath:   filePath,
 		ReadOffset: offset,
 		ReadLimit:  limit,

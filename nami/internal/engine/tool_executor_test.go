@@ -4,9 +4,12 @@ import (
 	"context"
 	"errors"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/channyeintun/nami/internal/agent"
 	"github.com/channyeintun/nami/internal/api"
@@ -113,5 +116,42 @@ func TestExecuteToolCallsAnswersEveryCallWhenPausingForPlanReview(t *testing.T) 
 		if !skipped.IsError || skipped.Output != planReviewSkippedMessage {
 			t.Fatalf("skipped result = %+v, want the plan review skip error", skipped)
 		}
+	}
+}
+
+// The read state has to remember a file as read_file saw it. Stat'ing it again
+// after the result was sent recorded a change made in between as already seen,
+// and the next read got the "unchanged" stub for content the model never saw.
+func TestReadStateRemembersTheFileAsItWasRead(t *testing.T) {
+	previous := toolpkg.GetGlobalFileReadState()
+	t.Cleanup(func() { toolpkg.SetGlobalFileReadState(previous) })
+	state := toolpkg.NewFileReadState()
+	toolpkg.SetGlobalFileReadState(state)
+
+	path := filepath.Join(t.TempDir(), "notes.txt")
+	if err := os.WriteFile(path, []byte("first version\n"), 0o600); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+	output, err := toolpkg.NewFileReadTool().Execute(t.Context(), toolpkg.ToolInput{Params: map[string]any{"filePath": path}})
+	if err != nil {
+		t.Fatalf("read_file: %v", err)
+	}
+
+	// Something else rewrites the file before the engine records the read.
+	if err := os.WriteFile(path, []byte("second, longer version\n"), 0o600); err != nil {
+		t.Fatalf("rewrite file: %v", err)
+	}
+	later := time.Now().Add(time.Minute)
+	if err := os.Chtimes(path, later, later); err != nil {
+		t.Fatalf("chtimes: %v", err)
+	}
+	rememberInlineReadResult(output, false)
+
+	current, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat file: %v", err)
+	}
+	if state.SeenUnchanged(path, max(1, output.ReadOffset), output.ReadLimit, current) {
+		t.Fatal("the read state records the rewritten file as already read")
 	}
 }

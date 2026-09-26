@@ -3,7 +3,6 @@ package engine
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
@@ -160,18 +159,17 @@ func forgetFileReads() {
 }
 
 func rememberInlineReadResult(output toolpkg.ToolOutput, spilled bool) {
-	if spilled || strings.TrimSpace(output.FilePath) == "" || output.ReadLimit <= 0 {
+	if spilled || strings.TrimSpace(output.FilePath) == "" || output.ReadLimit <= 0 || output.ReadInfo == nil {
 		return
 	}
 	readState := toolpkg.GetGlobalFileReadState()
 	if readState == nil {
 		return
 	}
-	info, err := os.Stat(output.FilePath)
-	if err != nil || info.IsDir() {
-		return
-	}
-	readState.Remember(output.FilePath, max(1, output.ReadOffset), output.ReadLimit, info)
+	// The file as read_file saw it. A stat taken now would record a change
+	// made since the read as already seen, and the next read of the file
+	// would get the "unchanged" stub for content the model never saw.
+	readState.Remember(output.FilePath, max(1, output.ReadOffset), output.ReadLimit, output.ReadInfo)
 }
 
 func updateTurnToolStats(turnStats *turnExecutionStats, budgetInfo toolBudgetInfo) {

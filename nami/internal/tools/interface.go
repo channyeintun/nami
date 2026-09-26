@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"os"
 
 	artifactspkg "github.com/channyeintun/nami/internal/artifacts"
 )
@@ -39,6 +40,7 @@ type ToolOutput struct {
 	FilePath    string
 	ReadOffset  int
 	ReadLimit   int
+	ReadInfo    os.FileInfo // the file's stat when read_file read it
 	Preview     string
 	Insertions  int
 	Deletions   int
