@@ -261,6 +261,7 @@ func (t *userTurnContext) executeQuery(ctx context.Context, planner *agent.Plann
 			return queryRunResult{}, err
 		}
 	}
+	t.closeUnfinishedToolCalls()
 
 	if queryCancelled || t.turnStopReason == "cancelled" {
 		if err := t.finishCancelledTurn(); err != nil {
@@ -313,6 +314,70 @@ func (t *userTurnContext) handleQueryEvent(event ipc.StreamEvent) error {
 		}
 	}
 	return t.deps.bridge.EmitEvent(event)
+}
+
+// closeUnfinishedToolCalls answers the tool calls a stopped query left
+// without results and saves the conversation, so the next request the
+// session sends is one providers accept.
+func (t *userTurnContext) closeUnfinishedToolCalls() {
+	messages, changed := answerUnfinishedToolCalls(t.state.messages)
+	if !changed {
+		return
+	}
+	t.state.messages = messages
+	if t.state.timeline != nil {
+		t.state.timeline.SyncMessages(messages)
+	}
+	t.persistCurrentMessages()
+}
+
+// unfinishedToolCallOutput is the result recorded for a tool call that never
+// produced one.
+const unfinishedToolCallOutput = "Tool call did not run to completion: the turn stopped before it returned a result."
+
+// answerUnfinishedToolCalls gives every tool call in the last assistant
+// message a result. A query that stops mid-batch — cancelled, failed, or
+// paused for plan review — leaves the calls it never finished unanswered, and
+// providers reject every later request that carries a tool call without its
+// result. The added results go straight after the existing ones, because a
+// call's results must come before anything else that follows it.
+func answerUnfinishedToolCalls(messages []api.Message) ([]api.Message, bool) {
+	callIndex := -1
+	for index, message := range slices.Backward(messages) {
+		if message.Role == api.RoleAssistant {
+			callIndex = index
+			break
+		}
+	}
+	if callIndex < 0 {
+		return messages, false
+	}
+
+	insertAt := callIndex + 1
+	answered := make(map[string]bool)
+	for insertAt < len(messages) && messages[insertAt].ToolResult != nil {
+		answered[messages[insertAt].ToolResult.ToolCallID] = true
+		insertAt++
+	}
+	var missing []api.Message
+	for _, call := range messages[callIndex].ToolCalls {
+		if answered[call.ID] {
+			continue
+		}
+		missing = append(missing, api.Message{
+			Role:    api.RoleTool,
+			Content: unfinishedToolCallOutput,
+			ToolResult: &api.ToolResult{
+				ToolCallID: call.ID,
+				Output:     unfinishedToolCallOutput,
+				IsError:    true,
+			},
+		})
+	}
+	if len(missing) == 0 {
+		return messages, false
+	}
+	return slices.Insert(messages, insertAt, missing...), true
 }
 
 func (t *userTurnContext) finishCancelledTurn() error {

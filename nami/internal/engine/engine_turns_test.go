@@ -70,6 +70,35 @@ func (c *scriptedClient) Stream(_ context.Context, req api.ModelRequest) (iter.S
 	}, nil
 }
 
+// mainRequests returns the main-loop requests the model has received.
+func (c *scriptedClient) mainRequests() []api.ModelRequest {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return append([]api.ModelRequest(nil), c.requests...)
+}
+
+// blockingTool runs until its context ends, standing in for a long command
+// the user stops.
+type blockingTool struct {
+	started chan struct{}
+	once    sync.Once
+}
+
+func (*blockingTool) Name() string        { return "block" }
+func (*blockingTool) Description() string { return "blocks until cancelled" }
+func (*blockingTool) InputSchema() any {
+	return map[string]any{"type": "object", "properties": map[string]any{}}
+}
+func (*blockingTool) Permission() toolpkg.PermissionLevel { return toolpkg.PermissionReadOnly }
+func (*blockingTool) Concurrency(toolpkg.ToolInput) toolpkg.ConcurrencyDecision {
+	return toolpkg.ConcurrencySerial
+}
+func (b *blockingTool) Execute(ctx context.Context, _ toolpkg.ToolInput) (toolpkg.ToolOutput, error) {
+	b.once.Do(func() { close(b.started) })
+	<-ctx.Done()
+	return toolpkg.ToolOutput{}, ctx.Err()
+}
+
 // echoTool is a read-only tool that answers immediately.
 type echoTool struct{}
 
@@ -89,6 +118,15 @@ func (echoTool) Execute(context.Context, toolpkg.ToolInput) (toolpkg.ToolOutput,
 type turnHarness struct {
 	deps  engineLoopDeps
 	state *engineLoopState
+	// input feeds client messages to the router, as the TUI would.
+	input *io.PipeWriter
+}
+
+func (h *turnHarness) send(t *testing.T, msgType ipc.ClientMessageType) {
+	t.Helper()
+	if _, err := io.WriteString(h.input, `{"type":"`+string(msgType)+`"}`+"\n"); err != nil {
+		t.Errorf("send %s: %v", msgType, err)
+	}
 }
 
 // newTurnHarness wires a real engine turn to a scripted model, with every
@@ -138,6 +176,7 @@ func newTurnHarness(t *testing.T, client *scriptedClient, tools ...toolpkg.Tool)
 			timeline:       newConversationTimeline(),
 			titleGenerated: true,
 		},
+		input: inputWriter,
 	}
 }
 
@@ -307,5 +346,115 @@ func TestTurnScopedHelpersTolerateAStartPastTheEnd(t *testing.T) {
 	}
 	if got := buildRecentTranscriptCorpus(messages, 5); got != "" {
 		t.Fatalf("buildRecentTranscriptCorpus = %q, want empty", got)
+	}
+}
+
+// unansweredToolCalls lists the tool calls in messages that no tool result
+// answers.
+func unansweredToolCalls(messages []api.Message) []string {
+	answered := map[string]bool{}
+	for _, message := range messages {
+		if message.ToolResult != nil {
+			answered[message.ToolResult.ToolCallID] = true
+		}
+	}
+	var missing []string
+	for _, message := range messages {
+		for _, call := range message.ToolCalls {
+			if !answered[call.ID] {
+				missing = append(missing, call.ID)
+			}
+		}
+	}
+	return missing
+}
+
+// Stopping a turn while a tool runs used to leave that call without a result.
+// Every provider rejects a request carrying an unanswered tool call, so every
+// later message in the session failed.
+func TestStoppingMidToolLeavesTheSessionUsable(t *testing.T) {
+	client := &scriptedClient{
+		caps: api.ModelCapabilities{SupportsToolUse: true, MaxContextWindow: 200_000, MaxOutputTokens: 8_000},
+		turns: []scriptedTurn{
+			{text: "Running it.", toolCalls: []api.ToolCall{{ID: "call-block", Name: "block", Input: "{}"}}},
+			{text: "Okay."},
+		},
+	}
+	tool := &blockingTool{started: make(chan struct{})}
+	h := newTurnHarness(t, client, tool)
+
+	go func() {
+		<-tool.started
+		h.send(t, ipc.MsgCancel)
+	}()
+	if err := handleUserInputMessage(t.Context(), ipc.UserInputPayload{Text: "run the long thing"}, h.deps, h.state); err != nil {
+		t.Fatalf("stopped turn: %v", err)
+	}
+	if missing := unansweredToolCalls(h.state.messages); len(missing) > 0 {
+		t.Fatalf("the stopped turn left tool calls %v unanswered", missing)
+	}
+	saved, err := h.deps.sessionStore.LoadTranscript(h.state.sessionID)
+	if err != nil {
+		t.Fatalf("LoadTranscript: %v", err)
+	}
+	if missing := unansweredToolCalls(saved); len(missing) > 0 {
+		t.Fatalf("the saved transcript left tool calls %v unanswered, so a resumed session fails too", missing)
+	}
+
+	if err := handleUserInputMessage(t.Context(), ipc.UserInputPayload{Text: "never mind"}, h.deps, h.state); err != nil {
+		t.Fatalf("next turn: %v", err)
+	}
+	requests := client.mainRequests()
+	if missing := unansweredToolCalls(requests[len(requests)-1].Messages); len(missing) > 0 {
+		t.Fatalf("the next request carries unanswered tool calls %v", missing)
+	}
+}
+
+func TestAnswerUnfinishedToolCalls(t *testing.T) {
+	calls := api.Message{Role: api.RoleAssistant, ToolCalls: []api.ToolCall{{ID: "a"}, {ID: "b"}}}
+	resultFor := func(id string) api.Message {
+		return api.Message{Role: api.RoleTool, Content: "done", ToolResult: &api.ToolResult{ToolCallID: id, Output: "done"}}
+	}
+	prompt := api.Message{Role: api.RoleUser, Content: "go"}
+	nudge := api.Message{Role: api.RoleUser, Content: "try a different edit"}
+
+	tests := []struct {
+		name string
+		in   []api.Message
+		// want lists each message's tool call ID for results, or its role.
+		want []string
+	}{
+		{name: "no assistant turn", in: []api.Message{prompt}, want: []string{"user"}},
+		{name: "final answer without calls", in: []api.Message{prompt, {Role: api.RoleAssistant, Content: "hi"}}, want: []string{"user", "assistant"}},
+		{name: "every call answered", in: []api.Message{prompt, calls, resultFor("a"), resultFor("b")}, want: []string{"user", "assistant", "a", "b"}},
+		// A stop mid-batch appends nothing after the calls.
+		{name: "stopped before any result", in: []api.Message{prompt, calls}, want: []string{"user", "assistant", "a", "b"}},
+		// A plan-review pause can record some results and a retry nudge; the
+		// missing result still has to come before the nudge.
+		{name: "paused after one result", in: []api.Message{prompt, calls, resultFor("a"), nudge}, want: []string{"user", "assistant", "a", "b", "user"}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, changed := answerUnfinishedToolCalls(slices.Clone(tc.in))
+			var shape []string
+			for _, message := range got {
+				if message.ToolResult != nil {
+					shape = append(shape, message.ToolResult.ToolCallID)
+					continue
+				}
+				shape = append(shape, string(message.Role))
+			}
+			if !slices.Equal(shape, tc.want) {
+				t.Fatalf("conversation = %v, want %v", shape, tc.want)
+			}
+			if changed != (len(got) > len(tc.in)) {
+				t.Fatalf("changed = %v for %d -> %d messages", changed, len(tc.in), len(got))
+			}
+			for _, message := range got {
+				if message.ToolResult != nil && message.ToolResult.Output == unfinishedToolCallOutput && !message.ToolResult.IsError {
+					t.Fatal("an unfinished call's result is not marked as an error")
+				}
+			}
+		})
 	}
 }
