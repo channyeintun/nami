@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/channyeintun/nami/internal/config"
+	"github.com/channyeintun/nami/internal/debuglog"
 )
 
 const (
@@ -206,17 +207,21 @@ func (c *Client) fetchAndCache(ctx context.Context) (Snapshot, error) {
 		return Snapshot{}, fmt.Errorf("parse models.dev response: %w", err)
 	}
 
-	if err := c.writeCache(data); err != nil {
-		return Snapshot{}, err
-	}
-
-	info, err := os.Stat(c.cachePath())
-	if err != nil {
-		return Snapshot{}, fmt.Errorf("stat models.dev cache: %w", err)
-	}
-
-	snapshot.FetchedAt = info.ModTime()
 	snapshot.RawJSON = data
+	snapshot.FetchedAt = time.Now()
+
+	// The snapshot in hand is good whether or not it can be cached: an
+	// unwritable cache only costs the next start a refetch, so it must not
+	// throw this one away and leave the catalog unavailable.
+	if err := c.writeCache(data); err != nil {
+		debuglog.Log("models_dev", "cache_write_failed", map[string]any{"error": err.Error()})
+		return snapshot, nil
+	}
+	// Stamp the snapshot with the cache file's own time, which is what a later
+	// cache load reports, so the two agree on its age.
+	if info, err := os.Stat(c.cachePath()); err == nil {
+		snapshot.FetchedAt = info.ModTime()
+	}
 	return snapshot, nil
 }
 

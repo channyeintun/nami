@@ -362,3 +362,30 @@ func TestClientDefaults(t *testing.T) {
 		t.Errorf("ttl = %v", custom.ttl())
 	}
 }
+
+// A cache that cannot be written must not cost the snapshot that was just
+// fetched: returning an error here left the catalog unavailable on every start
+// for a user whose cache directory is read-only.
+func TestLoadReturnsFetchedSnapshotWhenCacheIsUnwritable(t *testing.T) {
+	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, samplePayload)
+	})
+	// A regular file where the cache directory should be makes every cache
+	// write fail, on any platform and for any user.
+	blocker := filepath.Join(t.TempDir(), "not-a-directory")
+	if err := os.WriteFile(blocker, []byte("x"), 0o600); err != nil {
+		t.Fatalf("write blocker: %v", err)
+	}
+	client.CachePath = filepath.Join(blocker, "api.json")
+
+	snapshot, err := client.Load(context.Background())
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if _, ok := snapshot.Providers["anthropic"]; !ok {
+		t.Fatalf("providers = %+v, want the fetched catalog", snapshot.Providers)
+	}
+	if snapshot.FetchedAt.IsZero() {
+		t.Error("FetchedAt is zero for a fetched snapshot")
+	}
+}
