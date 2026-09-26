@@ -673,6 +673,9 @@ func buildRecentTranscriptCorpus(messages []api.Message, fromIndex int) string {
 	if start < 0 {
 		start = 0
 	}
+	if start > len(messages) {
+		start = len(messages)
+	}
 	parts := make([]string, 0, (len(messages)-start)*2)
 	for index := start; index < len(messages); index++ {
 		message := messages[index]

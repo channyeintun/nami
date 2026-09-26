@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"iter"
+	"slices"
 	"strings"
 	"time"
 
@@ -64,10 +65,14 @@ type userTurnContext struct {
 	explicitSkills     []skillspkg.Skill
 	plannerUserRequest string
 	messageCountBefore int
-	turnID             int
-	turnMetrics        *timing.CheckpointRecorder
-	turnStats          *turnExecutionStats
-	turnStopReason     string
+	// queryStart is the index of the first message the running query owns.
+	// Compaction rewrites the conversation mid-query, so it is kept in step by
+	// rebaseAfterCompaction instead of being taken once up front.
+	queryStart     int
+	turnID         int
+	turnMetrics    *timing.CheckpointRecorder
+	turnStats      *turnExecutionStats
+	turnStopReason string
 }
 
 func handleUserInputMessage(ctx context.Context, payload ipc.UserInputPayload, deps engineLoopDeps, state *engineLoopState) error {
@@ -180,7 +185,7 @@ func (t *userTurnContext) run(ctx context.Context) error {
 }
 
 func (t *userTurnContext) runPlannerTurn(ctx context.Context, availableSkills []skillspkg.Skill) (bool, error) {
-	messagesBeforeQuery := len(t.state.messages)
+	t.queryStart = len(t.state.messages)
 	planner := agent.NewPlanner(t.state.mode, t.state.sessionID, t.deps.artifactManager)
 	if err := t.beginPlannerTurn(ctx, planner); err != nil {
 		return false, err
@@ -192,13 +197,13 @@ func (t *userTurnContext) runPlannerTurn(ctx context.Context, availableSkills []
 	if queryResult.Stopped {
 		return false, nil
 	}
-	if err := t.finalizePlannerTurn(ctx, planner, messagesBeforeQuery); err != nil {
+	if err := t.finalizePlannerTurn(ctx, planner, t.queryStart); err != nil {
 		return false, err
 	}
-	if err := maybeRefreshSessionMemory(ctx, t.deps.bridge, t.deps.artifactManager, t.state.sessionID, t.turnID, t.state.messages, messagesBeforeQuery, newSessionMemoryRefiner(t.deps.bridge, t.deps.tracker, t.state.client)); err != nil {
+	if err := maybeRefreshSessionMemory(ctx, t.deps.bridge, t.deps.artifactManager, t.state.sessionID, t.turnID, t.state.messages, t.queryStart, newSessionMemoryRefiner(t.deps.bridge, t.deps.tracker, t.state.client)); err != nil {
 		return false, err
 	}
-	continueTurn, err := t.handlePlanReviewDecision(ctx, messagesBeforeQuery)
+	continueTurn, err := t.handlePlanReviewDecision(ctx, t.queryStart)
 	if err != nil || continueTurn {
 		return continueTurn, err
 	}
@@ -423,7 +428,12 @@ func (t *userTurnContext) newQueryDeps(planner *agent.Planner) agent.QueryDeps {
 		},
 		CompactMessages: func(callCtx context.Context, current []api.Message, reason agent.CompactReason) (compact.CompactResult, error) {
 			sessionMemory, _ := loadSessionMemorySnapshot(callCtx, t.deps.artifactManager, t.state.sessionID)
-			return compactWithMetrics(callCtx, t.deps.bridge, t.deps.tracker, t.state.client, t.deps.timingLogger, t.state.sessionID, t.turnID, string(reason), sessionMemory, systemPromptForMode(t.state.mode), t.deps.registry.Definitions(), current)
+			result, err := compactWithMetrics(callCtx, t.deps.bridge, t.deps.tracker, t.state.client, t.deps.timingLogger, t.state.sessionID, t.turnID, string(reason), sessionMemory, systemPromptForMode(t.state.mode), t.deps.registry.Definitions(), current)
+			if err != nil {
+				return compact.CompactResult{}, err
+			}
+			t.rebaseAfterCompaction(result)
+			return result, nil
 		},
 		RecallMemory: func(callCtx context.Context, files []agent.MemoryFile, userPrompt string) ([]agent.MemoryRecallResult, error) {
 			selector := memorypkg.RecallSelector{}
@@ -462,6 +472,32 @@ func (t *userTurnContext) newQueryDeps(planner *agent.Planner) agent.QueryDeps {
 		},
 		Clock:      time.Now,
 		AttemptLog: agent.NewAttemptLog(t.state.sessionDir),
+	}
+}
+
+// rebaseAfterCompaction brings the turn's view of the conversation in line
+// with a compaction that just rewrote it mid-query. Summarizing replaces the
+// earlier messages with a single summary message, so every position recorded
+// before it is stale: the query start can point past the end of the shorter
+// list, and the timeline names messages by their index. The query's messages
+// now begin at the new summary, which also lets the post-turn steps see that
+// this turn compacted.
+func (t *userTurnContext) rebaseAfterCompaction(result compact.CompactResult) {
+	if result.Strategy != compact.StrategySummarize && result.Strategy != compact.StrategyPartial {
+		// Truncating tool output edits messages in place; positions still hold.
+		return
+	}
+	t.queryStart = 0
+	for index, message := range slices.Backward(result.Messages) {
+		if compact.IsSummaryMessage(message) {
+			t.queryStart = index
+			break
+		}
+	}
+	// The agent keeps appending to its own slice, so hold a copy.
+	t.state.messages = append([]api.Message(nil), result.Messages...)
+	if t.state.timeline != nil {
+		t.state.timeline = rebuildConversationTimeline(t.state.messages)
 	}
 }
 

@@ -138,7 +138,8 @@ func emitPlanReviewResolution(bridge *ipc.Bridge, requestID string, decision str
 }
 
 func turnUsedToolName(messages []api.Message, fromIndex int, toolName string) bool {
-	for _, msg := range messages[fromIndex:] {
+	for index := max(fromIndex, 0); index < len(messages); index++ {
+		msg := messages[index]
 		if msg.Role != api.RoleAssistant {
 			continue
 		}
