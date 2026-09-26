@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -208,5 +209,15 @@ func TestTimeoutFromParamsUsesFallback(t *testing.T) {
 	}
 	if got := timeoutFromParams(map[string]any{"timeout_ms": float64(1500)}, fallback); got != 1500*time.Millisecond {
 		t.Errorf("timeout_ms 1500 = %v, want 1.5s", got)
+	}
+}
+
+// A huge timeout means "effectively none", never "already expired".
+func TestTimeoutFromParamsSaturatesInsteadOfOverflowing(t *testing.T) {
+	for _, value := range []any{float64(1e13), float64(1e20), int64(1e16), int(1e15), "10000000000000", math.Inf(1)} {
+		got := timeoutFromParams(map[string]any{"timeout_ms": value}, time.Second)
+		if got < 24*time.Hour {
+			t.Errorf("timeout_ms %v = %v, want a very long timeout", value, got)
+		}
 	}
 }

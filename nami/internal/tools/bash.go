@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -240,23 +241,34 @@ func timeoutFromParams(params map[string]any, fallback time.Duration) time.Durat
 	switch v := value.(type) {
 	case int:
 		if v > 0 {
-			return time.Duration(v) * time.Millisecond
+			return durationFromMillis(float64(v))
 		}
 	case int64:
 		if v > 0 {
-			return time.Duration(v) * time.Millisecond
+			return durationFromMillis(float64(v))
 		}
 	case float64:
 		if v > 0 {
-			return time.Duration(v) * time.Millisecond
+			return durationFromMillis(v)
 		}
 	case string:
 		parsed, err := strconv.Atoi(v)
 		if err == nil && parsed > 0 {
-			return time.Duration(parsed) * time.Millisecond
+			return durationFromMillis(float64(parsed))
 		}
 	}
 	return fallback
+}
+
+// durationFromMillis converts a positive millisecond count, saturating at the
+// longest time.Duration. Multiplying first overflowed: a timeout_ms of 1e13,
+// meant as "effectively no timeout", came out negative and expired the
+// command's context before it could start.
+func durationFromMillis(millis float64) time.Duration {
+	if millis >= float64(math.MaxInt64/int64(time.Millisecond)) {
+		return time.Duration(math.MaxInt64)
+	}
+	return time.Duration(millis * float64(time.Millisecond))
 }
 
 func shellCommandContext(ctx context.Context, command string) (*exec.Cmd, error) {
