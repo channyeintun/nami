@@ -443,7 +443,7 @@ func isLikelyBinaryFile(filePath string, sample []byte) bool {
 	if bytes.IndexByte(sample, 0) >= 0 {
 		return true
 	}
-	if !utf8.Valid(sample) {
+	if !utf8.Valid(trimIncompleteRune(sample)) {
 		return true
 	}
 	controlBytes := 0
@@ -453,6 +453,23 @@ func isLikelyBinaryFile(filePath string, sample []byte) bool {
 		}
 	}
 	return controlBytes > len(sample)/10
+}
+
+// trimIncompleteRune drops a multi-byte character cut off at the end of sample.
+// Callers sniff a fixed-size prefix of the file, and that boundary can land
+// inside a character of perfectly valid UTF-8 text.
+func trimIncompleteRune(sample []byte) []byte {
+	for back := 1; back < utf8.UTFMax && back <= len(sample); back++ {
+		start := len(sample) - back
+		if !utf8.RuneStart(sample[start]) {
+			continue
+		}
+		if utf8.FullRune(sample[start:]) {
+			return sample
+		}
+		return sample[:start]
+	}
+	return sample
 }
 
 func isNotebookFile(filePath string) bool {
