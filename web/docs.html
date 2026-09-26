@@ -335,7 +335,7 @@ install -m 755 nami-engine "$HOME/.local/bin/nami-engine"</code><button type="bu
                       GitHub Copilot
                     </td>
                     <td class="p-4 border-t border-[#1a1a1a]">
-                      (use <code>/connect</code>)
+                      (use <code>/connect github-copilot</code>)
                     </td>
                   </tr>
                   <tr>
@@ -443,8 +443,10 @@ install -m 755 nami-engine "$HOME/.local/bin/nami-engine"</code><button type="bu
             </h2>
             <div class="p-8 border border-[#1a1a1a] bg-subtle rounded-lg">
               <p class="text-gray-300 mb-6 leading-relaxed">
-                Run <code class="text-brand">/connect</code> within the TUI. For
-                Enterprise domains:
+                Run <code class="text-brand">/connect github-copilot</code>
+                within the TUI, or pick GitHub Copilot from
+                <code class="text-brand">/connect</code>. For Enterprise
+                domains:
               </p>
               <code class="bg-black p-4 rounded block mb-6 text-brand"
                 >/connect github-copilot your-company.example</code
@@ -452,7 +454,8 @@ install -m 755 nami-engine "$HOME/.local/bin/nami-engine"</code><button type="bu
               <ul class="space-y-3 text-xs text-gray-500">
                 <li>&bull; Prints device code in transcript</li>
                 <li>&bull; Opens verification URL automatically</li>
-                <li>&bull; Authorizes v5.5 models</li>
+                <li>&bull; Enables Copilot's model policies for the models Nami uses</li>
+                <li>&bull; Sets the main model to <code>github-copilot/gpt-5.4</code> and the subagent model to <code>github-copilot/claude-haiku-4.5</code></li>
                 <li>&bull; Stores tokens in Nami's <code>config.json</code> (see <a href="#config" class="text-brand hover:text-white transition">Configuration</a>) under <code>github_copilot</code></li>
                 <li>&bull; Clean with <code>/logout github-copilot</code> or remove that config section</li>
               </ul>

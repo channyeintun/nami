@@ -170,16 +170,16 @@ Supported providers:
 | Groq           | `GROQ_API_KEY`           |
 | Mistral        | `MISTRAL_API_KEY`        |
 | Ollama         | none — runs locally      |
-| GitHub Copilot | use `/connect` in Nami   |
+| GitHub Copilot | use `/connect github-copilot` in Nami |
 
 ### GitHub Copilot setup
 
 GitHub Copilot uses a device-login flow instead of a static API key.
 
-Start Nami, then run:
+Start Nami, then run `/connect github-copilot` (plain `/connect` opens a provider picker where you can choose it):
 
 ```text
-/connect
+/connect github-copilot
 ```
 
 Nami will:
