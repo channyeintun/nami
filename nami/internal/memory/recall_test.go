@@ -2,6 +2,7 @@ package memory
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -101,20 +102,49 @@ func TestSelectReturnsNothingWhenNoTermMatches(t *testing.T) {
 	}
 }
 
-func TestBuildMemoryRecallCandidatesCapsCandidates(t *testing.T) {
-	notes := make(map[string]string, memoryRecallMaxCandidates+10)
-	lines := make([]string, 0, memoryRecallMaxCandidates+10)
-	for i := range memoryRecallMaxCandidates + 10 {
-		name := filepath.Base(strings.ReplaceAll(strings.Repeat("n", i+1), " ", "")) + ".md"
+// fillerIndex builds an index of count entries that no deploy prompt matches.
+func fillerIndex(t *testing.T, fileType string, count int, extra ...string) agent.MemoryFile {
+	t.Helper()
+	notes := make(map[string]string, count+len(extra))
+	lines := make([]string, 0, count+len(extra))
+	for i := range count {
+		name := fmt.Sprintf("filler-%02d.md", i)
 		notes[name] = "body"
-		lines = append(lines, "- ["+name+"] Title "+name+" (project)")
+		lines = append(lines, "- ["+name+"] Styling rule "+name+" (project)")
 	}
-	file := memoryIndex(t, "project-index", notes, lines...)
+	for _, name := range extra {
+		notes[name] = "body"
+		lines = append(lines, "- ["+name+"] Deploy runbook (project)")
+	}
+	return memoryIndex(t, fileType, notes, lines...)
+}
 
-	candidates := buildMemoryRecallCandidates([]agent.MemoryFile{file})
-	if len(candidates) != memoryRecallMaxCandidates {
-		t.Fatalf("candidates = %d, want the cap of %d", len(candidates), memoryRecallMaxCandidates)
-	}
+// Every index entry is a recall candidate. Capping candidates before scoring
+// made entries past the first 32 unrecallable, and a long user index hid the
+// project index behind it entirely.
+func TestSelectConsidersEveryIndexEntry(t *testing.T) {
+	t.Run("entry late in one index", func(t *testing.T) {
+		file := fillerIndex(t, "project-index", 40, "deploy.md")
+		results, err := RecallSelector{}.Select(context.Background(), []agent.MemoryFile{file}, "how do we deploy?")
+		if err != nil {
+			t.Fatalf("Select: %v", err)
+		}
+		if len(results) != 1 || len(results[0].Lines) != 1 || !strings.Contains(results[0].Lines[0], "deploy.md") {
+			t.Fatalf("results = %+v, want the deploy entry", results)
+		}
+	})
+
+	t.Run("project index behind a long user index", func(t *testing.T) {
+		user := fillerIndex(t, "user-index", 40)
+		project := fillerIndex(t, "project-index", 0, "deploy.md")
+		results, err := RecallSelector{}.Select(context.Background(), []agent.MemoryFile{user, project}, "how do we deploy?")
+		if err != nil {
+			t.Fatalf("Select: %v", err)
+		}
+		if len(results) != 1 || results[0].Path != project.Path {
+			t.Fatalf("results = %+v, want the project deploy entry", results)
+		}
+	})
 }
 
 func TestSelectMemoryRecallCandidatesLimitsSelections(t *testing.T) {

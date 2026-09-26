@@ -13,7 +13,6 @@ import (
 )
 
 const (
-	memoryRecallMaxCandidates = 32
 	memoryRecallMaxSelections = 8
 	memoryRecallMaxTerms      = 12
 )
@@ -53,8 +52,12 @@ func (s RecallSelector) Select(ctx context.Context, files []agent.MemoryFile, us
 	return buildMemoryRecallResults(selected, "deterministic preference match"), nil
 }
 
+// buildMemoryRecallCandidates turns every usable index entry into a candidate.
+// Scoring decides what is recalled, so nothing is dropped here: the loader
+// already bounds each index, and an entry cut before scoring could never be
+// recalled however well it matched.
 func buildMemoryRecallCandidates(files []agent.MemoryFile) []recallCandidate {
-	candidates := make([]recallCandidate, 0, memoryRecallMaxCandidates)
+	var candidates []recallCandidate
 	for _, file := range files {
 		if file.Type != "project-index" && file.Type != "user-index" {
 			continue
@@ -76,9 +79,6 @@ func buildMemoryRecallCandidates(files []agent.MemoryFile) []recallCandidate {
 				Updated:  file.UpdatedAt,
 				Index:    entry.Order,
 			})
-			if len(candidates) >= memoryRecallMaxCandidates {
-				return candidates
-			}
 		}
 	}
 	return candidates
