@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"iter"
@@ -829,14 +830,32 @@ func trackModelStream(
 	return func(yield func(api.ModelEvent, error) bool) {
 		startedAt := time.Now()
 		var usage api.Usage
+		// A call that is cut off or abandoned partway was still billed for the
+		// usage the provider reported before it ended, so every exit records it.
+		recordCall := func() {
+			tracker.RecordAPICall(
+				client.ModelID(),
+				usage.InputTokens,
+				usage.OutputTokens,
+				usage.CacheReadTokens,
+				usage.CacheCreationTokens,
+				time.Since(startedAt),
+				costpkg.CalculateUSDCost(client.ModelID(), usage),
+			)
+		}
 
 		for event, streamErr := range stream {
 			if streamErr != nil {
+				recordCall()
+				if err := emitCostUpdate(bridge, tracker); err != nil {
+					streamErr = errors.Join(streamErr, err)
+				}
 				yield(api.ModelEvent{}, streamErr)
 				return
 			}
 			if event.Type == api.ModelEventRateLimits && event.RateLimits != nil {
 				if err := emitRateLimitUpdate(bridge, event.RateLimits); err != nil {
+					recordCall()
 					yield(api.ModelEvent{}, err)
 					return
 				}
@@ -847,19 +866,13 @@ func trackModelStream(
 				usage = *event.Usage
 			}
 			if !yield(event, nil) {
+				// Nobody is reading anymore; the next cost update carries it.
+				recordCall()
 				return
 			}
 		}
 
-		tracker.RecordAPICall(
-			client.ModelID(),
-			usage.InputTokens,
-			usage.OutputTokens,
-			usage.CacheReadTokens,
-			usage.CacheCreationTokens,
-			time.Since(startedAt),
-			costpkg.CalculateUSDCost(client.ModelID(), usage),
-		)
+		recordCall()
 		if err := emitCostUpdate(bridge, tracker); err != nil {
 			yield(api.ModelEvent{}, err)
 		}

@@ -104,6 +104,68 @@ func TestModelCallsRecordTheLatestUsageReport(t *testing.T) {
 	}
 }
 
+// cutOffClient reports the prompt's usage and then fails partway, as a stream
+// does when the user presses stop or the connection drops.
+type cutOffClient struct{}
+
+func (cutOffClient) ModelID() string                     { return "claude-sonnet-5" }
+func (cutOffClient) Capabilities() api.ModelCapabilities { return api.ModelCapabilities{} }
+
+func (cutOffClient) Stream(context.Context, api.ModelRequest) (iter.Seq2[api.ModelEvent, error], error) {
+	return func(yield func(api.ModelEvent, error) bool) {
+		if !yield(api.ModelEvent{Type: api.ModelEventUsage, Usage: &api.Usage{InputTokens: 50_000, OutputTokens: 1}}, nil) {
+			return
+		}
+		if !yield(api.ModelEvent{Type: api.ModelEventToken, Text: "partial"}, nil) {
+			return
+		}
+		yield(api.ModelEvent{}, context.Canceled)
+	}, nil
+}
+
+// The provider bills the prompt as soon as it reports it. A call that ended
+// early used to vanish from the cost entirely.
+func TestModelCallsThatEndEarlyAreStillCharged(t *testing.T) {
+	tests := []struct {
+		name    string
+		consume func(iter.Seq2[api.ModelEvent, error])
+	}{
+		{
+			name: "stream cut off",
+			consume: func(stream iter.Seq2[api.ModelEvent, error]) {
+				for _, err := range stream {
+					if err != nil {
+						return
+					}
+				}
+			},
+		},
+		{
+			name: "reader stops early",
+			consume: func(stream iter.Seq2[api.ModelEvent, error]) {
+				for range stream {
+					return
+				}
+			},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			bridge := ipc.NewBridge(strings.NewReader(""), io.Discard)
+			tracker := costpkg.NewTracker()
+			stream, err := trackModelStream(t.Context(), bridge, tracker, cutOffClient{}, api.ModelRequest{})
+			if err != nil {
+				t.Fatalf("trackModelStream: %v", err)
+			}
+			tc.consume(stream)
+
+			if got := tracker.Snapshot().TotalInputTokens; got != 50_000 {
+				t.Fatalf("recorded %d input tokens, want the 50000 the provider reported", got)
+			}
+		})
+	}
+}
+
 // The goal check and the session title are model calls like any other; their
 // usage has to reach the session's cost.
 func TestSideCallsAreCharged(t *testing.T) {
