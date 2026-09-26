@@ -41,13 +41,16 @@ func EstimateTokens(text string) int {
 func EstimateConversationTokens(messages []api.Message) int {
 	total := 0
 	for _, message := range messages {
-		total += EstimateTokens(message.Content)
+		// A tool message carries its output twice, as Content and as
+		// ToolResult.Output, and providers are sent the tool result alone.
+		if message.ToolResult != nil {
+			total += EstimateTokens(message.ToolResult.Output)
+		} else {
+			total += EstimateTokens(message.Content)
+		}
 		for _, call := range message.ToolCalls {
 			total += EstimateTokens(call.Name)
 			total += EstimateTokens(call.Input)
-		}
-		if message.ToolResult != nil {
-			total += EstimateTokens(message.ToolResult.Output)
 		}
 	}
 	return total
