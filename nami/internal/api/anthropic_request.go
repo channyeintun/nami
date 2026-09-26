@@ -211,14 +211,27 @@ func applyAnthropicCacheControl(system []anthropicTextBlock, messages []anthropi
 	applyAnthropicMessageCacheControl(messages)
 }
 
+// applyAnthropicMessageCacheControl marks the last two messages as cache
+// breakpoints. The agent ends every request with per-turn context, as a
+// message of its own or folded into the newest user message, and the next
+// request no longer carries it. A cache read can only land where an earlier
+// request wrote a breakpoint, so marking only the last message cached a prefix
+// no later request shared and the whole history was written again every time;
+// the message before it is the end of the history the next request repeats.
+// With the tools and the system prompt that makes four breakpoints, the most
+// Anthropic allows.
 func applyAnthropicMessageCacheControl(messages []anthropicMessage) {
+	marked := 0
 	for _, message := range slices.Backward(messages) {
 		blocks, ok := message.Content.([]map[string]any)
 		if !ok || len(blocks) == 0 {
 			continue
 		}
 		blocks[len(blocks)-1]["cache_control"] = defaultAnthropicCacheControl()
-		return
+		marked++
+		if marked == 2 {
+			return
+		}
 	}
 }
 

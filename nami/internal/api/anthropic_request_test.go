@@ -2,6 +2,8 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
+	"slices"
 	"testing"
 )
 
@@ -203,6 +205,59 @@ func TestBuildRequestSendsThinkingInTheFormTheModelAccepts(t *testing.T) {
 		if payload.Thinking == nil || *payload.Thinking != tc.want {
 			t.Errorf("%s: thinking = %+v, want %+v", tc.model, payload.Thinking, tc.want)
 		}
+	}
+}
+
+// cacheBreakpoints lists where a request carries cache_control: "tool:<name>",
+// "system:<index>" or "message:<index>".
+func cacheBreakpoints(t *testing.T, payload anthropicRequest) []string {
+	t.Helper()
+	var points []string
+	for _, tool := range payload.Tools {
+		if tool.CacheControl != nil {
+			points = append(points, "tool:"+tool.Name)
+		}
+	}
+	for index, block := range payload.System {
+		if block.CacheControl != nil {
+			points = append(points, fmt.Sprintf("system:%d", index))
+		}
+	}
+	for index, message := range payload.Messages {
+		for _, block := range contentBlocks(t, message) {
+			if block["cache_control"] != nil {
+				points = append(points, fmt.Sprintf("message:%d", index))
+			}
+		}
+	}
+	return points
+}
+
+func TestBuildRequestCachesTheHistoryBeforeTheTransientTail(t *testing.T) {
+	client := &AnthropicClient{provider: "anthropic", model: "claude-sonnet-5", capabilities: ModelCapabilities{SupportsCaching: true}}
+	payload, _, err := client.buildRequest(ModelRequest{
+		SystemPrompt: "stable rules",
+		Tools:        []ToolDefinition{{Name: "read", InputSchema: map[string]any{"type": "object"}}},
+		Messages: []Message{
+			{Role: RoleUser, Content: "read a.go"},
+			{Role: RoleAssistant, ToolCalls: []ToolCall{{ID: "call_1", Name: "read", Input: `{}`}}},
+			{Role: RoleTool, ToolResult: &ToolResult{ToolCallID: "call_1", Output: "package a"}},
+			// The agent ends every request with per-turn context that the
+			// next request no longer carries.
+			{Role: RoleUser, Content: "Runtime context for the current turn below."},
+		},
+		MaxTokens: 8000,
+	})
+	if err != nil {
+		t.Fatalf("buildRequest: %v", err)
+	}
+
+	// A read can only land where an earlier request wrote a breakpoint, so the
+	// last message the next request will share, the tool result, has to be
+	// one. Anthropic allows four breakpoints in all.
+	want := []string{"tool:read", "system:0", "message:2", "message:3"}
+	if got := cacheBreakpoints(t, payload); !slices.Equal(got, want) {
+		t.Fatalf("breakpoints = %v, want %v", got, want)
 	}
 }
 
