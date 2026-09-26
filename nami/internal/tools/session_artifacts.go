@@ -2,6 +2,8 @@ package tools
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"strings"
 	"sync"
@@ -323,7 +325,7 @@ func saveSearchReportArtifact(ctx context.Context, url string, query string, con
 	}
 	mdContent := artifactspkg.RenderSearchReportMarkdown(description, content)
 
-	slot := "web-fetch-" + sanitizeArtifactSlot(url)
+	slot := webFetchArtifactSlot(url)
 	artifact, _, created, saveErr := manager.UpsertSessionMarkdown(ctx, artifactspkg.MarkdownRequest{
 		Kind:    artifactspkg.KindSearchReport,
 		Scope:   artifactspkg.ScopeSession,
@@ -368,6 +370,15 @@ func saveDiffPreviewArtifact(ctx context.Context, description string, diff strin
 	}
 
 	return ArtifactMutation{Artifact: artifact, Content: mdContent, Created: created}, true
+}
+
+// webFetchArtifactSlot keys a fetch report by its full URL, so refetching a page
+// updates its report. The readable part keeps only the start of the URL, which
+// every page of one site or repository shares, so a hash of the whole URL
+// stops those pages from overwriting each other's reports.
+func webFetchArtifactSlot(url string) string {
+	sum := sha256.Sum256([]byte(url))
+	return "web-fetch-" + sanitizeArtifactSlot(url) + "-" + hex.EncodeToString(sum[:6])
 }
 
 // sanitizeArtifactSlot returns a short normalized slot key from an arbitrary string.
