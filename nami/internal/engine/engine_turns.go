@@ -531,6 +531,9 @@ func (t *userTurnContext) newQueryDeps(planner *agent.Planner) agent.QueryDeps {
 			if err != nil {
 				return compact.CompactResult{}, err
 			}
+			if compactionDroppedToolResults(result) {
+				forgetFileReads()
+			}
 			t.rebaseAfterCompaction(result)
 			return result, nil
 		},
@@ -605,6 +608,12 @@ func (t *userTurnContext) rebaseAfterCompaction(result compact.CompactResult) {
 // stale. Truncating tool output edits messages in place; positions still hold.
 func compactionMovedMessages(result compact.CompactResult) bool {
 	return result.Strategy == compact.StrategySummarize || result.Strategy == compact.StrategyPartial
+}
+
+// compactionDroppedToolResults reports whether a compaction took tool results
+// out of the conversation, by summarizing them or by cutting them short.
+func compactionDroppedToolResults(result compact.CompactResult) bool {
+	return compactionMovedMessages(result) || result.MicrocompactApplied
 }
 
 // persistCurrentMessages saves the conversation mid-turn. A failed save must

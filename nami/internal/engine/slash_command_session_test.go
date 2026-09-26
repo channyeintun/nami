@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -15,6 +17,7 @@ import (
 	costpkg "github.com/channyeintun/nami/internal/cost"
 	"github.com/channyeintun/nami/internal/ipc"
 	"github.com/channyeintun/nami/internal/session"
+	toolpkg "github.com/channyeintun/nami/internal/tools"
 )
 
 // isolateUserConfig points the user config and home directories at empty
@@ -440,4 +443,94 @@ func TestResumeSlashCommandKeepsTheResumedSessionsCost(t *testing.T) {
 	if shown != 1.25 {
 		t.Fatalf("the TUI was last shown a cost of %v, want 1.25", shown)
 	}
+}
+
+// rememberFileRead installs a fresh read state holding one read of a new file.
+// The returned check reports whether read_file would still answer a re-read
+// with its "unchanged since last read" stub instead of the content.
+func rememberFileRead(t *testing.T) func() bool {
+	t.Helper()
+	previous := toolpkg.GetGlobalFileReadState()
+	t.Cleanup(func() { toolpkg.SetGlobalFileReadState(previous) })
+	state := toolpkg.NewFileReadState()
+	toolpkg.SetGlobalFileReadState(state)
+
+	path := filepath.Join(t.TempDir(), "read.txt")
+	if err := os.WriteFile(path, []byte("contents\n"), 0o600); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat file: %v", err)
+	}
+	state.Remember(path, 1, 2000, info)
+	return func() bool { return state.SeenUnchanged(path, 1, 2000, info) }
+}
+
+// read_file answers a re-read of an unchanged file with a stub that points at
+// the earlier result. A command that leaves the conversation without that
+// result has to forget the read, or the model can no longer see the file.
+func TestSessionCommandsForgetFileReadsTheConversationLost(t *testing.T) {
+	isolateUserConfig(t)
+
+	t.Run("clear", func(t *testing.T) {
+		stillSeen := rememberFileRead(t)
+		cmd, _ := newTestSlashCommandContext(t, session.NewStore(t.TempDir()), rewindTestConversation(), newConversationTimeline())
+		if err := handleClearSlashCommand(cmd); err != nil {
+			t.Fatalf("handleClearSlashCommand: %v", err)
+		}
+		if stillSeen() {
+			t.Fatal("/clear kept the read, so the new session gets the stub for a file it never read")
+		}
+	})
+
+	t.Run("resume", func(t *testing.T) {
+		store := session.NewStore(t.TempDir())
+		if err := persistSessionState(store, sessionStateParams{
+			SessionID: "target-session",
+			CreatedAt: time.Now(),
+			Mode:      agent.ModeFast,
+			Model:     "github-copilot/gpt-5",
+			Messages:  []api.Message{{Role: api.RoleUser, Content: "restored question"}},
+		}); err != nil {
+			t.Fatalf("persist target session: %v", err)
+		}
+		stillSeen := rememberFileRead(t)
+		cmd, _ := newTestSlashCommandContext(t, store, rewindTestConversation(), newConversationTimeline())
+		cmd.args = "target-session"
+		if err := handleResumeSlashCommand(cmd); err != nil {
+			t.Fatalf("handleResumeSlashCommand: %v", err)
+		}
+		if stillSeen() {
+			t.Fatal("/resume kept the read, so the resumed session gets the stub for a result it does not hold")
+		}
+	})
+
+	t.Run("rewind", func(t *testing.T) {
+		stillSeen := rememberFileRead(t)
+		messages := rewindTestConversation()
+		cmd, picker := newPickerSlashCommandContext(t, session.NewStore(t.TempDir()), messages, rebuildConversationTimeline(messages))
+		if _, err := picker.run(t, cmd, handleRewindSlashCommand, ipc.EventRewindSelectionRequested, ipc.MsgRewindSelectionResponse,
+			func(requestID string) any {
+				return ipc.RewindSelectionResponsePayload{RequestID: requestID, MessageIndex: 0}
+			}); err != nil {
+			t.Fatalf("handleRewindSlashCommand: %v", err)
+		}
+		if stillSeen() {
+			t.Fatal("/rewind kept the read, though it dropped the result")
+		}
+	})
+
+	t.Run("compact", func(t *testing.T) {
+		stillSeen := rememberFileRead(t)
+		messages := longConversation(30)
+		cmd, _ := newTestSlashCommandContext(t, session.NewStore(t.TempDir()), messages, rebuildConversationTimeline(messages))
+		*cmd.client = &scriptedClient{caps: api.ModelCapabilities{SupportsToolUse: true, MaxContextWindow: 20_000, MaxOutputTokens: 1_000}}
+		if err := handleCompactSlashCommand(cmd); err != nil {
+			t.Fatalf("handleCompactSlashCommand: %v", err)
+		}
+		if stillSeen() {
+			t.Fatal("/compact kept the read, though the summary replaced the result")
+		}
+	})
 }

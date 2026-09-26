@@ -604,3 +604,26 @@ func TestATurnReportsThatTheSessionCouldNotBeSaved(t *testing.T) {
 	}
 	t.Fatalf("no notice said the session was not saved; the TUI received:\n%s", h.output.String())
 }
+
+// A compaction in the middle of a turn replaces earlier tool results with a
+// summary, so read_file must return content again for the reads it dropped.
+func TestMidTurnCompactionForgetsFileReads(t *testing.T) {
+	client := &scriptedClient{
+		caps:  api.ModelCapabilities{SupportsToolUse: true, MaxContextWindow: 20_000, MaxOutputTokens: 1_000},
+		turns: []scriptedTurn{{text: "Here is what I found."}},
+	}
+	h := newTurnHarness(t, client, echoTool{})
+	h.state.messages = longConversation(30)
+	h.state.timeline = rebuildConversationTimeline(h.state.messages)
+	stillSeen := rememberFileRead(t)
+
+	if err := handleUserInputMessage(t.Context(), ipc.UserInputPayload{Text: "keep going"}, h.deps, h.state); err != nil {
+		t.Fatalf("handleUserInputMessage: %v", err)
+	}
+	if !compact.IsSummaryMessage(h.state.messages[0]) {
+		t.Fatalf("the turn did not compact; the test no longer exercises the rewrite")
+	}
+	if stillSeen() {
+		t.Fatal("the compacted turn kept the read, so a re-read gets the stub for a result the summary replaced")
+	}
+}

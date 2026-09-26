@@ -75,6 +75,19 @@ func (s *FileReadState) Invalidate(path string) {
 	s.mu.Unlock()
 }
 
+// Reset forgets every read. The "unchanged since last read" answer points the
+// model back at an earlier result, so once the conversation no longer holds
+// those results - compacted, rewound, cleared or swapped for another session -
+// read_file has to return the content again.
+func (s *FileReadState) Reset() {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	clear(s.entries)
+	s.mu.Unlock()
+}
+
 func (s *FileReadState) RecordMetric(metric FileReadMetric) {
 	if s == nil {
 		return

@@ -48,6 +48,9 @@ func handleCompactSlashCommand(cmd *slashCommandContext) error {
 	}
 
 	cmd.state.Messages = result.Messages
+	if compactionDroppedToolResults(result) {
+		forgetFileReads()
+	}
 	if compactionMovedMessages(result) {
 		// The timeline names messages by position, and the summary moved
 		// them; the saved timeline would otherwise point a later /resume at
@@ -103,6 +106,7 @@ func handleResumeSlashCommand(cmd *slashCommandContext) error {
 	cmd.state.Messages = append(cmd.state.Messages[:0], restored.Messages...)
 	cmd.state.SessionID = restored.Metadata.SessionID
 	setActiveSession(cmd.state.SessionID)
+	forgetFileReads()
 	// Every save records the tracker's total as the session's cost, so the
 	// tracker has to start from the resumed session's own spend. Left with
 	// the previous session's, the first save would overwrite it.
@@ -224,6 +228,7 @@ func handleRewindSlashCommand(cmd *slashCommandContext) error {
 	}
 
 	cmd.state.Messages = append(cmd.state.Messages[:0], cmd.state.Messages[:selectedIndex+1]...)
+	forgetFileReads()
 	cmd.state.Timeline = trimConversationTimelineToMessage(
 		cmd.state.Timeline,
 		conversationTimelineMessageID(selectedIndex),
@@ -453,6 +458,7 @@ func handleClearSlashCommand(cmd *slashCommandContext) error {
 	}
 
 	cmd.state.Messages = cmd.state.Messages[:0]
+	forgetFileReads()
 	// The timeline indexes messages by position, so the old one would both
 	// leak the previous session's transcript into the new session's saved
 	// timeline and swallow the new messages whose positions it already holds.

@@ -152,6 +152,13 @@ func finalizeToolOutput(
 	return finalOutput, truncated || spillPath != "", spilled, nil
 }
 
+// forgetFileReads makes read_file return content again for every file. Its
+// "unchanged since last read" answer points the model at an earlier result,
+// which a compacted, rewound, cleared or resumed conversation no longer holds.
+func forgetFileReads() {
+	toolpkg.GetGlobalFileReadState().Reset()
+}
+
 func rememberInlineReadResult(output toolpkg.ToolOutput, spilled bool) {
 	if spilled || strings.TrimSpace(output.FilePath) == "" || output.ReadLimit <= 0 {
 		return
