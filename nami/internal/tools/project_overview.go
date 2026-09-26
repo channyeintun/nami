@@ -192,11 +192,10 @@ func (t *ProjectOverviewTool) Execute(ctx context.Context, input ToolInput) (Too
 		}
 		return nil
 	})
-	if walkErr != nil && walkErr != filepath.SkipAll {
+	// WalkDir reports SkipAll as success, and the callback returns ctx.Err()
+	// on cancellation, so any error left here is a real failure.
+	if walkErr != nil {
 		return ToolOutput{}, walkErr
-	}
-	if walkErr == ctx.Err() {
-		return ToolOutput{}, ctx.Err()
 	}
 
 	summary := projectOverview{

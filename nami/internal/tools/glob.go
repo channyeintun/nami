@@ -131,11 +131,10 @@ func (t *GlobTool) Execute(ctx context.Context, input ToolInput) (ToolOutput, er
 		}
 		return nil
 	})
+	// The walk callback returns ctx.Err() on cancellation, so a cancelled
+	// search surfaces here as an ordinary walk error.
 	if err != nil && !errors.Is(err, errGlobLimitReached) {
 		return ToolOutput{}, err
-	}
-	if errors.Is(err, ctx.Err()) {
-		return ToolOutput{}, ctx.Err()
 	}
 
 	sort.Strings(matches)
