@@ -149,13 +149,21 @@ func openLocked() error {
 	if strings.TrimSpace(sessionDir) == "" {
 		return errors.New("session directory is not configured")
 	}
-	if err := os.MkdirAll(sessionDir, 0o755); err != nil {
+	// The log holds conversation traffic, so it is kept private like the rest
+	// of the session's data.
+	if err := os.MkdirAll(sessionDir, 0o700); err != nil {
 		Enabled = false
 		return err
 	}
 	path := filepath.Join(sessionDir, DefaultPath)
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 	if err != nil {
+		Enabled = false
+		return err
+	}
+	// A log created before this was readable by everyone.
+	if err := f.Chmod(0o600); err != nil {
+		_ = f.Close()
 		Enabled = false
 		return err
 	}

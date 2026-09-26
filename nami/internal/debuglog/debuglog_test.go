@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
@@ -386,6 +388,45 @@ func TestEmitIsInertWhenDisabled(t *testing.T) {
 	}
 	if CurrentPath() != "" {
 		t.Fatalf("CurrentPath = %q, want empty", CurrentPath())
+	}
+}
+
+// The log holds conversation traffic: it must not be readable by other users,
+// including a log left behind by an older version.
+func TestEnableKeepsTheLogPrivate(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix permission bits")
+	}
+	dir := filepath.Join(t.TempDir(), "session")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	old := filepath.Join(dir, DefaultPath)
+	if err := os.WriteFile(old, []byte("{}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := ConfigureSession("private-log-test", dir); err != nil {
+		t.Fatalf("ConfigureSession: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := Disable(); err != nil {
+			t.Errorf("Disable: %v", err)
+		}
+		if err := ConfigureSession("", ""); err != nil {
+			t.Errorf("ConfigureSession reset: %v", err)
+		}
+	})
+
+	path, err := Enable()
+	if err != nil {
+		t.Fatalf("Enable: %v", err)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if mode := info.Mode().Perm(); mode != 0o600 {
+		t.Errorf("debug log mode = %v, want 0600", mode)
 	}
 }
 
