@@ -136,7 +136,7 @@ func TestExecuteToolCallsForSubagentTruncatesWhenTheSpillFails(t *testing.T) {
 	registry := newFakeRegistry(&fakeTool{name: "read_file", permission: toolpkg.PermissionReadOnly, output: huge})
 
 	results, err := executeToolCallsForSubagent(
-		t.Context(), exploreSubagentType, nil, registry, permissions.NewContext(), brokenArtifacts,
+		t.Context(), exploreSubagentType, nil, registry, permissions.NewContext(), nil, brokenArtifacts,
 		"child-session", t.TempDir(), nil, 0,
 		[]api.ToolCall{{ID: "call-read", Name: "read_file", Input: "{}"}},
 	)
@@ -152,6 +152,35 @@ func TestExecuteToolCallsForSubagentTruncatesWhenTheSpillFails(t *testing.T) {
 	}
 	if !strings.Contains(output, "could not be saved") {
 		t.Fatalf("output does not say why the full result is missing: %q", output[len(output)-200:])
+	}
+}
+
+// A pre_tool_use hook that denies a call must deny it whether the parent
+// makes the call or delegates it to a child agent.
+func TestExecuteToolCallsForSubagentHonoursPreToolUseHooks(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the hook in this test is a POSIX shell script")
+	}
+	hooksDir := t.TempDir()
+	script := "#!/bin/sh\ncat >/dev/null\necho '{\"action\":\"deny\",\"message\":\"reads are audited\"}'\n"
+	if err := os.WriteFile(filepath.Join(hooksDir, "pre_tool_use"), []byte(script), 0o755); err != nil {
+		t.Fatalf("write hook: %v", err)
+	}
+	read := &fakeTool{name: "read_file", permission: toolpkg.PermissionReadOnly, output: "secret"}
+
+	results, err := executeToolCallsForSubagent(
+		t.Context(), exploreSubagentType, nil, newFakeRegistry(read), permissions.NewContext(), hooks.NewRunner(hooksDir), nil,
+		"child-session", t.TempDir(), nil, 0,
+		[]api.ToolCall{{ID: "call-read", Name: "read_file", Input: "{}"}},
+	)
+	if err != nil {
+		t.Fatalf("executeToolCallsForSubagent: %v", err)
+	}
+	if read.calls.Load() != 0 {
+		t.Fatal("the child ran a call its pre_tool_use hook denied")
+	}
+	if len(results) != 1 || !results[0].IsError || results[0].Output != "reads are audited" {
+		t.Fatalf("results = %+v, want the hook's denial", results)
 	}
 }
 

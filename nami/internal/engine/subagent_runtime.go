@@ -324,7 +324,7 @@ func executeSubagent(
 			return trackModelStream(callCtx, childBridge, childTracker, client, modelReq)
 		},
 		ExecuteToolBatch: func(callCtx context.Context, calls []api.ToolCall) ([]api.ToolResult, error) {
-			return executeToolCallsForSubagent(callCtx, subagentType, rolePolicy, executionRegistry, childPermissionCtx, artifactManager, childSessionID, sessionStore.SessionDir(childSessionID), childTracker, client.Capabilities().MaxOutputTokens, calls)
+			return executeToolCallsForSubagent(callCtx, subagentType, rolePolicy, executionRegistry, childPermissionCtx, hookRunner, artifactManager, childSessionID, sessionStore.SessionDir(childSessionID), childTracker, client.Capabilities().MaxOutputTokens, calls)
 		},
 		CompactMessages: func(callCtx context.Context, current []api.Message, reason agent.CompactReason) (compact.CompactResult, error) {
 			sessionMemory, _ := loadSessionMemorySnapshot(callCtx, artifactManager, childSessionID)
@@ -914,6 +914,7 @@ func executeToolCallsForSubagent(
 	rolePolicy *subagentRolePolicy,
 	registry *toolpkg.Registry,
 	permissionCtx *permissions.Context,
+	hookRunner *hooks.Runner,
 	artifactManager *artifactspkg.Manager,
 	sessionID string,
 	sessionDir string,
@@ -959,6 +960,12 @@ func executeToolCallsForSubagent(
 			results[index] = api.ToolResult{ToolCallID: normalized.ID, Output: fmt.Sprintf("tool %q is not allowed in the %s subagent", tool.Name(), subagentType), IsError: true}
 			continue
 		}
+		// The user's tool hooks apply to every call the agent makes; if they
+		// skipped children, delegating a call would be a way around them.
+		if reason, denied := preToolUseHookDenial(ctx, hookRunner, sessionID, normalized); denied {
+			results[index] = api.ToolResult{ToolCallID: normalized.ID, Output: reason, IsError: true}
+			continue
+		}
 		pending = append(pending, toolpkg.PendingCall{Index: index, Tool: tool, Input: input})
 	}
 
@@ -995,6 +1002,9 @@ func executeToolCallsForSubagent(
 			toolResult.Output = output
 			toolResult.IsError = result.Output.IsError
 			results[result.Index] = toolResult
+			if !result.Output.IsError {
+				runPostToolUseHooks(ctx, hookRunner, sessionID, call, output)
+			}
 		}
 	}
 

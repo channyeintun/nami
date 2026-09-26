@@ -233,8 +233,20 @@ func runPreToolUseHooks(
 	feedback string,
 	bridge *ipc.Bridge,
 ) (bool, error) {
-	if hookRunner == nil {
+	reason, denied := preToolUseHookDenial(ctx, hookRunner, sessionID, call)
+	if !denied {
 		return false, nil
+	}
+	reason = appendPermissionFeedback(reason, feedback)
+	results[index] = api.ToolResult{ToolCallID: call.ID, Output: reason, IsError: true}
+	return true, emitToolError(bridge, call, reason, toolpkg.ToolOutput{}, nil)
+}
+
+// preToolUseHookDenial runs the pre_tool_use hooks for a call and reports
+// whether one of them denied it, with the reason to give the model.
+func preToolUseHookDenial(ctx context.Context, hookRunner *hooks.Runner, sessionID string, call api.ToolCall) (string, bool) {
+	if hookRunner == nil {
+		return "", false
 	}
 	responses, _ := hookRunner.Run(ctx, hooks.Payload{
 		Type:      hooks.HookPreToolUse,
@@ -246,15 +258,12 @@ func runPreToolUseHooks(
 		if resp.Action != "deny" {
 			continue
 		}
-		reason := resp.Message
-		if reason == "" {
-			reason = "blocked by pre_tool_use hook"
+		if resp.Message == "" {
+			return "blocked by pre_tool_use hook", true
 		}
-		reason = appendPermissionFeedback(reason, feedback)
-		results[index] = api.ToolResult{ToolCallID: call.ID, Output: reason, IsError: true}
-		return true, emitToolError(bridge, call, reason, toolpkg.ToolOutput{}, nil)
+		return resp.Message, true
 	}
-	return false, nil
+	return "", false
 }
 
 func emitToolStart(bridge *ipc.Bridge, call api.ToolCall) error {
