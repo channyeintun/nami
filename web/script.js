@@ -44,6 +44,19 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // lucide.createIcons() swaps each <i data-lucide> placeholder for an <svg>
+    // that keeps the data-lucide attribute, so the icon has to be found by that
+    // attribute each time rather than as the original <i>.
+    const setCopyIcon = (button, name) => {
+        const icon = button.querySelector("[data-lucide]");
+        if (!icon) return;
+        icon.setAttribute("data-lucide", name);
+        icon.classList.toggle("text-brand", name === "check");
+        if (typeof lucide !== 'undefined') {
+            lucide.createIcons();
+        }
+    };
+
     // Copy functionality
     document.querySelectorAll(".copy-button").forEach((button) => {
         button.addEventListener("click", async () => {
@@ -58,22 +71,8 @@ document.addEventListener('DOMContentLoaded', () => {
             try {
                 await navigator.clipboard.writeText(text);
 
-                const icon = button.querySelector("i");
-                if (icon) {
-                    icon.setAttribute("data-lucide", "check");
-                    icon.classList.add("text-brand");
-                    if (typeof lucide !== 'undefined') {
-                        lucide.createIcons();
-                    }
-
-                    setTimeout(() => {
-                        icon.setAttribute("data-lucide", "copy");
-                        icon.classList.remove("text-brand");
-                        if (typeof lucide !== 'undefined') {
-                            lucide.createIcons();
-                        }
-                    }, 2000);
-                }
+                setCopyIcon(button, "check");
+                setTimeout(() => setCopyIcon(button, "copy"), 2000);
             } catch (err) {
                 console.error("Failed to copy: ", err);
             }
