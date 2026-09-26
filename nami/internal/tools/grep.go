@@ -151,20 +151,20 @@ func (t *GrepTool) Execute(ctx context.Context, input ToolInput) (ToolOutput, er
 		return ToolOutput{}, fmt.Errorf("head_limit and offset must be >= 0")
 	}
 
-	var rawOutput, skipped string
+	var result searchOutput
 	var toolErr error
 	if _, lookupErr := exec.LookPath("rg"); lookupErr == nil {
-		rawOutput, skipped, toolErr = runRipgrep(ctx, searchPath, pattern, outputMode, normalizedParams)
+		result, toolErr = runRipgrep(ctx, searchPath, pattern, outputMode, normalizedParams)
 	} else {
-		rawOutput, skipped, toolErr = runGrepFallback(ctx, searchPath, pattern, outputMode, normalizedParams)
+		result, toolErr = runGrepFallback(ctx, searchPath, pattern, outputMode, normalizedParams)
 	}
 	if toolErr != nil {
 		return ToolOutput{}, toolErr
 	}
 
-	lines := splitOutputLines(rawOutput)
+	lines := splitOutputLines(result.lines)
 	if len(lines) == 0 {
-		return ToolOutput{Output: appendSkippedPathsNote("No matches found", skipped)}, nil
+		return ToolOutput{Output: appendSkippedPathsNote("No matches found", result.skipped)}, nil
 	}
 
 	lines = applyOffset(lines, offset)
@@ -178,8 +178,24 @@ func (t *GrepTool) Execute(ctx context.Context, input ToolInput) (ToolOutput, er
 	if truncated {
 		output += fmt.Sprintf("\n(Results are truncated. Use offset=%d to continue.)", offset+len(lines))
 	}
+	if result.capped {
+		truncated = true
+		output += fmt.Sprintf("\n(Search output passed %d MB and was cut there. Narrow the pattern, path or glob to see the rest.)", maxSearchOutputBytes>>20)
+	}
 
-	return ToolOutput{Output: appendSkippedPathsNote(output, skipped), Truncated: truncated}, nil
+	return ToolOutput{Output: appendSkippedPathsNote(output, result.skipped), Truncated: truncated}, nil
+}
+
+// maxSearchOutputBytes bounds how much of a search backend's output is kept.
+// offset and head_limit only apply afterwards, and a broad pattern over a
+// large tree can print far more than grep_search could ever show.
+const maxSearchOutputBytes = 8 << 20
+
+// searchOutput is what a search backend printed.
+type searchOutput struct {
+	lines   string // result lines
+	skipped string // errors for paths the backend could not read
+	capped  bool   // lines end at maxSearchOutputBytes; the rest was dropped
 }
 
 const maxSkippedPathLines = 5
@@ -205,32 +221,46 @@ func appendSkippedPathsNote(output, skipped string) string {
 // therefore a partial result: the output is kept and the error text is
 // returned as skipped. A failure with no output is a real error, such as an
 // invalid pattern.
-func runSearchCommand(ctx context.Context, name string, args []string) (output, skipped string, err error) {
+func runSearchCommand(ctx context.Context, name string, args []string) (searchOutput, error) {
 	cmd := exec.CommandContext(ctx, name, args...)
-	var stdout bytes.Buffer
+	stdout := &cappedBuffer{limit: maxSearchOutputBytes}
 	var stderr bytes.Buffer
-	cmd.Stdout = &stdout
+	cmd.Stdout = stdout
 	cmd.Stderr = &stderr
 	runErr := cmd.Run()
 	if runErr == nil {
-		return stdout.String(), "", nil
+		return keptSearchLines(stdout), nil
 	}
 	if ctx.Err() != nil {
-		return "", "", ctx.Err()
+		return searchOutput{}, ctx.Err()
 	}
 	errorText := strings.TrimSpace(stderr.String())
 	if exitErr, ok := errors.AsType[*exec.ExitError](runErr); ok {
 		if exitErr.ExitCode() == 1 {
-			return "", "", nil
+			return searchOutput{}, nil
 		}
-		if stdout.Len() > 0 {
-			return stdout.String(), errorText, nil
+		if result := keptSearchLines(stdout); result.lines != "" {
+			result.skipped = errorText
+			return result, nil
 		}
 	}
 	if errorText == "" {
-		return "", "", fmt.Errorf("%s: %w", name, runErr)
+		return searchOutput{}, fmt.Errorf("%s: %w", name, runErr)
 	}
-	return "", "", fmt.Errorf("%s: %s: %w", name, errorText, runErr)
+	return searchOutput{}, fmt.Errorf("%s: %s: %w", name, errorText, runErr)
+}
+
+// keptSearchLines returns the output a capped buffer kept. When the cap cut
+// the output it cut the last line too, and part of a line is not a result.
+func keptSearchLines(stdout *cappedBuffer) searchOutput {
+	lines := stdout.buffer.String()
+	if stdout.dropped == 0 {
+		return searchOutput{lines: lines}
+	}
+	if complete, _, found := strings.CutLast(lines, "\n"); found {
+		lines = complete
+	}
+	return searchOutput{lines: lines, capped: true}
 }
 
 func resolveSearchPath(params map[string]any) (string, error) {
@@ -251,7 +281,7 @@ func resolveSearchPath(params map[string]any) (string, error) {
 	return searchPath, nil
 }
 
-func runRipgrep(ctx context.Context, searchPath, pattern, outputMode string, params map[string]any) (string, string, error) {
+func runRipgrep(ctx context.Context, searchPath, pattern, outputMode string, params map[string]any) (searchOutput, error) {
 	args := []string{"--color=never"}
 
 	switch outputMode {
@@ -287,7 +317,7 @@ func runRipgrep(ctx context.Context, searchPath, pattern, outputMode string, par
 	return runSearchCommand(ctx, "rg", args)
 }
 
-func runGrepFallback(ctx context.Context, searchPath, pattern, outputMode string, params map[string]any) (string, string, error) {
+func runGrepFallback(ctx context.Context, searchPath, pattern, outputMode string, params map[string]any) (searchOutput, error) {
 	args := []string{"-R", "-E"}
 	if outputMode == "files_with_matches" {
 		args = append(args, "-l")
@@ -313,17 +343,18 @@ func runGrepFallback(ctx context.Context, searchPath, pattern, outputMode string
 	// -e keeps a pattern such as "--verbose" from being parsed as an option.
 	args = append(args, "-e", pattern, "--", searchPath)
 
-	output, skipped, err := runSearchCommand(ctx, "grep", args)
+	result, err := runSearchCommand(ctx, "grep", args)
 	if err != nil {
-		return "", "", err
+		return searchOutput{}, err
 	}
 
-	lines := splitOutputLines(output)
+	lines := splitOutputLines(result.lines)
 	if glob, ok := stringParam(params, "glob"); ok && strings.TrimSpace(glob) != "" {
 		patterns := splitGlobPatterns(glob)
 		lines = filterGrepLinesByGlob(lines, patterns)
 	}
-	return strings.Join(lines, "\n"), skipped, nil
+	result.lines = strings.Join(lines, "\n")
+	return result, nil
 }
 
 func appendContextArgs(args *[]string, params map[string]any, outputMode string) {

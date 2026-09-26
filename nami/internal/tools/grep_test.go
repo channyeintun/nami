@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -12,7 +13,71 @@ import (
 	"testing"
 )
 
-type searchRunner func(ctx context.Context, searchPath, pattern, outputMode string, params map[string]any) (string, string, error)
+type searchRunner func(ctx context.Context, searchPath, pattern, outputMode string, params map[string]any) (searchOutput, error)
+
+// A broad pattern over a large tree can print far more than grep_search can
+// show. What is kept is capped, cut at a line boundary, and flagged.
+func TestRunSearchCommandCapsOutput(t *testing.T) {
+	yes, head := lookPathsOrSkip(t, "yes", "head")
+	// 40-byte lines, twice the cap.
+	script := fmt.Sprintf("%s %s | %s -n %d", yes, strings.Repeat("0", 39), head, 2*maxSearchOutputBytes/40)
+	result, err := runSearchCommand(context.Background(), "sh", []string{"-c", script})
+	if err != nil {
+		t.Fatalf("runSearchCommand: %v", err)
+	}
+	if !result.capped {
+		t.Fatal("capped = false for output twice the cap")
+	}
+	if len(result.lines) > maxSearchOutputBytes {
+		t.Fatalf("kept %d bytes, over the %d byte cap", len(result.lines), maxSearchOutputBytes)
+	}
+	for _, line := range splitOutputLines(result.lines) {
+		if line != strings.Repeat("0", 39) {
+			t.Fatalf("kept a partial line %q", line)
+		}
+	}
+}
+
+func TestGrepReportsCappedSearchOutput(t *testing.T) {
+	yes, head := lookPathsOrSkip(t, "yes", "head")
+	workspace := t.TempDir()
+	match := filepath.Join(workspace, "a.txt") + ":1:needle"
+	// A fake rg that prints more matching lines than the cap keeps.
+	fakeDir := t.TempDir()
+	script := fmt.Sprintf("#!/bin/sh\n%s '%s' | %s -n %d\n", yes, match, head, 2*maxSearchOutputBytes/len(match))
+	if err := os.WriteFile(filepath.Join(fakeDir, "rg"), []byte(script), 0o755); err != nil {
+		t.Fatalf("write fake rg: %v", err)
+	}
+	t.Setenv("PATH", fakeDir)
+
+	output, err := NewGrepTool().Execute(context.Background(), ToolInput{Params: map[string]any{
+		"query": "needle", "path": workspace, "output_mode": "content",
+	}})
+	if err != nil {
+		t.Fatalf("grep_search: %v", err)
+	}
+	if !output.Truncated || !strings.Contains(output.Output, "Search output passed") {
+		t.Fatalf("output = %.200q... truncated=%v, want the cap reported", output.Output, output.Truncated)
+	}
+}
+
+// lookPathsOrSkip resolves the named commands to absolute paths, for scripts
+// that run after PATH has been replaced.
+func lookPathsOrSkip(t *testing.T, first, second string) (string, string) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("needs a POSIX shell")
+	}
+	firstPath, err := exec.LookPath(first)
+	if err != nil {
+		t.Skipf("%s not installed", first)
+	}
+	secondPath, err := exec.LookPath(second)
+	if err != nil {
+		t.Skipf("%s not installed", second)
+	}
+	return firstPath, secondPath
+}
 
 // installFakeRipgrep puts an rg on PATH that prints the given stdout and
 // stderr and exits with the given status, so each exit-status branch of
@@ -97,13 +162,13 @@ func TestSearchRunnersTreatLeadingDashAsPattern(t *testing.T) {
 			}
 			cases := map[string]string{"--verbose": "run --verbose", "-q": "keep -q here"}
 			for query, wantLine := range cases {
-				output, _, err := run(context.Background(), workspace, regexp.QuoteMeta(query), "content", map[string]any{})
+				result, err := run(context.Background(), workspace, regexp.QuoteMeta(query), "content", map[string]any{})
 				if err != nil {
 					t.Fatalf("search %q: %v", query, err)
 				}
-				lines := splitOutputLines(output)
+				lines := splitOutputLines(result.lines)
 				if len(lines) != 1 || !strings.HasSuffix(lines[0], wantLine) || !strings.HasPrefix(lines[0], file) {
-					t.Fatalf("search %q = %q, want the single line %q from %s", query, output, wantLine, file)
+					t.Fatalf("search %q = %q, want the single line %q from %s", query, result.lines, wantLine, file)
 				}
 			}
 		})
