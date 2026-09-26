@@ -37,7 +37,10 @@ const engineSubcommands = new Set(["debug-view", "mcp", "timing-summary"]);
 // the launcher are passed on, so stopping nami does not orphan the engine.
 function runEngine(engineArgs) {
   const child = spawn(enginePath, engineArgs, { stdio: "inherit" });
-  const forwardedSignals = ["SIGINT", "SIGTERM", "SIGHUP"];
+  // Windows delivers console events to the engine itself, and Deno there only
+  // accepts SIGINT and SIGBREAK listeners, so forward nothing on win32.
+  const forwardedSignals =
+    process.platform === "win32" ? [] : ["SIGINT", "SIGTERM", "SIGHUP"];
   const forward = (signal) => child.kill(signal);
   for (const signal of forwardedSignals) {
     process.on(signal, forward);
