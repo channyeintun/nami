@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"slices"
 	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -258,6 +259,46 @@ func TestRunWithoutRunnerErrors(t *testing.T) {
 	resolved := mustResolve(t, Spec{Nodes: []NodeSpec{node("a")}})
 	if _, err := resolved.Run(t.Context(), Options{}); !errors.Is(err, ErrNoRunner) {
 		t.Fatalf("err = %v, want ErrNoRunner", err)
+	}
+}
+
+// Once the caller cancels, nothing new may launch. Each launch is a child agent
+// that runs start hooks and writes a session before it would notice the
+// cancelled context, so the remaining nodes must be skipped, not attempted.
+func TestRunStopsLaunchingNodesOnceCancelled(t *testing.T) {
+	resolved := mustResolve(t, Spec{
+		MaxParallel: 1,
+		Nodes:       []NodeSpec{node("first"), node("second"), node("third", "first")},
+	})
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	var launched []string
+	result, err := resolved.Run(ctx, Options{
+		Run: func(_ context.Context, req NodeRequest) (NodeResult, error) {
+			launched = append(launched, req.ID)
+			// The user cancels while the first node is finishing successfully.
+			cancel()
+			return NodeResult{Output: "out:" + req.ID}, nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if !slices.Equal(launched, []string{"first"}) {
+		t.Fatalf("launched %v after cancellation, want only [first]", launched)
+	}
+	if got := statusOf(result, "first").Status; got != StatusSucceeded {
+		t.Fatalf("first status = %q, want succeeded", got)
+	}
+	for _, id := range []string{"second", "third"} {
+		state := statusOf(result, id)
+		if state.Status != StatusSkipped || !strings.Contains(state.Error, "cancelled") {
+			t.Fatalf("%s = %+v, want skipped as cancelled", id, state)
+		}
+	}
+	if result.Status != StatusFailed || result.Skipped != 2 {
+		t.Fatalf("result = %+v, want a failed run with two skipped nodes", result)
 	}
 }
 

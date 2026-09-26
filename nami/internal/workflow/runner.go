@@ -209,6 +209,17 @@ func (r *runState) execute(ctx context.Context) Result {
 	inflight := 0
 
 	for {
+		// A cancelled run launches nothing further. Nodes already in flight
+		// see the cancelled context and settle on their own; a node that has
+		// not started is skipped rather than handed to a runner that would
+		// set up a whole child agent before noticing the cancellation.
+		if ctx.Err() != nil {
+			reason := fmt.Sprintf("run cancelled: %v", context.Cause(ctx))
+			for idx := range r.states {
+				r.skip(idx, reason)
+			}
+			ready = nil
+		}
 		for inflight < r.limit && len(ready) > 0 {
 			idx := ready[0]
 			ready = ready[1:]
@@ -378,17 +389,22 @@ func (r *runState) propagateFailure(idx int) []int {
 	}
 
 	for _, id := range doomed {
-		doomedIdx := r.index[id]
-		if r.states[doomedIdx].Status != StatusQueued {
-			continue
-		}
-		r.states[doomedIdx].Status = StatusSkipped
-		r.states[doomedIdx].Error = reason
-		r.states[doomedIdx].CompletedAt = r.clock()
-		r.completed++
-		r.emit(doomedIdx)
+		r.skip(r.index[id], reason)
 	}
 	return nil
+}
+
+// skip marks a node that has not started as skipped. A node already running or
+// finished keeps its outcome.
+func (r *runState) skip(idx int, reason string) {
+	if r.states[idx].Status != StatusQueued {
+		return
+	}
+	r.states[idx].Status = StatusSkipped
+	r.states[idx].Error = reason
+	r.states[idx].CompletedAt = r.clock()
+	r.completed++
+	r.emit(idx)
 }
 
 func (r *runState) emit(idx int) {
