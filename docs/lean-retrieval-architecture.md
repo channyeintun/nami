@@ -54,8 +54,8 @@ This means the graph persists across turns within one session instead of being r
 
 The retrieval pass runs during the query loop before model invocation.
 
-- `nami/internal/agent/loop.go`
-- `runLiveRetrieval(...)`
+- `nami/internal/agent/loop_retrieval.go`
+- `runLiveRetrieval(...)`, called from `runLiveRetrievalStage` in `nami/internal/agent/iteration_pipeline.go`
 
 Per turn it does this:
 
@@ -320,7 +320,6 @@ It shows two complementary views:
 Related assets:
 
 - `web/docs.html`
-- `docs/architecture.png`
 
 The important conceptual mapping is:
 
@@ -346,7 +345,8 @@ It is a lightweight, repo-first retrieval layer inside a broader context system 
 ## Key source files
 
 - `nami/internal/agent/query_stream.go` — session state owns the graph
-- `nami/internal/agent/loop.go` — runs retrieval and emits telemetry
+- `nami/internal/agent/loop_retrieval.go` — runs retrieval
+- `nami/internal/agent/loop_events.go` — emits retrieval and attempt-log telemetry
 - `nami/internal/agent/retrieval.go` — anchor extraction, scoring entrypoint, live snippet reads
 - `nami/internal/agent/retrieval_graph.go` — graph structure, parsing, invalidation, scoring expansion
 - `nami/internal/agent/context_pressure.go` — pressure gating and retrieval budget
