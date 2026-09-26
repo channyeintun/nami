@@ -2,6 +2,7 @@ import React, { type FC, useState } from "react";
 import { Box, Text, useInput } from "silvery";
 import { withoutLastCharacter } from "../utils/text.js";
 import type { UIArtifactReview } from "../hooks/useEvents.js";
+import { useTypeAheadGuard } from "../hooks/useTypeAheadGuard.js";
 
 interface ArtifactReviewPromptProps {
   review: UIArtifactReview;
@@ -28,6 +29,9 @@ const ArtifactReviewPrompt: FC<ArtifactReviewPromptProps> = ({
 }) => {
   const [feedback, setFeedback] = useState("");
   const [reviseFeedbackMode, setReviseFeedbackMode] = useState(false);
+  // "a" approves the plan and lets the agent start writing, so a letter typed
+  // for the prompt behind this one must not decide it.
+  const canDecide = useTypeAheadGuard();
 
   useInput((input, key) => {
     const text = key.text ?? input;
@@ -52,11 +56,18 @@ const ArtifactReviewPrompt: FC<ArtifactReviewPromptProps> = ({
       return;
     }
 
+    if (key.escape) {
+      onRespond("cancel");
+      return;
+    }
+    if (!canDecide()) {
+      return;
+    }
     if (input === "a") {
       onRespond("approve");
     } else if (input === "r") {
       setReviseFeedbackMode(true);
-    } else if (input === "c" || key.escape) {
+    } else if (input === "c") {
       onRespond("cancel");
     }
   });

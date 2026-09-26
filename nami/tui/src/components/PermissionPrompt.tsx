@@ -1,6 +1,7 @@
 import path from "node:path";
 import React, { type FC, useMemo, useState } from "react";
 import { Box, Text, useInput } from "silvery";
+import { useTypeAheadGuard } from "../hooks/useTypeAheadGuard.js";
 import type { PermissionResponseDecision } from "../protocol/types.js";
 import { truncateEnd } from "../utils/text.js";
 
@@ -95,6 +96,9 @@ const PermissionPrompt: FC<PermissionPromptProps> = ({
   onCancelTurn,
 }) => {
   const [selectedIndex, setSelectedIndex] = useState(0);
+  // Enter and every shortcut but N approve, so a key typed for the prompt
+  // behind this one must not decide it.
+  const canDecide = useTypeAheadGuard();
 
   useInput((input, key) => {
     if (key.escape) {
@@ -116,14 +120,14 @@ const PermissionPrompt: FC<PermissionPromptProps> = ({
 
     if (key.return) {
       const selected = OPTIONS[selectedIndex];
-      if (selected) {
+      if (selected && canDecide()) {
         onRespond(selected.decision);
       }
       return;
     }
 
     const shortcut = input?.toLowerCase();
-    if (!shortcut) {
+    if (!shortcut || !canDecide()) {
       return;
     }
 

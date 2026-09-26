@@ -944,7 +944,10 @@ const App: FC<AppProps> = ({ enginePath, model, mode, autoMode }) => {
             minHeight={0}
             marginTop={1}
           >
+            {/* Keyed so each request starts with a fresh selection and
+                type-ahead guard, even when it replaces the one on screen. */}
             <PermissionPrompt
+              key={uiState.pendingPermission.request_id}
               tool={uiState.pendingPermission.tool}
               command={uiState.pendingPermission.command}
               rawInput={uiState.pendingPermission.raw_input}
@@ -966,6 +969,7 @@ const App: FC<AppProps> = ({ enginePath, model, mode, autoMode }) => {
             marginTop={1}
           >
             <ArtifactReviewPrompt
+              key={uiState.pendingArtifactReview.requestId}
               review={uiState.pendingArtifactReview}
               onRespond={handleArtifactReviewResponse}
             />
