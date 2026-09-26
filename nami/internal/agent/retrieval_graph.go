@@ -172,26 +172,29 @@ func (g *RetrievalGraph) Invalidate(path string) {
 }
 
 func (g *RetrievalGraph) invalidateFileNodes(path string) {
-	// Collect keys to remove: the file itself + any symbols sourced from it.
-	toRemove := []string{path}
+	// Drop the file's node, its outgoing edges, and the symbols it contains.
+	// Edges other files hold into this file stay: they record those files'
+	// own imports and test pairings, which this file changing does not undo.
+	symbols := make(map[string]struct{})
 	for _, edge := range g.Adj[path] {
 		if edge.Kind == EdgeContains {
-			toRemove = append(toRemove, edge.Target)
+			symbols[edge.Target] = struct{}{}
 		}
 	}
-	for _, key := range toRemove {
+	delete(g.Nodes, path)
+	delete(g.Adj, path)
+	if len(symbols) == 0 {
+		return
+	}
+	for key := range symbols {
 		delete(g.Nodes, key)
 		delete(g.Adj, key)
 	}
-	// Remove inbound edges pointing to removed keys.
-	removeSet := make(map[string]struct{}, len(toRemove))
-	for _, key := range toRemove {
-		removeSet[key] = struct{}{}
-	}
+	// Remove inbound edges pointing to the removed symbols.
 	for src, edges := range g.Adj {
 		filtered := edges[:0]
 		for _, e := range edges {
-			if _, remove := removeSet[e.Target]; !remove {
+			if _, remove := symbols[e.Target]; !remove {
 				filtered = append(filtered, e)
 			}
 		}

@@ -100,3 +100,26 @@ func TestRetrievalGraphForgetsSymbolAnchorsOnceTheSymbolIsGone(t *testing.T) {
 		t.Fatalf("expected no symbol anchors once no file defines RenderWidget, got %v", symbols)
 	}
 }
+
+func TestRetrievalGraphKeepsImportEdgesIntoInvalidatedFile(t *testing.T) {
+	// Editing an imported file changes that file's own structure, not the
+	// importer's, so the importer must still lead to it afterwards.
+	dir := t.TempDir()
+	writeRetrievalFile(t, dir, "go.mod", "module example.com/demo\n")
+	app := writeRetrievalFile(t, dir, "app.go", "package main\n\nimport \"example.com/demo/lib\"\n\nfunc main() { lib.Helper() }\n")
+	lib := writeRetrievalFile(t, dir, "lib/lib.go", "package lib\n\nfunc Helper() {}\n")
+
+	graph := NewRetrievalGraph(dir)
+	anchors := []RetrievalAnchor{{FilePath: app}}
+	candidates, _ := ScoreCandidates(anchors, dir, "", nil, graph)
+	if candidateScores(candidates)[lib] == 0 {
+		t.Fatalf("expected the imported file to be a candidate before invalidation, got %+v", candidates)
+	}
+
+	graph.Invalidate(lib)
+
+	candidates, _ = ScoreCandidates(anchors, dir, "", nil, graph)
+	if candidateScores(candidates)[lib] == 0 {
+		t.Fatalf("expected the imported file to stay a candidate after it was invalidated, got %+v", candidates)
+	}
+}
