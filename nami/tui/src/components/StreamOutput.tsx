@@ -3,9 +3,10 @@ import React, {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
-import { Box, ListView, MeasuredBox, Text } from "silvery";
+import { Box, ListView, MeasuredBox, Text, useInput } from "silvery";
 import { DEFAULT_PROMPT_MARKER } from "../constants/prompt.js";
 import type {
   UIActiveTurnStatus,
@@ -235,6 +236,41 @@ const StreamOutput: FC<StreamOutputProps> = ({
     [displayBlocks.length],
   );
 
+  // The list's built-in key handling also answers j, k, G and Ctrl+U/D, and
+  // silvery hands every key to every active handler, so typing "k" into the
+  // prompt moved the transcript and switched off auto-follow. It is turned
+  // off below; only navigation keys that type nothing move the transcript.
+  const viewportHeightRef = useRef(1);
+  useInput(
+    (_input, key) => {
+      const last = displayBlocks.length - 1;
+      if (last < 0) {
+        return;
+      }
+
+      const pageStep = Math.max(1, Math.floor(viewportHeightRef.current / 2));
+      let next: number;
+      if (key.upArrow) {
+        next = cursorIndex - 1;
+      } else if (key.downArrow) {
+        next = cursorIndex + 1;
+      } else if (key.pageUp) {
+        next = cursorIndex - pageStep;
+      } else if (key.pageDown) {
+        next = cursorIndex + pageStep;
+      } else if (key.home) {
+        next = 0;
+      } else if (key.end) {
+        next = last;
+      } else {
+        return;
+      }
+
+      handleCursorChange(Math.max(0, Math.min(last, next)));
+    },
+    { isActive: !searchQuery },
+  );
+
   useEffect(() => {
     onTranscriptSearchStatsChange?.(
       searchMatchIndices.length,
@@ -265,14 +301,16 @@ const StreamOutput: FC<StreamOutputProps> = ({
       marginTop={1}
       userSelect="text"
     >
-      {({ height }) => (
+      {({ height }) => {
+        viewportHeightRef.current = Math.max(1, height);
+        return (
         <ListView
           items={displayBlocks}
           height={Math.max(1, height)}
           nav
           cursorKey={cursorIndex}
           onCursor={handleCursorChange}
-          active={!searchQuery}
+          active={false}
           estimateHeight={(index) =>
             estimateDisplayBlockHeight(displayBlocks[index])
           }
@@ -324,7 +362,8 @@ const StreamOutput: FC<StreamOutputProps> = ({
             );
           }}
         />
-      )}
+        );
+      }}
     </MeasuredBox>
   );
 };
