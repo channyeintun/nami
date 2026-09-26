@@ -195,6 +195,34 @@ func TestNormalizeDelegatedPromptLineKeepsCharactersWhole(t *testing.T) {
 	}
 }
 
+func TestNormalizeSubagentFinalAnswer(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string
+		want    string
+	}{
+		{name: "tagged answer", content: "notes\n<final_answer>\nScope: x\n</final_answer>\n", want: "Scope: x"},
+		{name: "tags in any case", content: "<FINAL_ANSWER>done</Final_Answer>", want: "done"},
+		{name: "last closing tag ends the answer", content: "<final_answer>a</final_answer> b </final_answer>", want: "a</final_answer> b"},
+		{name: "no tags", content: "  plain answer  ", want: "plain answer"},
+		{name: "empty tags keep the whole text", content: "<final_answer> </final_answer>", want: "<final_answer> </final_answer>"},
+		{name: "closing tag before opening tag", content: "</final_answer> x <final_answer>", want: "</final_answer> x <final_answer>"},
+		// Characters whose lowercase form has a different byte length used
+		// to shift the cut: "İ" shrinks, the Kelvin sign shrinks, "Ⱥ" grows
+		// - far enough to slice past the end of the string and panic.
+		{name: "shrinking characters before the tags", content: strings.Repeat("İ", 5) + " <final_answer>x</final_answer>", want: "x"},
+		{name: "kelvin sign before the tags", content: "KK <final_answer>result</final_answer>", want: "result"},
+		{name: "growing characters before the tags", content: strings.Repeat("Ⱥ", 20) + " <final_answer>x</final_answer>", want: "x"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := normalizeSubagentFinalAnswer(tt.content); got != tt.want {
+				t.Fatalf("normalizeSubagentFinalAnswer(%q) = %q, want %q", tt.content, got, tt.want)
+			}
+		})
+	}
+}
+
 // requirePrivate fails unless path grants nothing to group or others.
 func requirePrivate(t *testing.T, path string) {
 	t.Helper()

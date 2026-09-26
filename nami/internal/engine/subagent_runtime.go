@@ -1042,21 +1042,38 @@ func subagentAllowsToolName(subagentType string, toolName string) bool {
 }
 
 func normalizeSubagentFinalAnswer(content string) string {
+	const openTag, closeTag = "<final_answer>", "</final_answer>"
 	trimmed := strings.TrimSpace(content)
 	if trimmed == "" {
 		return ""
 	}
-	lower := strings.ToLower(trimmed)
-	start := strings.Index(lower, "<final_answer>")
-	end := strings.LastIndex(lower, "</final_answer>")
-	if start == -1 || end == -1 || end <= start {
+	// The tags are found in a lowercased copy and the offsets used to slice
+	// the original, so the copy must keep every byte where it was. Unicode
+	// lowercasing does not: "Ⱥ" grows to three bytes and "İ" shrinks to one,
+	// which shifted the cut into the wrong text or past the end of it.
+	lower := asciiLower(trimmed)
+	start := strings.Index(lower, openTag)
+	beforeClose, _, found := strings.CutLast(lower, closeTag)
+	if start == -1 || !found || len(beforeClose) <= start {
 		return trimmed
 	}
-	inner := strings.TrimSpace(trimmed[start+len("<final_answer>") : end])
+	inner := strings.TrimSpace(trimmed[start+len(openTag) : len(beforeClose)])
 	if inner == "" {
 		return trimmed
 	}
 	return inner
+}
+
+// asciiLower lowercases ASCII letters only, leaving every other byte - and so
+// every byte offset - unchanged.
+func asciiLower(s string) string {
+	lowered := []byte(s)
+	for i, c := range lowered {
+		if 'A' <= c && c <= 'Z' {
+			lowered[i] = c + ('a' - 'A')
+		}
+	}
+	return string(lowered)
 }
 
 // Session data - prompts, transcripts, results - routinely carries secrets
