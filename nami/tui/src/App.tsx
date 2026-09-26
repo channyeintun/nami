@@ -45,6 +45,7 @@ import type {
   BackgroundAgentDetailPayload,
   BackgroundCommandDetailPayload,
   BackgroundCommandUpdatedPayload,
+  ErrorPayload,
   PermissionResponseDecision,
   SwarmDashboardSnapshotPayload,
   StreamEvent,
@@ -99,6 +100,10 @@ const App: FC<AppProps> = ({ enginePath, model, mode, autoMode }) => {
   const nextImageIdRef = useRef(1);
   const [queuedPrompts, setQueuedPrompts] = useState<QueuedPrompt[]>([]);
   const [nextQueuedPromptId, setNextQueuedPromptId] = useState(1);
+  // Set from sending a slash command until the engine has finished it. Many
+  // commands never start a turn, so without this the next prompt would go
+  // out before the command's reply and take that reply as its own.
+  const [slashCommandInFlight, setSlashCommandInFlight] = useState(false);
   const [pendingTaskNotifications, setPendingTaskNotifications] = useState<
     PendingTaskNotification[]
   >([]);
@@ -175,6 +180,10 @@ const App: FC<AppProps> = ({ enginePath, model, mode, autoMode }) => {
       	const payload = event.payload as SwarmDashboardSnapshotPayload | undefined;
       	setSwarmDashboardSnapshot(payload ?? { handoffs: [] });
       	}
+
+      if (endsSlashCommand(event)) {
+        setSlashCommandInFlight(false);
+      }
 
       handleEvent(event);
 
@@ -306,8 +315,9 @@ const App: FC<AppProps> = ({ enginePath, model, mode, autoMode }) => {
     (text: string, images: UserInputImagePayload[]) => {
       appendUserMessage(text);
       clearStream();
-      if (text.startsWith("/") && images.length === 0) {
+      if (isSlashCommandPrompt(text, images)) {
         const [cmd, ...rest] = text.slice(1).split(" ");
+        setSlashCommandInFlight(true);
         engine.sendCommand(cmd!, rest.join(" "));
         return;
       }
@@ -336,7 +346,13 @@ const App: FC<AppProps> = ({ enginePath, model, mode, autoMode }) => {
   }, [prompt.value]);
 
   useEffect(() => {
-    if (isQueuedPromptDispatchBlocked(uiState, isEngineReady)) {
+    if (
+      isQueuedPromptDispatchBlocked(
+        uiState,
+        isEngineReady,
+        slashCommandInFlight,
+      )
+    ) {
       return;
     }
 
@@ -352,6 +368,7 @@ const App: FC<AppProps> = ({ enginePath, model, mode, autoMode }) => {
   }, [
     isEngineReady,
     pendingTaskNotifications,
+    slashCommandInFlight,
     submitTaskNotification,
     uiState.isStreaming,
     uiState.pendingPermission,
@@ -364,7 +381,13 @@ const App: FC<AppProps> = ({ enginePath, model, mode, autoMode }) => {
   ]);
 
   useEffect(() => {
-    if (isQueuedPromptDispatchBlocked(uiState, isEngineReady)) {
+    if (
+      isQueuedPromptDispatchBlocked(
+        uiState,
+        isEngineReady,
+        slashCommandInFlight,
+      )
+    ) {
       return;
     }
 
@@ -385,6 +408,7 @@ const App: FC<AppProps> = ({ enginePath, model, mode, autoMode }) => {
     isEngineReady,
     pendingTaskNotifications.length,
     queuedPrompts,
+    slashCommandInFlight,
     submitPrompt,
     uiState.isStreaming,
     uiState.pendingPermission,
@@ -399,7 +423,11 @@ const App: FC<AppProps> = ({ enginePath, model, mode, autoMode }) => {
   const handleSendNextQueuedPrompt = useCallback(() => {
     if (
       pendingTaskNotifications.length > 0 ||
-      isQueuedPromptDispatchBlocked(uiState, isEngineReady)
+      isQueuedPromptDispatchBlocked(
+        uiState,
+        isEngineReady,
+        slashCommandInFlight,
+      )
     ) {
       return;
     }
@@ -416,6 +444,7 @@ const App: FC<AppProps> = ({ enginePath, model, mode, autoMode }) => {
     isEngineReady,
     pendingTaskNotifications.length,
     queuedPrompts,
+    slashCommandInFlight,
     submitPrompt,
     uiState,
   ]);
@@ -483,30 +512,16 @@ const App: FC<AppProps> = ({ enginePath, model, mode, autoMode }) => {
       uiState.pendingReasoningSelection ||
       uiState.pendingRewindSelection ||
       uiState.pendingResumeSelection ||
+      slashCommandInFlight ||
       pendingTaskNotifications.length > 0 ||
       queuedPrompts.length
     ) {
-      if (queuedPrompts.length > 0) {
-        setQueuedPrompts((current) => {
-          const lastQueuedPrompt = current.at(-1);
-          if (!lastQueuedPrompt) {
-            return current;
-          }
-
-          return [
-            ...current.slice(0, -1),
-            mergeQueuedPrompt(lastQueuedPrompt, text, images),
-          ];
-        });
-        return;
-      }
-
       const queuedPrompt: QueuedPrompt = {
         id: nextQueuedPromptId,
         text,
         images,
       };
-      setQueuedPrompts((current) => [...current, queuedPrompt]);
+      setQueuedPrompts((current) => enqueuePrompt(current, queuedPrompt));
       setNextQueuedPromptId((current) => current + 1);
       return;
     }
@@ -1260,9 +1275,11 @@ function selectVisibleArtifacts(
 function isQueuedPromptDispatchBlocked(
   uiState: ReturnType<typeof useEvents>["uiState"],
   isEngineReady: boolean,
+  slashCommandInFlight: boolean,
 ): boolean {
   return (
     !isEngineReady ||
+    slashCommandInFlight ||
     uiState.isStreaming ||
     uiState.pendingPermission !== null ||
     uiState.pendingAskUserQuestion !== null ||
@@ -1272,6 +1289,56 @@ function isQueuedPromptDispatchBlocked(
     uiState.pendingRewindSelection !== null ||
     uiState.pendingResumeSelection !== null
   );
+}
+
+/** Whether submitPrompt sends this as a slash command rather than to the model. */
+function isSlashCommandPrompt(
+  text: string,
+  images: UserInputImagePayload[],
+): boolean {
+  return text.startsWith("/") && images.length === 0;
+}
+
+/**
+ * Whether the engine has finished the slash command it was sent. It announces
+ * the session's goal after every built-in command, which for some (/plan,
+ * /fast) is all it sends; unknown commands and skills end with turn_complete;
+ * and a fatal error ends anything.
+ */
+function endsSlashCommand(event: StreamEvent): boolean {
+  switch (event.type) {
+    case "turn_complete":
+    case "goal_state_changed":
+      return true;
+    case "error":
+      return !(event.payload as ErrorPayload | undefined)?.recoverable;
+    default:
+      return false;
+  }
+}
+
+/**
+ * Adds a prompt typed while the engine is busy. Consecutive prompts are sent
+ * as one message, but a slash command always stays on its own: joined, it
+ * would reach the engine as a garbled command, or as text for the model.
+ */
+function enqueuePrompt(
+  queue: QueuedPrompt[],
+  next: QueuedPrompt,
+): QueuedPrompt[] {
+  const last = queue.at(-1);
+  if (
+    !last ||
+    isSlashCommandPrompt(last.text, last.images) ||
+    isSlashCommandPrompt(next.text, next.images)
+  ) {
+    return [...queue, next];
+  }
+
+  return [
+    ...queue.slice(0, -1),
+    mergeQueuedPrompt(last, next.text, next.images),
+  ];
 }
 
 function clonePromptImages(
