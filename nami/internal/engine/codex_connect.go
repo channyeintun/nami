@@ -68,7 +68,9 @@ func connectCodex(cmd *slashCommandContext, methodInput string) (*connectResult,
 	// login, which can take minutes.
 	if err := config.Update(func(cfg *config.Config) {
 		cfg.Codex = codexAuth
-		cfg.Model = modelRef("codex", api.Presets["codex"].DefaultModel)
+		// Provider apart from model; see saveConnectedModel.
+		cfg.Provider = "codex"
+		cfg.Model = api.Presets["codex"].DefaultModel
 	}); err != nil {
 		return nil, emitTextResponse(cmd.bridge, fmt.Sprintf("save Codex credentials: %v", err))
 	}
@@ -94,11 +96,11 @@ func connectCodexFromEnv(cmd *slashCommandContext) (*connectResult, error) {
 		spec, _ := commandspkg.LookupConnectProvider("codex")
 		return nil, emitTextResponse(cmd.bridge, commandspkg.FormatConnectProviderGuidance(spec, snapshot))
 	}
-	model := modelRef("codex", api.Presets["codex"].DefaultModel)
-	if err := config.Update(func(cfg *config.Config) { cfg.Model = model }); err != nil {
+	if err := saveConnectedModel("codex", api.Presets["codex"].DefaultModel); err != nil {
 		return nil, emitTextResponse(cmd.bridge, fmt.Sprintf("save Codex configuration: %v", err))
 	}
-	statusCfg.Model = model
+	statusCfg.Provider = "codex"
+	statusCfg.Model = api.Presets["codex"].DefaultModel
 	return &connectResult{
 		Provider: "codex",
 		Model:    api.Presets["codex"].DefaultModel,

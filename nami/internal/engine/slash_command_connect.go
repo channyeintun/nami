@@ -120,12 +120,12 @@ func connectStaticProvider(cmd *slashCommandContext, providerID string, extraArg
 		return nil, emitTextResponse(cmd.bridge, commandspkg.FormatConnectProviderGuidance(spec, snapshot))
 	}
 
-	model := modelRef(providerID, spec.DefaultModel)
-	if err := config.Update(func(cfg *config.Config) { cfg.Model = model }); err != nil {
+	if err := saveConnectedModel(providerID, spec.DefaultModel); err != nil {
 		return nil, emitTextResponse(cmd.bridge, fmt.Sprintf("save %s configuration: %v", spec.Label, err))
 	}
 
-	currentCfg.Model = model
+	currentCfg.Provider = providerID
+	currentCfg.Model = spec.DefaultModel
 	return &connectResult{
 		Provider: providerID,
 		Model:    spec.DefaultModel,
@@ -137,6 +137,18 @@ func connectStaticProvider(cmd *slashCommandContext, providerID string, extraArg
 			return fmt.Sprintf("%s is ready via %s. Set main model to %s.", spec.Label, status.AuthSource, activeModelID)
 		},
 	}, nil
+}
+
+// saveConnectedModel makes a connected provider's default model the configured
+// one, with the provider and the model in their own fields. Saved as one
+// "provider/model" string beside the provider field already there, the model
+// would be read back whole on that old provider: the loader cannot split it,
+// because some model ids contain a slash, such as Groq's "openai/gpt-oss-120b".
+func saveConnectedModel(providerID string, model string) error {
+	return config.Update(func(cfg *config.Config) {
+		cfg.Provider = providerID
+		cfg.Model = model
+	})
 }
 
 func promptConnectProviderSelection(cmd *slashCommandContext, snapshot commandspkg.ProviderSnapshot) (string, error) {
@@ -275,8 +287,11 @@ func connectGitHubCopilot(cmd *slashCommandContext, enterpriseInput string) (*co
 	reasoningEffort := ""
 	if err := config.Update(func(cfg *config.Config) {
 		cfg.GitHubCopilot = copilotAuth
-		cfg.Model = modelRef("github-copilot", api.Presets["github-copilot"].DefaultModel)
-		cfg.SubagentModel = modelRef("github-copilot", api.GitHubCopilotDefaultSubagentModel)
+		// Providers apart from models; see saveConnectedModel.
+		cfg.Provider = "github-copilot"
+		cfg.Model = api.Presets["github-copilot"].DefaultModel
+		cfg.SubagentProvider = "github-copilot"
+		cfg.SubagentModel = api.GitHubCopilotDefaultSubagentModel
 		if strings.TrimSpace(cfg.ReasoningEffort) == "" {
 			cfg.ReasoningEffort = api.ReasoningEffortMedium
 		}
