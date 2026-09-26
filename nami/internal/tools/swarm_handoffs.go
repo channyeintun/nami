@@ -180,6 +180,11 @@ func (t *SwarmListInboxTool) Concurrency(input ToolInput) ConcurrencyDecision {
 	return ConcurrencyParallel
 }
 
+func (t *SwarmListInboxTool) Validate(input ToolInput) error {
+	_, err := collectHandoffStatuses(input.Params)
+	return err
+}
+
 func (t *SwarmListInboxTool) Execute(ctx context.Context, input ToolInput) (ToolOutput, error) {
 	sessionID, manager, store, cwd, err := getSwarmRuntime()
 	if err != nil {
@@ -189,7 +194,10 @@ func (t *SwarmListInboxTool) Execute(ctx context.Context, input ToolInput) (Tool
 	if boolParam(input.Params, "dequeue") {
 		return dequeueInbox(ctx, manager, store, sessionID, cwd, role)
 	}
-	statuses := collectHandoffStatuses(input.Params)
+	statuses, err := collectHandoffStatuses(input.Params)
+	if err != nil {
+		return ToolOutput{}, err
+	}
 	handoffs, err := swarm.ListHandoffs(store, sessionID, role, statuses)
 	if err != nil {
 		return ToolOutput{}, err
@@ -295,7 +303,10 @@ func handoffArtifactSlot(id string) string {
 	return "handoff:" + strings.TrimSpace(id)
 }
 
-func collectHandoffStatuses(params map[string]any) []swarm.HandoffStatus {
+// collectHandoffStatuses gathers the status filters from both parameters. An
+// unrecognized status is an error rather than being dropped: dropping the only
+// filter would list every handoff as though it matched.
+func collectHandoffStatuses(params map[string]any) ([]swarm.HandoffStatus, error) {
 	values := make([]string, 0, 4)
 	values = append(values, stringSliceParam(params, "statuses")...)
 	if status := strings.TrimSpace(firstStringOrEmpty(params, "status")); status != "" {
@@ -306,7 +317,7 @@ func collectHandoffStatuses(params map[string]any) []swarm.HandoffStatus {
 	for _, value := range values {
 		normalized := swarm.NormalizeHandoffStatus(value)
 		if !swarm.IsValidHandoffStatus(normalized) {
-			continue
+			return nil, fmt.Errorf("unknown handoff status %q; use pending, acked, in_progress, completed, blocked, or superseded", value)
 		}
 		if _, ok := seen[normalized]; ok {
 			continue
@@ -314,7 +325,7 @@ func collectHandoffStatuses(params map[string]any) []swarm.HandoffStatus {
 		seen[normalized] = struct{}{}
 		statuses = append(statuses, normalized)
 	}
-	return statuses
+	return statuses, nil
 }
 
 func dequeueInbox(ctx context.Context, manager *artifactspkg.Manager, store *session.Store, sessionID string, cwd string, role string) (ToolOutput, error) {

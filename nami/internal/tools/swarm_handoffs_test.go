@@ -1,6 +1,34 @@
 package tools
 
-import "testing"
+import (
+	"slices"
+	"testing"
+
+	"github.com/channyeintun/nami/internal/swarm"
+)
+
+// An unrecognized status filter used to be dropped, which left no filter at
+// all: asking for "complete" listed every handoff as though it matched.
+func TestSwarmListInboxRejectsUnknownStatusFilters(t *testing.T) {
+	tool := NewSwarmListInboxTool()
+	for _, params := range []map[string]any{
+		{"status": "complete"},
+		{"statuses": []any{"pending", "done"}},
+	} {
+		if err := tool.Validate(ToolInput{Params: params}); err == nil {
+			t.Errorf("Validate(%v) accepted an unknown status", params)
+		}
+	}
+
+	statuses, err := collectHandoffStatuses(map[string]any{"statuses": []any{"in-progress", "blocked"}, "status": "blocked"})
+	if err != nil {
+		t.Fatalf("collectHandoffStatuses: %v", err)
+	}
+	want := []swarm.HandoffStatus{swarm.HandoffStatusInProgress, swarm.HandoffStatusBlocked}
+	if !slices.Equal(statuses, want) {
+		t.Fatalf("statuses = %v, want %v", statuses, want)
+	}
+}
 
 // Listing the inbox changes nothing and may run alongside other calls, but a
 // dequeue applies the role's queue policy, which supersedes older handoffs
