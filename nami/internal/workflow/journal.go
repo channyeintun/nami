@@ -41,11 +41,11 @@ type Journal struct {
 // path. When resumeFrom names a readable prior journal, its records seed the
 // replay cache.
 //
-// A run's path is not always new: run ids restart with each process, so a run
-// can land on an earlier run's journal, or on the very journal it resumes
-// from. Truncating it would destroy records not yet replayed. Keeping them is
-// safe, because a record only replays for a node whose key it matches, and
-// the key commits to the node's whole ancestry.
+// A journal already at path is kept, never truncated: a run that landed on
+// an earlier run's journal, or on the very journal it resumes from, would
+// otherwise destroy records not yet replayed. Keeping them is safe, because a
+// record only replays for a node whose key it matches, and the key commits to
+// the node's whole ancestry.
 func OpenJournal(path string, resumeFrom string) (*Journal, error) {
 	path = strings.TrimSpace(path)
 	if path == "" {

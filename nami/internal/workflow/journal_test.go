@@ -51,8 +51,8 @@ func appendToFile(t *testing.T, path string, text string) {
 	}
 }
 
-// Run ids restart with each process, so a resumed run can be given the id,
-// and so the journal path, of the run it resumes. Opening that journal used to
+// A resumed run can open its journal on the path of the run it resumes, as it
+// did when run ids restarted with each process. Opening that journal used to
 // truncate it, and a run that died before replaying everything took the
 // records it had not replayed yet with it.
 func TestOpeningAnExistingJournalKeepsItsRecords(t *testing.T) {

@@ -2,12 +2,13 @@ package engine
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 	"path/filepath"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
+	"uuid"
 
 	"github.com/channyeintun/nami/internal/ipc"
 	toolpkg "github.com/channyeintun/nami/internal/tools"
@@ -19,7 +20,6 @@ import (
 const workflowRunRetention = 5 * time.Minute
 
 var (
-	workflowRunCtr atomic.Int64
 	workflowRunsMu sync.RWMutex
 	workflowRuns   = map[string]*workflowRun{}
 )
@@ -44,8 +44,14 @@ type workflowRun struct {
 	updated chan struct{}
 }
 
+// newWorkflowRunID returns an id no other process hands out. A run's journal is
+// named after its id, and a resumed session's runs share its workflows
+// directory with the runs of earlier processes; a counter restarted at wf_1 in
+// every process. Twelve hex digits of a random UUID keep the id short enough
+// to type.
 func newWorkflowRunID() string {
-	return fmt.Sprintf("wf_%d", workflowRunCtr.Add(1))
+	id := uuid.New()
+	return "wf_" + hex.EncodeToString(id[:6])
 }
 
 func registerWorkflowRun(run *workflowRun) {

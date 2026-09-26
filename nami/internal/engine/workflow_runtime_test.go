@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"os/exec"
 	"slices"
 	"strings"
 	"sync"
@@ -436,4 +438,44 @@ func TestWorkflowStatusWaitWakesWhenTheRunFinishes(t *testing.T) {
 		t.Fatalf("status = %q, want completed", status.Status)
 	}
 	<-done
+}
+
+// Every run's journal is named after its id, and a resumed session's runs share
+// its workflows directory with runs from earlier processes. A counter that
+// restarts with each process gave the first run of every process the id wf_1,
+// so two processes' runs shared an id and a journal.
+func TestWorkflowRunIDsDifferAcrossProcesses(t *testing.T) {
+	if os.Getenv("NAMI_TEST_PRINT_WORKFLOW_RUN_ID") == "1" {
+		fmt.Println("run-id:" + newWorkflowRunID())
+		return
+	}
+	first := firstWorkflowRunIDOfANewProcess(t)
+	second := firstWorkflowRunIDOfANewProcess(t)
+	if first == second {
+		t.Fatalf("two processes both started with run id %q", first)
+	}
+	for _, id := range []string{first, second} {
+		if !strings.HasPrefix(id, "wf_") || len(id) > len("wf_")+16 {
+			t.Fatalf("run id %q should keep the wf_ prefix and stay short enough to type", id)
+		}
+	}
+}
+
+// firstWorkflowRunIDOfANewProcess runs this test binary again and returns the
+// first run id the new process hands out.
+func firstWorkflowRunIDOfANewProcess(t *testing.T) string {
+	t.Helper()
+	cmd := exec.Command(os.Args[0], "-test.run=^TestWorkflowRunIDsDifferAcrossProcesses$", "-test.count=1")
+	cmd.Env = append(os.Environ(), "NAMI_TEST_PRINT_WORKFLOW_RUN_ID=1")
+	output, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("run the test binary: %v\n%s", err, output)
+	}
+	for line := range strings.Lines(string(output)) {
+		if id, found := strings.CutPrefix(strings.TrimSpace(line), "run-id:"); found {
+			return id
+		}
+	}
+	t.Fatalf("the new process printed no run id:\n%s", output)
+	return ""
 }
