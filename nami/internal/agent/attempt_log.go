@@ -16,6 +16,14 @@ const (
 	maxAttemptLogPromptTokens = 600
 )
 
+// The log sits in the session directory and records failed commands and their
+// error output, which can carry the same secrets as the conversation. It is
+// owner-only like every other file the session store writes there.
+const (
+	attemptLogDirMode  os.FileMode = 0o700
+	attemptLogFileMode os.FileMode = 0o600
+)
+
 // AttemptEntry records one failed or blocked tool attempt for the current session.
 type AttemptEntry struct {
 	Command        string    `json:"command,omitempty"`
@@ -45,7 +53,7 @@ func (l *AttemptLog) Record(entry AttemptEntry) error {
 	if entry.RecordedAt.IsZero() {
 		entry.RecordedAt = time.Now()
 	}
-	if err := os.MkdirAll(l.sessionDir, 0o755); err != nil {
+	if err := os.MkdirAll(l.sessionDir, attemptLogDirMode); err != nil {
 		return fmt.Errorf("attempt log: create session dir: %w", err)
 	}
 	data, err := json.Marshal(entry)
@@ -53,7 +61,7 @@ func (l *AttemptLog) Record(entry AttemptEntry) error {
 		return fmt.Errorf("attempt log: marshal: %w", err)
 	}
 	path := filepath.Join(l.sessionDir, attemptLogFilename)
-	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, attemptLogFileMode)
 	if err != nil {
 		return fmt.Errorf("attempt log: open: %w", err)
 	}
