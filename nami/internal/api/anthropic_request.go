@@ -156,6 +156,20 @@ func toolResultBlock(result ToolResult) map[string]any {
 	return block
 }
 
+// encodeToolArguments renders an argument object that a provider sent already
+// decoded. A call without arguments gets an empty object rather than null,
+// since the input is replayed to providers that require an object.
+func encodeToolArguments(args any) (string, error) {
+	if args == nil {
+		return "{}", nil
+	}
+	encoded, err := json.Marshal(args)
+	if err != nil {
+		return "", err
+	}
+	return string(encoded), nil
+}
+
 func decodeToolInput(input string) (any, error) {
 	if strings.TrimSpace(input) == "" {
 		return map[string]any{}, nil

@@ -221,7 +221,7 @@ func (c *GeminiClient) handleEvent(data string, state *geminiStreamState, yield 
 		for _, part := range candidate.Content.Parts {
 			switch {
 			case part.FunctionCall != nil:
-				input, err := json.Marshal(part.FunctionCall.Args)
+				input, err := encodeToolArguments(part.FunctionCall.Args)
 				if err != nil {
 					return fmt.Errorf("encode Gemini function call args: %w", err)
 				}
@@ -234,7 +234,7 @@ func (c *GeminiClient) handleEvent(data string, state *geminiStreamState, yield 
 					ToolCall: &ToolCall{
 						ID:               id,
 						Name:             part.FunctionCall.Name,
-						Input:            string(input),
+						Input:            input,
 						ThoughtSignature: part.ThoughtSignature,
 					},
 				}, nil) {

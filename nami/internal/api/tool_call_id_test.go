@@ -62,6 +62,53 @@ func TestUnnamedToolCallsGetIDsUniqueAcrossTheSession(t *testing.T) {
 	}
 }
 
+func TestToolCallsWithoutArgumentsCarryAnEmptyObject(t *testing.T) {
+	cases := []struct {
+		name      string
+		body      string
+		newClient func(baseURL string) (LLMClient, error)
+	}{
+		{
+			name: "gemini",
+			body: `data: {"candidates":[{"content":{"parts":[{"functionCall":{"name":"now"}}],"role":"model"},"finishReason":"STOP"}]}
+
+`,
+			newClient: func(baseURL string) (LLMClient, error) {
+				return NewGeminiClient("gemini-2.5-pro", "key", baseURL)
+			},
+		},
+		{
+			name: "ollama",
+			body: `{"message":{"role":"assistant","tool_calls":[{"function":{"name":"now"}}]},"done":true,"done_reason":"stop"}
+`,
+			newClient: func(baseURL string) (LLMClient, error) {
+				return NewOllamaClient("gemma4-e4b", "", baseURL)
+			},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			client, err := tc.newClient(serveStream(t, tc.body).URL)
+			if err != nil {
+				t.Fatalf("new client: %v", err)
+			}
+			events := drainStream(t, client, ModelRequest{Messages: []Message{{Role: RoleUser, Content: "what time is it"}}})
+			var calls []*ToolCall
+			for _, event := range events {
+				if event.Type == ModelEventToolCall {
+					calls = append(calls, event.ToolCall)
+				}
+			}
+			// The input is replayed to whichever provider the session uses
+			// next, and Anthropic rejects a tool_use input that is not an
+			// object.
+			if len(calls) != 1 || calls[0].Input != "{}" {
+				t.Fatalf("tool calls = %+v, want one with input {}", calls)
+			}
+		})
+	}
+}
+
 func TestGeminiRequestMapsSynthesizedIDsBackToToolNames(t *testing.T) {
 	// A replayed call and its result are matched by id, and Gemini needs the
 	// function name on the response.

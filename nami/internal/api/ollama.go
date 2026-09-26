@@ -217,7 +217,7 @@ func (c *OllamaClient) handleChunk(
 		}
 	}
 	for _, toolCall := range chunk.Message.ToolCalls {
-		input, err := json.Marshal(toolCall.Function.Arguments)
+		input, err := encodeToolArguments(toolCall.Function.Arguments)
 		if err != nil {
 			return fmt.Errorf("encode Ollama tool call args: %w", err)
 		}
@@ -227,7 +227,7 @@ func (c *OllamaClient) handleChunk(
 			ToolCall: &ToolCall{
 				ID:    newToolCallID(),
 				Name:  toolCall.Function.Name,
-				Input: string(input),
+				Input: input,
 			},
 		}, nil) {
 			return errStopStream
