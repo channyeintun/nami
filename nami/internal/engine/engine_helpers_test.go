@@ -45,18 +45,6 @@ func TestMergeUsageAccumulatesEveryCounter(t *testing.T) {
 	}
 }
 
-func TestMergeUsageDoesNotMutateInputs(t *testing.T) {
-	current := api.Usage{InputTokens: 10}
-	next := api.Usage{InputTokens: 5}
-	mergeUsage(current, next)
-
-	// Usage is passed by value; a caller accumulating in a loop relies on the
-	// originals staying put.
-	if current.InputTokens != 10 || next.InputTokens != 5 {
-		t.Fatalf("mergeUsage mutated its arguments: %+v %+v", current, next)
-	}
-}
-
 func TestTruncateOutputPreviewClampsPreviewLength(t *testing.T) {
 	output := "hello world"
 

@@ -191,7 +191,7 @@ func RunMCPRemove(cwd, rawName, scopeRaw string) (MCPCommandResult, error) {
 		return MCPCommandResult{}, err
 	}
 	if _, ok := cfg.Servers[name]; !ok {
-		return MCPCommandResult{}, fmt.Errorf("No MCP server found with name %q in %s config", name, scope)
+		return MCPCommandResult{}, fmt.Errorf("no MCP server found with name %q in %s config", name, scope)
 	}
 	delete(cfg.Servers, name)
 	path, err := configpkg.SaveMCPConfigForScope(cwd, scope, cfg)
@@ -427,7 +427,7 @@ func resolveMCPServerForGet(cwd, name, scopeRaw string) (string, configpkg.MCPSe
 		return "", configpkg.MCPServerConfig{}, nil, err
 	}
 	if len(entries) == 0 {
-		return "", configpkg.MCPServerConfig{}, nil, fmt.Errorf("No MCP server found with name %q", name)
+		return "", configpkg.MCPServerConfig{}, nil, fmt.Errorf("no MCP server found with name %q", name)
 	}
 
 	if strings.TrimSpace(scopeRaw) != "" {
@@ -437,7 +437,7 @@ func resolveMCPServerForGet(cwd, name, scopeRaw string) (string, configpkg.MCPSe
 		}
 		server, ok := entries[scope]
 		if !ok {
-			return "", configpkg.MCPServerConfig{}, nil, fmt.Errorf("No MCP server found with name %q in %s config", name, scope)
+			return "", configpkg.MCPServerConfig{}, nil, fmt.Errorf("no MCP server found with name %q in %s config", name, scope)
 		}
 		return scope.String(), server, []string{scope.String()}, nil
 	}
@@ -478,7 +478,7 @@ func resolveMCPRemoveScope(cwd, name, scopeRaw string) (configpkg.MCPScope, erro
 		return "", err
 	}
 	if len(entries) == 0 {
-		return "", fmt.Errorf("No MCP server found with name %q", name)
+		return "", fmt.Errorf("no MCP server found with name %q", name)
 	}
 	if len(entries) == 1 {
 		for scope := range entries {

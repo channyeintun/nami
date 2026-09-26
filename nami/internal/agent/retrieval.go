@@ -274,9 +274,7 @@ func gitStatusPaths(gitStatusText, cwd string) []string {
 			continue
 		}
 		path := parseGitStatusPath(line)
-		for _, resolved := range resolveFilePath(path, cwd) {
-			paths = append(paths, resolved)
-		}
+		paths = append(paths, resolveFilePath(path, cwd)...)
 	}
 	return paths
 }

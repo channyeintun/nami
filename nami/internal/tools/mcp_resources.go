@@ -161,10 +161,8 @@ func (t *ListMCPResourcesTool) Execute(ctx context.Context, input ToolInput) (To
 	}
 	server, _ := stringParam(input.Params, "server")
 	includeTemplates := true
-	if firstBoolParam(input.Params, "includeTemplates", "include_templates") == false {
-		if _, exists := firstParam(input.Params, "includeTemplates", "include_templates"); exists {
-			includeTemplates = false
-		}
+	if _, exists := firstParam(input.Params, "includeTemplates", "include_templates"); exists {
+		includeTemplates = firstBoolParam(input.Params, "includeTemplates", "include_templates")
 	}
 	response, err := manager.ResourceInventories(strings.TrimSpace(server), includeTemplates)
 	if err != nil {

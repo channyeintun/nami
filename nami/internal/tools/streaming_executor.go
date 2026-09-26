@@ -30,7 +30,6 @@ type streamingCall struct {
 	status    streamingCallStatus
 	result    IndexedResult
 	completed bool
-	ready     bool
 }
 
 type streamingCallStatus string

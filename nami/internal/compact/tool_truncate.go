@@ -24,8 +24,6 @@ var CompactableTools = map[string]bool{
 	"file_write":                   true,
 }
 
-const truncatedMarker = "[Old tool result content cleared]"
-
 // TruncateToolResults replaces old tool results with a short marker.
 // Only truncates results from compactable tools, preserving the most recent
 // tool result of each type.

@@ -477,6 +477,9 @@ func connectSession(ctx context.Context, definition ServerDefinition) (Session, 
 		Name:    "nami",
 		Version: "dev",
 	}, nil)
+	// Roots are deprecated as of protocol 2026-07-28 (SEP-2577) but remain
+	// functional through the deprecation window, and servers such as the
+	// filesystem server still scope their access by them.
 	if root := rootURI(definition.WorkingDir); root != "" {
 		client.AddRoots(&sdkmcp.Root{
 			Name: filepath.Base(definition.WorkingDir),
