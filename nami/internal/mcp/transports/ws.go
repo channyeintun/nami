@@ -12,6 +12,12 @@ import (
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
+// maxWSMessageBytes bounds one inbound message. The library default of 32 KiB
+// is far too small for real tool results, but no limit at all would let a
+// server exhaust the engine's memory with a single message; this matches the
+// bound the LSP transport uses.
+const maxWSMessageBytes = 32 << 20
+
 type wsTransport struct {
 	endpoint string
 	client   *websocket.DialOptions
@@ -39,7 +45,7 @@ func (t *wsTransport) Connect(ctx context.Context) (sdkmcp.Connection, error) {
 	if err != nil {
 		return nil, err
 	}
-	conn.SetReadLimit(-1)
+	conn.SetReadLimit(maxWSMessageBytes)
 	return &wsConn{conn: conn}, nil
 }
 
