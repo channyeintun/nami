@@ -10,7 +10,11 @@ import (
 // model and routinely contains braces, backticks, and JSON, none of which should
 // be parsed as markup. Substitution also has to stay byte-stable, because the
 // substituted prompt is what the journal hashes for resume.
-var outputRefPattern = regexp.MustCompile(`\$\{outputs\.([a-z0-9][a-z0-9_-]*)\}`)
+//
+// The id accepts capitals because Resolve lowercases node ids: a node declared
+// as "fetchData" is "fetchdata", and ${outputs.fetchData} must name it rather
+// than slip past validation and reach the node as a raw placeholder.
+var outputRefPattern = regexp.MustCompile(`\$\{outputs\.([A-Za-z0-9][A-Za-z0-9_-]*)\}`)
 
 // OutputReferences lists the node ids a prompt interpolates, in first-use order
 // and without duplicates.
@@ -19,7 +23,7 @@ func OutputReferences(prompt string) []string {
 	refs := make([]string, 0, len(matches))
 	seen := make(map[string]struct{}, len(matches))
 	for _, match := range matches {
-		id := match[1]
+		id := strings.ToLower(match[1])
 		if _, ok := seen[id]; ok {
 			continue
 		}
@@ -35,7 +39,7 @@ func OutputReferences(prompt string) []string {
 // the node than an empty gap in its instructions.
 func ExpandPrompt(prompt string, outputs map[string]string) string {
 	return outputRefPattern.ReplaceAllStringFunc(prompt, func(match string) string {
-		id := outputRefPattern.FindStringSubmatch(match)[1]
+		id := strings.ToLower(outputRefPattern.FindStringSubmatch(match)[1])
 		output, ok := outputs[id]
 		if !ok || strings.TrimSpace(output) == "" {
 			return "[no output from " + id + "]"

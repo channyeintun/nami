@@ -155,6 +155,25 @@ func TestResolveAcceptsDeclaredOutputReference(t *testing.T) {
 	}
 }
 
+// Node ids are case-insensitive, so a reference spelled with the id's original
+// capitals must be validated like any other — otherwise it slips past both the
+// dependency check and substitution and reaches the node as a raw placeholder.
+func TestResolveValidatesMixedCaseOutputReferences(t *testing.T) {
+	spec := Spec{Nodes: []NodeSpec{
+		node("fetchData"),
+		{ID: "report", Description: "d", Prompt: "use ${outputs.fetchData}"},
+	}}
+
+	_, err := spec.Resolve()
+	validation, ok := errors.AsType[*ValidationError](err)
+	if !ok {
+		t.Fatalf("expected ValidationError for an undeclared mixed-case reference, got %v", err)
+	}
+	if joined := strings.Join(validation.Problems, "; "); !strings.Contains(joined, `without listing "fetchdata"`) {
+		t.Fatalf("expected a depends_on problem naming fetchdata, got %q", joined)
+	}
+}
+
 func TestResolveRejectsUnknownFailurePolicy(t *testing.T) {
 	spec := Spec{Nodes: []NodeSpec{node("a")}, OnNodeFailure: "explode"}
 
@@ -181,6 +200,13 @@ func TestOutputReferencesDedupesInOrder(t *testing.T) {
 	refs := OutputReferences("${outputs.b} then ${outputs.a} then ${outputs.b}")
 	if !slices.Equal(refs, []string{"b", "a"}) {
 		t.Fatalf("OutputReferences = %v, want [b a]", refs)
+	}
+}
+
+func TestOutputReferencesNormalizesCase(t *testing.T) {
+	refs := OutputReferences("${outputs.Build} and ${outputs.build} and ${outputs.TEST_1}")
+	if !slices.Equal(refs, []string{"build", "test_1"}) {
+		t.Fatalf("OutputReferences = %v, want [build test_1]", refs)
 	}
 }
 

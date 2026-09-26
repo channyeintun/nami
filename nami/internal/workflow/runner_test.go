@@ -230,6 +230,33 @@ func TestRunExpandsDependencyOutputsIntoPrompts(t *testing.T) {
 	}
 }
 
+func TestRunExpandsMixedCaseOutputReferences(t *testing.T) {
+	resolved := mustResolve(t, Spec{Nodes: []NodeSpec{
+		node("fetchData"),
+		{
+			ID:          "report",
+			Description: "report",
+			Prompt:      "report on ${outputs.fetchData}",
+			DependsOn:   []string{"fetchData"},
+		},
+	}})
+
+	var seenPrompt string
+	if _, err := resolved.Run(t.Context(), Options{
+		Run: func(_ context.Context, req NodeRequest) (NodeResult, error) {
+			if req.ID == "report" {
+				seenPrompt = req.Prompt
+			}
+			return NodeResult{Output: "out:" + req.ID}, nil
+		},
+	}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if seenPrompt != "report on out:fetchdata" {
+		t.Fatalf("prompt = %q, want the dependency output substituted", seenPrompt)
+	}
+}
+
 func TestRunReportsProgressForEveryTransition(t *testing.T) {
 	resolved := mustResolve(t, Spec{Nodes: []NodeSpec{node("a"), node("b", "a")}})
 
