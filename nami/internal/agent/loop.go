@@ -114,16 +114,10 @@ func handleToolCallsTurn(
 	results, err := deps.ExecuteToolBatch(ctx, turn.toolCalls)
 	pauseForPlanReview, ok := errors.AsType[*PauseForPlanReviewError](err)
 	if err != nil && !ok {
+		appendToolResultMessages(state, turn.toolCalls, results, fmt.Sprintf("Tool call was interrupted before its result was recorded: %v", err))
 		return err
 	}
-	for _, result := range results {
-		resultCopy := result
-		state.Messages = append(state.Messages, api.Message{
-			Role:       api.RoleTool,
-			Content:    result.Output,
-			ToolResult: &resultCopy,
-		})
-	}
+	appendToolResultMessages(state, turn.toolCalls, results, "Tool call was not run: execution paused for implementation plan review.")
 	collectTouchedFiles(state, turn.toolCalls, results)
 	invalidateGraphFiles(state, turn.toolCalls, results)
 	repeated, err := recordFailedAttempts(deps.AttemptLog, turn.toolCalls, results)
@@ -150,6 +144,33 @@ func handleToolCallsTurn(
 		}
 	}
 	return nil
+}
+
+// appendToolResultMessages records the batch results, then answers every call
+// the batch left without a result with an error explaining why. Providers
+// reject any later request whose tool_use has no matching tool_result, so a
+// cancelled or paused batch would otherwise break the rest of the session.
+// The placeholders only go into the transcript; they are not failed attempts.
+func appendToolResultMessages(state *QueryState, calls []api.ToolCall, results []api.ToolResult, missingReason string) {
+	answered := make(map[string]struct{}, len(results))
+	for _, result := range results {
+		appendToolResultMessage(state, result)
+		answered[result.ToolCallID] = struct{}{}
+	}
+	for _, call := range calls {
+		if _, ok := answered[call.ID]; ok {
+			continue
+		}
+		appendToolResultMessage(state, api.ToolResult{ToolCallID: call.ID, Output: missingReason, IsError: true})
+	}
+}
+
+func appendToolResultMessage(state *QueryState, result api.ToolResult) {
+	state.Messages = append(state.Messages, api.Message{
+		Role:       api.RoleTool,
+		Content:    result.Output,
+		ToolResult: &result,
+	})
 }
 
 func finalizeAssistantTurn(
