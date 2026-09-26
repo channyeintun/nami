@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/channyeintun/nami/internal/agent"
 	"github.com/channyeintun/nami/internal/api"
@@ -181,6 +182,16 @@ func TestExecuteToolCallsForSubagentHonoursPreToolUseHooks(t *testing.T) {
 	}
 	if len(results) != 1 || !results[0].IsError || results[0].Output != "reads are audited" {
 		t.Fatalf("results = %+v, want the hook's denial", results)
+	}
+}
+
+func TestNormalizeDelegatedPromptLineKeepsCharactersWhole(t *testing.T) {
+	line := normalizeDelegatedPromptLine("- " + strings.Repeat("漢", 300))
+	if !utf8.ValidString(line) {
+		t.Fatalf("brief line is not valid UTF-8: %q", line)
+	}
+	if got := utf8.RuneCountInString(line); got != 220 {
+		t.Fatalf("brief line has %d characters, want 220", got)
 	}
 }
 

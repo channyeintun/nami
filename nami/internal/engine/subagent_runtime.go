@@ -1171,8 +1171,9 @@ func normalizeDelegatedPromptLine(value string) string {
 		return ""
 	}
 	line = strings.Join(strings.Fields(line), " ")
-	if len(line) > 220 {
-		line = strings.TrimSpace(line[:220])
+	// Cut on characters, not bytes, so a multibyte character is never split.
+	if runes := []rune(line); len(runes) > 220 {
+		line = strings.TrimSpace(string(runes[:220]))
 	}
 	return line
 }

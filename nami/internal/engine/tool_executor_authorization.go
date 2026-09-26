@@ -384,11 +384,14 @@ func normalizePermissionSummaryValue(value string) string {
 	if trimmed == "" {
 		return ""
 	}
+	// Cut on characters, not bytes: a byte cut can split a multibyte
+	// character and leave invalid UTF-8 in the prompt.
 	const limit = 80
-	if len(trimmed) <= limit {
+	runes := []rune(trimmed)
+	if len(runes) <= limit {
 		return trimmed
 	}
-	return trimmed[:limit-3] + "..."
+	return string(runes[:limit-3]) + "..."
 }
 
 func applyPatchPermissionTargets(call toolpkg.PendingCall) ([]string, string) {

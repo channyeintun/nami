@@ -5,8 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/channyeintun/nami/internal/ipc"
 	toolpkg "github.com/channyeintun/nami/internal/tools"
@@ -84,6 +86,32 @@ func (h *ipcHarness) waitForEvent(t *testing.T, eventType ipc.EventType) ipc.Str
 		case <-timeout:
 			t.Fatalf("timed out waiting for %s", eventType)
 		}
+	}
+}
+
+func TestNormalizePermissionSummaryValueKeepsCharactersWhole(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{name: "short value", input: "  ls   -la  ", want: "ls -la"},
+		{name: "exactly at the limit", input: strings.Repeat("é", 80), want: strings.Repeat("é", 80)},
+		// 80 two-byte characters used to be cut at byte 77, in the middle
+		// of a character.
+		{name: "multibyte over the limit", input: strings.Repeat("é", 81), want: strings.Repeat("é", 77) + "..."},
+		{name: "cjk over the limit", input: strings.Repeat("漢", 100), want: strings.Repeat("漢", 77) + "..."},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := normalizePermissionSummaryValue(tt.input)
+			if !utf8.ValidString(got) {
+				t.Fatalf("summary is not valid UTF-8: %q", got)
+			}
+			if got != tt.want {
+				t.Fatalf("normalizePermissionSummaryValue = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }
 
