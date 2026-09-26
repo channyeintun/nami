@@ -41,45 +41,62 @@ func TestInstructionFileDistrust(t *testing.T) {
 		}
 	})
 
-	for name, mode := range map[string]os.FileMode{
-		"world-writable directory":        0o777,
-		"sticky world-writable directory": 0o777 | os.ModeSticky,
-	} {
-		t.Run(name, func(t *testing.T) {
-			dir := t.TempDir()
-			path := writeInstructionFile(t, dir, "Use tabs.")
-			if err := os.Chmod(dir, mode); err != nil {
-				t.Fatalf("chmod: %v", err)
-			}
-			if reason := instructionFileDistrustFor(path, uid); !strings.Contains(reason, "every user can write to") {
-				t.Fatalf("expected a file in a world-writable directory to be distrusted, got %q", reason)
-			}
-		})
-	}
-
-	t.Run("world-writable file", func(t *testing.T) {
-		path := writeInstructionFile(t, t.TempDir(), "Use tabs.")
-		if err := os.Chmod(path, 0o666); err != nil {
+	t.Run("shared temporary directory", func(t *testing.T) {
+		dir := t.TempDir()
+		path := writeInstructionFile(t, dir, "Use tabs.")
+		if err := os.Chmod(dir, 0o777|os.ModeSticky); err != nil {
 			t.Fatalf("chmod: %v", err)
 		}
-		if reason := instructionFileDistrustFor(path, uid); reason != "writable by every user" {
-			t.Fatalf("expected a world-writable file to be distrusted, got %q", reason)
+		if reason := instructionFileDistrustFor(path, uid); !strings.Contains(reason, "every user can create files in") {
+			t.Fatalf("expected a file in a sticky world-writable directory to be distrusted, got %q", reason)
+		}
+	})
+
+	// WSL shows files on Windows drives, and FAT volumes show every file, as
+	// 0777. The user's own projects there must keep their instructions.
+	t.Run("own file with open permission bits", func(t *testing.T) {
+		dir := t.TempDir()
+		path := writeInstructionFile(t, dir, "Use tabs.")
+		if err := os.Chmod(path, 0o777); err != nil {
+			t.Fatalf("chmod: %v", err)
+		}
+		if err := os.Chmod(dir, 0o777); err != nil {
+			t.Fatalf("chmod: %v", err)
+		}
+		if reason := instructionFileDistrustFor(path, uid); reason != "" {
+			t.Fatalf("expected the file to be trusted, got %q", reason)
 		}
 	})
 
 	t.Run("file another user owns", func(t *testing.T) {
 		path := writeInstructionFile(t, t.TempDir(), "Use tabs.")
-		// Giving the file away needs root. Otherwise ask about it on behalf
-		// of another user, which it is foreign to in the same way.
-		asUID := uid + 1
+		// Ask about the file on behalf of another user, to whom it is
+		// foreign in the same way. Root is exempt, so that user is not root.
+		asUID := 4243
 		if uid == 0 {
 			if err := os.Chown(path, 4242, 4242); err != nil {
 				t.Fatalf("chown: %v", err)
 			}
-			asUID = 0
+		} else {
+			asUID = uid + 1
 		}
 		if reason := instructionFileDistrustFor(path, asUID); !strings.Contains(reason, "not by you or root") {
 			t.Fatalf("expected a file owned by someone else to be distrusted, got %q", reason)
+		}
+	})
+
+	// Root working in another user's checkout, as in a container over a host
+	// directory, keeps the project's instructions.
+	t.Run("root and a file another user owns", func(t *testing.T) {
+		if uid != 0 {
+			t.Skip("giving a file to another user needs root")
+		}
+		path := writeInstructionFile(t, t.TempDir(), "Use tabs.")
+		if err := os.Chown(path, 4242, 4242); err != nil {
+			t.Fatalf("chown: %v", err)
+		}
+		if reason := instructionFileDistrustFor(path, 0); reason != "" {
+			t.Fatalf("expected root to trust the file, got %q", reason)
 		}
 	})
 
