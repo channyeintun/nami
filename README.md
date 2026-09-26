@@ -262,9 +262,9 @@ nami mcp get sentry
 nami mcp remove sentry
 ```
 
-Supported scopes:
+Supported scopes, chosen with `--scope` (`-s`):
 
-- `project` writes repo-local MCP config to `.nami/mcp.json`
+- `project`, the default for `add` and `add-json`, writes repo-local MCP config to `.nami/mcp.json` at the root of the current git repository; outside a repository, use `--scope user`
 - `user` writes user MCP config to Nami's config file (see [Configuration](#configuration))
 
 Notes:
@@ -487,7 +487,7 @@ If you use GitHub Copilot, config may also persist Copilot credentials and a `su
 
 ### MCP servers
 
-Nami can load external MCP servers at startup from either the user config file or `.nami/mcp.json` in the current workspace. The workspace file is merged on top of the user config for the current session, so team-local MCP settings can live in the repo without replacing your personal global setup.
+Nami can load external MCP servers at startup from either the user config file or `.nami/mcp.json` at the root of the current git repository. The workspace file is merged on top of the user config for the current session, so team-local MCP settings can live in the repo without replacing your personal global setup.
 
 Example user config:
 

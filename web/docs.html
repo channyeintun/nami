@@ -955,7 +955,9 @@ install -m 755 nami-engine "$HOME/.local/bin/nami-engine"</code><button type="bu
                   Project Scope
                 </p>
                 <p class="text-gray-300">
-                  Writes repo-local MCP config to <code>.nami/mcp.json</code>
+                  The default. Writes repo-local MCP config to
+                  <code>.nami/mcp.json</code> at the root of the current git
+                  repository
                 </p>
               </div>
               <div class="p-6 border border-[#1a1a1a] rounded-md bg-subtle/40">
@@ -963,8 +965,8 @@ install -m 755 nami-engine "$HOME/.local/bin/nami-engine"</code><button type="bu
                   User Scope
                 </p>
                 <p class="text-gray-300">
-                  Writes user MCP config to Nami's
-                  <code>config.json</code>
+                  With <code>--scope user</code>, writes user MCP config to
+                  Nami's <code>config.json</code>
                 </p>
               </div>
             </div>
