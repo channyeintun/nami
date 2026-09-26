@@ -108,6 +108,18 @@ func TestQueryReportsTransportFailure(t *testing.T) {
 	}
 }
 
+// The cap used to truncate silently, so an oversized reply surfaced as a
+// confusing "unexpected end of JSON input" rather than as a size limit.
+func TestQueryReportsOversizedResponse(t *testing.T) {
+	model := generateServer(t, func(w http.ResponseWriter, _ map[string]any) {
+		_, _ = w.Write([]byte(`{"response":"` + strings.Repeat("a", maxResponseBytes) + `"}`))
+	})
+	_, err := model.Query(context.Background(), "prompt", 10)
+	if err == nil || !strings.Contains(err.Error(), "exceeded") {
+		t.Fatalf("Query error = %v, want a size-limit error", err)
+	}
+}
+
 // A local generation can run for minutes. Cancelling the turn that asked for
 // it — a compaction the user interrupts — must stop the wait, not sit out the
 // client's two-minute timeout.

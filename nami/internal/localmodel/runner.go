@@ -118,9 +118,12 @@ func (m *LocalModel) Query(ctx context.Context, prompt string, maxTokens int) (s
 	}
 	defer resp.Body.Close()
 
-	responseBody, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
+	responseBody, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes+1))
 	if err != nil {
 		return "", fmt.Errorf("read ollama response: %w", err)
+	}
+	if len(responseBody) > maxResponseBytes {
+		return "", fmt.Errorf("ollama response exceeded %d bytes", maxResponseBytes)
 	}
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("ollama generate failed: %s: %s", resp.Status, strings.TrimSpace(string(responseBody)))
