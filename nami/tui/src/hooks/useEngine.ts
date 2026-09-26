@@ -103,12 +103,18 @@ export function useEngine(enginePath: string, options: EngineOptions = {}) {
       });
     });
 
+    // The first error line on stderr is usually why the engine is exiting, so
+    // the exit report below carries it.
+    let stderrError: string | null = null;
+
     stderrRl.on("line", (line) => {
       const message = line.trim();
-      if (!message) return;
-      // Only treat lines starting with "error" or "fatal" as real errors.
-      // Other stderr output is diagnostic (debug logs, warnings).
-      if (/^(error|fatal)/i.test(message)) {
+      if (!message || stderrError) return;
+      // Only treat lines starting with "error", "fatal" or "panic" (a Go
+      // panic) as real errors. Other stderr output is diagnostic (debug logs,
+      // warnings).
+      if (/^(error|fatal|panic)/i.test(message)) {
+        stderrError = message;
         setState((prev) => ({
           ...prev,
           error: prev.error ?? message,
@@ -116,13 +122,19 @@ export function useEngine(enginePath: string, options: EngineOptions = {}) {
       }
     });
 
-    proc.on("exit", (code) => {
-      if (code !== 0) {
-        setState((prev) => ({
-          ...prev,
-          error: `Engine exited with code ${code}`,
-        }));
-      }
+    // "close" rather than "exit" so stderr has been read to the end. Any exit
+    // before cleanup is unexpected, including status 0: the UI is left
+    // talking to nothing either way.
+    proc.on("close", (code, signal) => {
+      // A spawn that failed has no pid and was reported as an "error".
+      if (stopping || proc.pid === undefined) return;
+      const exit = signal
+        ? `Engine was killed by ${signal}`
+        : `Engine exited with code ${code}`;
+      setState((prev) => ({
+        ...prev,
+        error: stderrError ? `${exit}: ${stderrError}` : exit,
+      }));
     });
 
     return () => {
