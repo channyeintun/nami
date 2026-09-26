@@ -21,10 +21,17 @@ func (c *OpenAICompatClient) buildRequest(req ModelRequest) (openAICompatRequest
 		Model:       c.model,
 		Messages:    messages,
 		Tools:       buildOpenAICompatTools(req.Tools),
-		MaxTokens:   maxTokens,
 		Stream:      true,
 		Stop:        req.StopSequences,
 		Temperature: req.Temperature,
+	}
+	// OpenAI rejects max_tokens for its reasoning models, the GPT-5 series
+	// included, and accepts max_completion_tokens for every model; the other
+	// compatible servers document max_tokens.
+	if c.provider == "openai" {
+		payload.MaxCompletionTokens = maxTokens
+	} else {
+		payload.MaxTokens = maxTokens
 	}
 
 	var extraHeaders map[string]string

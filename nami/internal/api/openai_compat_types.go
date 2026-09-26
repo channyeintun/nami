@@ -3,13 +3,14 @@ package api
 import "strings"
 
 type openAICompatRequest struct {
-	Model       string                       `json:"model"`
-	Messages    []openAICompatMessage        `json:"messages"`
-	Tools       []openAICompatToolDefinition `json:"tools,omitempty"`
-	MaxTokens   int                          `json:"max_tokens,omitempty"`
-	Temperature *float64                     `json:"temperature,omitempty"`
-	Stop        []string                     `json:"stop,omitempty"`
-	Stream      bool                         `json:"stream"`
+	Model               string                       `json:"model"`
+	Messages            []openAICompatMessage        `json:"messages"`
+	Tools               []openAICompatToolDefinition `json:"tools,omitempty"`
+	MaxTokens           int                          `json:"max_tokens,omitempty"`
+	MaxCompletionTokens int                          `json:"max_completion_tokens,omitempty"`
+	Temperature         *float64                     `json:"temperature,omitempty"`
+	Stop                []string                     `json:"stop,omitempty"`
+	Stream              bool                         `json:"stream"`
 }
 
 type openAICompatMessage struct {
