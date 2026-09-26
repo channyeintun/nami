@@ -1,6 +1,8 @@
 package tools
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -63,6 +65,35 @@ func TestBackgroundCommandFinishesWhileALeftoverProcessHoldsTheTerminal(t *testi
 	waitForBackgroundExit(t, bg, commandWaitDelay+4*time.Second)
 	if output := bg.snapshotDelta().Output; !strings.Contains(output, "started") {
 		t.Fatalf("output = %q, want the command's output", output)
+	}
+}
+
+// Stopping a command has to stop everything it started. Killing only the shell
+// relied on the terminal hangup to take the rest down, which misses any process
+// that ignores SIGHUP.
+func TestStopKillsEverythingTheBackgroundCommandStarted(t *testing.T) {
+	skipWithoutPOSIXShell(t)
+	bg := startTestBackgroundCommand(t, "(trap '' HUP; echo ready; sleep 1; echo alive > survived) & wait")
+	waitForBackgroundOutput(t, bg, "ready", 5*time.Second)
+
+	result := bg.stop(2 * time.Second)
+	if result.Running {
+		t.Fatalf("stop returned a running command: %+v", result)
+	}
+	time.Sleep(1500 * time.Millisecond)
+	if _, err := os.Stat(filepath.Join(bg.cwd, "survived")); err == nil {
+		t.Fatal("a process started by the stopped command kept running")
+	}
+}
+
+func waitForBackgroundOutput(t *testing.T, bg *backgroundCommand, want string, limit time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(limit)
+	for !strings.Contains(bg.output.tail(0), want) {
+		if time.Now().After(deadline) {
+			t.Fatalf("background command %s never printed %q", bg.id, want)
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
 }
 
