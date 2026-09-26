@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -107,8 +108,12 @@ func (t *NotebookEditTool) Execute(ctx context.Context, input ToolInput) (ToolOu
 		return ToolOutput{}, fmt.Errorf("read notebook %q: %w", filePath, err)
 	}
 
+	// Numbers stay json.Number so they are written back exactly as they were
+	// (1.0 stays 1.0).
+	decoder := json.NewDecoder(bytes.NewReader(contentBytes))
+	decoder.UseNumber()
 	var notebook map[string]any
-	if err := json.Unmarshal(contentBytes, &notebook); err != nil {
+	if err := decoder.Decode(&notebook); err != nil {
 		return ToolOutput{}, fmt.Errorf("parse notebook %q: %w", filePath, err)
 	}
 	rawCells, ok := notebook["cells"].([]any)
@@ -160,13 +165,9 @@ func (t *NotebookEditTool) Execute(ctx context.Context, input ToolInput) (ToolOu
 	}
 	notebook["cells"] = rawCells
 
-	updatedBytes, err := json.MarshalIndent(notebook, "", "  ")
+	updatedContent, err := encodeNotebookLike(notebook, string(contentBytes))
 	if err != nil {
 		return ToolOutput{}, fmt.Errorf("marshal notebook %q: %w", filePath, err)
-	}
-	updatedContent := string(updatedBytes)
-	if !strings.HasSuffix(updatedContent, "\n") {
-		updatedContent += "\n"
 	}
 
 	if err := trackFileBeforeWrite(filePath); err != nil {
@@ -185,6 +186,34 @@ func (t *NotebookEditTool) Execute(ctx context.Context, input ToolInput) (ToolOu
 		Insertions: insertions,
 		Deletions:  deletions,
 	}, nil
+}
+
+// encodeNotebookLike writes notebook the way nbformat does — sorted keys and
+// characters such as < and & left unescaped — using the original file's
+// indentation and line endings, so an edit changes only the lines of the cells
+// it touches instead of every line of the file.
+func encodeNotebookLike(notebook map[string]any, original string) (string, error) {
+	var encoded strings.Builder
+	encoder := json.NewEncoder(&encoded)
+	encoder.SetEscapeHTML(false)
+	encoder.SetIndent("", notebookIndent(original))
+	if err := encoder.Encode(notebook); err != nil {
+		return "", err
+	}
+	// JSON strings cannot hold a raw newline, so every "\n" here is layout.
+	return strings.ReplaceAll(encoded.String(), "\n", newLineEndingText(original).lineEnding), nil
+}
+
+// notebookIndent returns the indentation of the first indented line of a
+// notebook file, which is one level, or nbformat's single space.
+func notebookIndent(content string) string {
+	for line := range strings.SplitSeq(content, "\n") {
+		body := strings.TrimLeft(line, " \t")
+		if body != "" && len(body) < len(line) {
+			return line[:len(line)-len(body)]
+		}
+	}
+	return " "
 }
 
 func normalizeNotebookEditCellType(value string) string {
