@@ -60,17 +60,7 @@ function runEngine(engineArgs) {
   });
 }
 
-// Forward CLI args as env overrides
-function applyOptions(args) {
-  for (let i = 0; i < args.length; i++) {
-    if ((args[i] === "--model" || args[i] === "-m") && args[i + 1]) {
-      process.env["NAMI_MODEL"] = args[++i];
-    } else if (args[i] === "--mode" && args[i + 1]) {
-      process.env["NAMI_MODE"] = args[++i];
-    } else if (args[i] === "--auto-mode") {
-      process.env["NAMI_AUTO_MODE"] = "true";
-    } else if (args[i] === "--help" || args[i] === "-h") {
-      console.log(`Usage: nami [options]
+const usage = `Usage: nami [options]
        nami mcp <add|add-json|list|get|remove> [args]
        nami debug-view --file <debug.log>
 
@@ -78,9 +68,52 @@ Options:
   --model, -m <provider/model>  Model to use (default: anthropic/claude-sonnet-5)
   --mode <plan|fast>            Execution mode (default: plan)
   --auto-mode                   Auto-approve non-destructive tool calls
-  --help, -h                    Show this help`);
+  --help, -h                    Show this help`;
+
+// Options that take a value, and the environment variable each one sets.
+const valueOptions = new Map([
+  ["--model", "NAMI_MODEL"],
+  ["-m", "NAMI_MODEL"],
+  ["--mode", "NAMI_MODE"],
+]);
+
+function exitWithUsageError(message) {
+  console.error(`nami: ${message}\nRun "nami --help" for usage.`);
+  process.exit(2);
+}
+
+// Forward CLI args as env overrides. A mistyped or incomplete option stops
+// here: ignoring it would start a session with settings the user did not ask
+// for.
+function applyOptions(args) {
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === "--help" || arg === "-h") {
+      console.log(usage);
       process.exit(0);
     }
+    if (arg === "--auto-mode") {
+      process.env["NAMI_AUTO_MODE"] = "true";
+      continue;
+    }
+
+    // Long options also take their value as "--model=name".
+    const equals = arg.startsWith("--") ? arg.indexOf("=") : -1;
+    const name = equals === -1 ? arg : arg.slice(0, equals);
+    const envName = valueOptions.get(name);
+    if (!envName) {
+      exitWithUsageError(
+        arg.startsWith("-") ? `unknown option ${arg}` : `unexpected argument ${arg}`,
+      );
+    }
+    const value = equals === -1 ? args[++i] : arg.slice(equals + 1);
+    if (!value || value.startsWith("-")) {
+      exitWithUsageError(`${name} needs a value`);
+    }
+    if (name === "--mode" && value !== "plan" && value !== "fast") {
+      exitWithUsageError(`--mode must be plan or fast, not ${value}`);
+    }
+    process.env[envName] = value;
   }
 }
 
