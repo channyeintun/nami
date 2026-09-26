@@ -56,33 +56,34 @@ const BackgroundTasksDialog: FC<BackgroundTasksDialogProps> = ({
     process.stdout.columns ?? 80,
   );
   const items = useMemo(() => buildTaskItems(commands, agents), [commands, agents]);
-  const [selectedIndex, setSelectedIndex] = useState(0);
+  // The list is re-sorted whenever a task's status or update time changes, so
+  // the selection is held by task key. An index would slide the cursor, the
+  // detail view and the stop shortcut onto whichever task moved into its slot.
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [view, setView] = useState<"list" | "detail">("list");
-  const selectedItem = items[selectedIndex] ?? null;
+  const keyedIndex = items.findIndex((item) => item.key === selectedKey);
+  const selectedIndex = Math.max(0, keyedIndex);
+  // Until a task is picked the list cursor rests on the first row; the detail
+  // view only ever shows the task that was picked.
+  const selectedItem =
+    keyedIndex >= 0
+      ? items[keyedIndex]
+      : view === "list"
+        ? (items[0] ?? null)
+        : null;
   const liveDetail = selectedItem ? details[selectedItem.key] : undefined;
   const detail = selectedItem
     ? liveDetail ?? buildTaskDetailFallback(selectedItem, commands, agents)
     : undefined;
 
+  const onlyItemKey = items.length === 1 ? items[0]?.key : undefined;
   useEffect(() => {
-    if (items.length === 0) {
-      setSelectedIndex(0);
-      setView("list");
+    if (!onlyItemKey) {
       return;
     }
-
-    if (selectedIndex >= items.length) {
-      setSelectedIndex(items.length - 1);
-    }
-  }, [items, selectedIndex]);
-
-  useEffect(() => {
-    if (items.length !== 1) {
-      return;
-    }
-    setSelectedIndex(0);
+    setSelectedKey(onlyItemKey);
     setView("detail");
-  }, [items.length]);
+  }, [onlyItemKey]);
 
   // The parent hands down a new onInspectTask on every render, and each
   // inspection is answered by a detail event that re-renders the parent. An
@@ -221,12 +222,13 @@ const BackgroundTasksDialog: FC<BackgroundTasksDialogProps> = ({
           <TaskList
             items={items}
             selectedIndex={selectedIndex}
-            onCursor={setSelectedIndex}
+            onCursor={(index) => setSelectedKey(items[index]?.key ?? null)}
             onSelectIndex={(index) => {
-              if (!items[index]) {
+              const item = items[index];
+              if (!item) {
                 return;
               }
-              setSelectedIndex(index);
+              setSelectedKey(item.key);
               setView("detail");
             }}
           />
