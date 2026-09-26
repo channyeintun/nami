@@ -14,6 +14,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/channyeintun/nami/internal/fsutil"
 )
 
 // LocalStore implements Service using the local filesystem.
@@ -99,7 +101,7 @@ func (s *LocalStore) Save(_ context.Context, req SaveRequest) (ArtifactVersion, 
 	}
 
 	contentPath := filepath.Join(artDir, fmt.Sprintf("v%d.md", version))
-	if err := writeFileAtomic(contentPath, req.Content, 0o644); err != nil {
+	if err := fsutil.WriteFileAtomic(contentPath, req.Content, 0o644); err != nil {
 		return ArtifactVersion{}, fmt.Errorf("write content: %w", err)
 	}
 
@@ -120,7 +122,7 @@ func (s *LocalStore) Save(_ context.Context, req SaveRequest) (ArtifactVersion, 
 	if err != nil {
 		return ArtifactVersion{}, fmt.Errorf("marshal metadata: %w", err)
 	}
-	if err := writeFileAtomic(filepath.Join(artDir, "meta.json"), metaData, 0o644); err != nil {
+	if err := fsutil.WriteFileAtomic(filepath.Join(artDir, "meta.json"), metaData, 0o644); err != nil {
 		return ArtifactVersion{}, fmt.Errorf("write metadata: %w", err)
 	}
 
@@ -131,28 +133,6 @@ func (s *LocalStore) Save(_ context.Context, req SaveRequest) (ArtifactVersion, 
 		CreatedAt:   createdAt,
 		UpdatedAt:   now,
 	}, nil
-}
-
-func writeFileAtomic(path string, data []byte, perm os.FileMode) error {
-	dir := filepath.Dir(path)
-	tmp, err := os.CreateTemp(dir, "."+filepath.Base(path)+"-*.tmp")
-	if err != nil {
-		return err
-	}
-	tmpName := tmp.Name()
-	defer os.Remove(tmpName)
-	if _, err := tmp.Write(data); err != nil {
-		_ = tmp.Close()
-		return err
-	}
-	if err := tmp.Chmod(perm); err != nil {
-		_ = tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	return os.Rename(tmpName, path)
 }
 
 func (s *LocalStore) Load(_ context.Context, req LoadRequest) (Artifact, error) {

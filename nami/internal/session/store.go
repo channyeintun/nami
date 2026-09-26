@@ -13,6 +13,7 @@ import (
 
 	"github.com/channyeintun/nami/internal/api"
 	"github.com/channyeintun/nami/internal/config"
+	"github.com/channyeintun/nami/internal/fsutil"
 	"github.com/channyeintun/nami/internal/ipc"
 )
 
@@ -90,7 +91,7 @@ func (s *Store) saveMetadataLocked(meta Metadata) error {
 	if err != nil {
 		return fmt.Errorf("marshal metadata: %w", err)
 	}
-	return writeFileAtomic(filepath.Join(dir, "metadata.json"), data, sessionFileMode)
+	return fsutil.WriteFileAtomic(filepath.Join(dir, "metadata.json"), data, sessionFileMode)
 }
 
 // LoadMetadata reads session metadata.
@@ -163,29 +164,7 @@ func (s *Store) SaveConversationTimeline(sessionID string, payload ipc.Conversat
 	if err != nil {
 		return fmt.Errorf("marshal conversation timeline: %w", err)
 	}
-	return writeFileAtomic(filepath.Join(dir, "timeline.json"), data, sessionFileMode)
-}
-
-func writeFileAtomic(path string, data []byte, perm os.FileMode) error {
-	dir := filepath.Dir(path)
-	tmp, err := os.CreateTemp(dir, "."+filepath.Base(path)+"-*.tmp")
-	if err != nil {
-		return err
-	}
-	tmpName := tmp.Name()
-	defer os.Remove(tmpName)
-	if _, err := tmp.Write(data); err != nil {
-		_ = tmp.Close()
-		return err
-	}
-	if err := tmp.Chmod(perm); err != nil {
-		_ = tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	return os.Rename(tmpName, path)
+	return fsutil.WriteFileAtomic(filepath.Join(dir, "timeline.json"), data, sessionFileMode)
 }
 
 // LoadConversationTimeline reads the hydrated conversation timeline for a session.

@@ -355,29 +355,3 @@ func TestSessionOwnerID(t *testing.T) {
 		})
 	}
 }
-
-func TestWriteFileAtomicReplacesContent(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "file.txt")
-	if err := writeFileAtomic(path, []byte("first"), 0o644); err != nil {
-		t.Fatalf("writeFileAtomic: %v", err)
-	}
-	if err := writeFileAtomic(path, []byte("second"), 0o644); err != nil {
-		t.Fatalf("writeFileAtomic: %v", err)
-	}
-
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read: %v", err)
-	}
-	if string(data) != "second" {
-		t.Fatalf("content = %q", data)
-	}
-
-	entries, err := os.ReadDir(filepath.Dir(path))
-	if err != nil {
-		t.Fatalf("read dir: %v", err)
-	}
-	if len(entries) != 1 {
-		t.Fatalf("directory holds %d entries, want only the target file", len(entries))
-	}
-}
