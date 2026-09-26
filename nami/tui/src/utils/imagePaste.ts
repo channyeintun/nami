@@ -21,17 +21,34 @@ interface ReadImageFileResult {
   warning: string | null;
 }
 
+// osascript and PowerShell answer in well under this, but a clipboard owner
+// that never responds would otherwise leave the paste pending forever with
+// the helper process still running.
+const CLIPBOARD_COMMAND_TIMEOUT_MS = 10_000;
+
 function execFileAsync(file: string, args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
-    execFile(file, args, { windowsHide: true }, (error, stdout) => {
-      if (error) {
-        reject(error);
-        return;
-      }
+    execFile(
+      file,
+      args,
+      { windowsHide: true, timeout: CLIPBOARD_COMMAND_TIMEOUT_MS },
+      (error, stdout) => {
+        if (error) {
+          reject(error);
+          return;
+        }
 
-      resolve(stdout.toString());
-    });
+        resolve(stdout.toString());
+      },
+    );
   });
+}
+
+// Nothing awaits the cleanup, and an unhandled rejection ends the whole app,
+// so a failed removal is dropped here. The image has been read by then; the
+// cost of a failure is a stray file in the OS temp directory.
+function removeTemporaryFile(path: string): void {
+  rm(path, { force: true }).catch(() => undefined);
 }
 
 function isAbsoluteImagePath(value: string): boolean {
@@ -176,7 +193,7 @@ async function readClipboardImageOnMac(): Promise<PastedImageData | null> {
   } catch {
     return null;
   } finally {
-    void rm(outputPath, { force: true });
+    removeTemporaryFile(outputPath);
   }
 }
 
@@ -236,7 +253,7 @@ async function readClipboardImageOnWindows(): Promise<PastedImageData | null> {
   } catch {
     return null;
   } finally {
-    void rm(outputPath, { force: true });
+    removeTemporaryFile(outputPath);
   }
 }
 
