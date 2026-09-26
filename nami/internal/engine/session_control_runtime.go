@@ -107,6 +107,12 @@ func (r *sessionControlRuntime) ExitWorktree(ctx context.Context) (toolpkg.Workt
 func (r *sessionControlRuntime) prepareWorktree(ctx context.Context, repoRoot string, req toolpkg.WorktreeControlRequest) (string, bool, error) {
 	targetPath := strings.TrimSpace(req.Path)
 	branch := strings.TrimSpace(req.Branch)
+	// Git reads an argument that starts with "-" as an option even after the
+	// path, so a branch of "-B<name>" would reset that existing branch. No
+	// branch name may start with "-", so refuse it before it reaches git.
+	if strings.HasPrefix(branch, "-") {
+		return "", false, fmt.Errorf("invalid branch name %q: branch names cannot start with \"-\"", branch)
+	}
 	if targetPath == "" {
 		if branch == "" {
 			return "", false, fmt.Errorf("worktree path or branch is required")
