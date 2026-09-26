@@ -12,20 +12,21 @@ import (
 	"time"
 )
 
-// streamingHTTPTimeout is the per-request timeout for streaming API calls.
-// Long enough for slow models; context cancellation handles early termination.
-const streamingHTTPTimeout = 5 * time.Minute
+// requestHTTPTimeout bounds a whole request/response exchange, from
+// connecting to reading the last byte of the body.
+const requestHTTPTimeout = 5 * time.Minute
 
 // maxPromptBudgetReservedOutputTokens mirrors the prompt-side reserve used by
 // the UI and compaction heuristics when providers only expose a raw context
 // window and an output ceiling.
 const maxPromptBudgetReservedOutputTokens = 20_000
 
-// newHTTPClient returns an *http.Client with a 5-minute timeout suitable for
-// streaming responses. Context cancellation handles premature abort.
+// newHTTPClient returns an *http.Client for short request/response calls such
+// as the OAuth and device-login flows. Streamed model responses use
+// newStreamingHTTPClient, since this overall deadline would cut them off.
 func newHTTPClient() *http.Client {
 	return &http.Client{
-		Timeout: streamingHTTPTimeout,
+		Timeout: requestHTTPTimeout,
 	}
 }
 

@@ -48,7 +48,7 @@ func NewGeminiClient(model, apiKey, baseURL string) (*GeminiClient, error) {
 		model:        model,
 		baseURL:      strings.TrimRight(baseURL, "/"),
 		apiKey:       apiKey,
-		httpClient:   newHTTPClient(),
+		httpClient:   newStreamingHTTPClient(),
 		capabilities: ResolveModelCapabilities("gemini", model),
 	}, nil
 }

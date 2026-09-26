@@ -78,7 +78,7 @@ func NewOpenAIResponsesClient(provider, model, apiKey, baseURL string) (*OpenAIR
 		model:        model,
 		baseURL:      strings.TrimRight(baseURL, "/"),
 		apiKey:       apiKey,
-		httpClient:   newHTTPClient(),
+		httpClient:   newStreamingHTTPClient(),
 		capabilities: ResolveModelCapabilities(provider, model),
 	}, nil
 }

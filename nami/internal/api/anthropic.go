@@ -74,7 +74,7 @@ func NewAnthropicClientForProvider(provider, model, apiKey, baseURL string) (*An
 		model:        model,
 		baseURL:      strings.TrimRight(baseURL, "/"),
 		apiKey:       apiKey,
-		httpClient:   newHTTPClient(),
+		httpClient:   newStreamingHTTPClient(),
 		capabilities: ResolveModelCapabilities(provider, model),
 	}, nil
 }
