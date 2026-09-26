@@ -637,8 +637,8 @@ type BackgroundCommandUpdatedPayload struct {
 	Cwd             string    `json:"cwd,omitempty"`
 	Status          string    `json:"status"`
 	Running         bool      `json:"running"`
-	StartedAt       time.Time `json:"started_at"`
-	UpdatedAt       time.Time `json:"updated_at"`
+	StartedAt       time.Time `json:"started_at,omitzero"`
+	UpdatedAt       time.Time `json:"updated_at,omitzero"`
 	OutputPreview   string    `json:"output_preview,omitempty"`
 	HasUnreadOutput bool      `json:"has_unread_output,omitempty"`
 	UnreadBytes     int       `json:"unread_bytes,omitempty"`
@@ -654,8 +654,8 @@ type BackgroundCommandDetailPayload struct {
 	Cwd             string    `json:"cwd,omitempty"`
 	Status          string    `json:"status"`
 	Running         bool      `json:"running"`
-	StartedAt       time.Time `json:"started_at"`
-	UpdatedAt       time.Time `json:"updated_at"`
+	StartedAt       time.Time `json:"started_at,omitzero"`
+	UpdatedAt       time.Time `json:"updated_at,omitzero"`
 	Output          string    `json:"output,omitempty"`
 	HasUnreadOutput bool      `json:"has_unread_output,omitempty"`
 	UnreadBytes     int       `json:"unread_bytes,omitempty"`
@@ -697,8 +697,8 @@ type SwarmHandoffPayload struct {
 	NextAction   string    `json:"next_action,omitempty"`
 	Status       string    `json:"status"`
 	StatusNote   string    `json:"status_note,omitempty"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	CreatedAt    time.Time `json:"created_at,omitzero"`
+	UpdatedAt    time.Time `json:"updated_at,omitzero"`
 }
 
 type SwarmDashboardSnapshotPayload struct {
