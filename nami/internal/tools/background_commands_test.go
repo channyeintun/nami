@@ -88,6 +88,21 @@ func TestStopKillsEverythingTheBackgroundCommandStarted(t *testing.T) {
 	}
 }
 
+// command_status reads the command's state while its output is still
+// streaming in; run under -race, this catches fields read outside the lock.
+func TestBackgroundCommandStatusWhileOutputStreams(t *testing.T) {
+	skipWithoutPOSIXShell(t)
+	bg := startTestBackgroundCommand(t, "while :; do echo tick; sleep 0.01; done")
+	waitForBackgroundOutput(t, bg, "tick", 5*time.Second)
+
+	for range 20 {
+		if result := bg.snapshotDelta(); !result.Running || result.UpdatedAt.IsZero() {
+			t.Fatalf("snapshot = %+v, want a running command with an update time", result)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
 // unreadInput is far more than the terminal buffers hold, so writing it to a
 // process that never reads its stdin blocks.
 var unreadInput = strings.Repeat("0123456789abcdef\n", 64*1024)

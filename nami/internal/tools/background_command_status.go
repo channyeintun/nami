@@ -149,6 +149,7 @@ func (bg *backgroundCommand) snapshotDelta() BackgroundCommandResult {
 	bg.mu.Lock()
 	running := bg.running
 	errText := bg.errText
+	updatedAt := bg.updatedAt
 	var exitCode *int
 	if bg.exitCode != nil {
 		copied := *bg.exitCode
@@ -162,7 +163,7 @@ func (bg *backgroundCommand) snapshotDelta() BackgroundCommandResult {
 		Cwd:       bg.cwd,
 		Running:   running,
 		StartedAt: bg.startedAt,
-		UpdatedAt: bg.updatedAt,
+		UpdatedAt: updatedAt,
 		Output:    bg.output.ReadDelta(),
 		Error:     errText,
 		ExitCode:  exitCode,
