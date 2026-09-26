@@ -82,7 +82,11 @@ func (t *FileHistoryTool) Execute(ctx context.Context, input ToolInput) (ToolOut
 		if label == "" {
 			label = "snapshot"
 		}
-		return ToolOutput{Output: fmt.Sprintf("Created snapshot: %s", history.MakeSnapshot(label))}, nil
+		snapshotID, err := history.MakeSnapshot(label)
+		if err != nil {
+			return ToolOutput{}, fmt.Errorf("create snapshot: %w", err)
+		}
+		return ToolOutput{Output: fmt.Sprintf("Created snapshot: %s", snapshotID)}, nil
 	case "latest_snapshot":
 		snapshotID := history.LatestSnapshotID()
 		if snapshotID == "" {

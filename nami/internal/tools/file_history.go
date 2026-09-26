@@ -3,7 +3,10 @@ package tools
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
+	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,19 +15,24 @@ import (
 )
 
 // FileHistory tracks file modifications for undo/rewind support.
-// Before each write or edit, the original file content is backed up.
+//
+// A snapshot records the state files were in when it was taken. Files the
+// session had already modified are backed up when the snapshot is made. A file
+// the session first modifies later is backed up just before that write: the
+// session has not written it since the snapshot, so its content is still what
+// it was then.
 type FileHistory struct {
 	mu        sync.Mutex
 	baseDir   string
 	snapshots []FileSnapshot
-	tracked   map[string]string // path -> last backup hash
+	tracked   map[string]struct{} // absolute paths the session has modified
 }
 
-// FileSnapshot records a point-in-time checkpoint of all tracked files.
+// FileSnapshot records the state of files at a point in time.
 type FileSnapshot struct {
 	ID        string
 	CreatedAt time.Time
-	Files     []FileBackup
+	Files     map[string]FileBackup // keyed by absolute path
 }
 
 // FileBackup is a single file's content at a point in time.
@@ -33,6 +41,7 @@ type FileBackup struct {
 	BackupPath string
 	Existed    bool
 	Hash       string
+	Mode       fs.FileMode
 }
 
 // FileRewindResult reports the outcome of restoring a snapshot.
@@ -47,7 +56,7 @@ const maxSnapshots = 100
 func NewFileHistory(baseDir string) *FileHistory {
 	return &FileHistory{
 		baseDir: baseDir,
-		tracked: make(map[string]string),
+		tracked: make(map[string]struct{}),
 	}
 }
 
@@ -56,8 +65,9 @@ func DefaultFileHistoryDir(sessionDir string) string {
 	return filepath.Join(sessionDir, "file-history")
 }
 
-// TrackEdit records the current contents of a file before it is modified.
-// Should be called before any write or edit operation.
+// TrackEdit must be called before a file is modified. It marks the file as
+// modified by the session and backs it up into every snapshot that does not
+// cover it yet.
 func (h *FileHistory) TrackEdit(filePath string) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -66,58 +76,42 @@ func (h *FileHistory) TrackEdit(filePath string) error {
 	if err != nil {
 		return err
 	}
+	h.tracked[absPath] = struct{}{}
 
-	data, err := os.ReadFile(absPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			// File doesn't exist yet — track as non-existent
-			h.tracked[absPath] = ""
-			return nil
+	var backup *FileBackup
+	for i := range h.snapshots {
+		if _, covered := h.snapshots[i].Files[absPath]; covered {
+			continue
 		}
-		return fmt.Errorf("read file for tracking: %w", err)
-	}
-
-	hash := hashContent(data)
-	if prev, ok := h.tracked[absPath]; ok && prev == hash {
-		return nil // already tracked this version
-	}
-
-	backupDir := filepath.Join(h.baseDir, hash[:2])
-	if err := os.MkdirAll(backupDir, 0o755); err != nil {
-		return fmt.Errorf("create backup dir: %w", err)
-	}
-
-	backupPath := filepath.Join(backupDir, hash)
-	if _, err := os.Stat(backupPath); os.IsNotExist(err) {
-		if err := os.WriteFile(backupPath, data, 0o644); err != nil {
-			return fmt.Errorf("write backup: %w", err)
+		if backup == nil {
+			current, err := h.backupFile(absPath)
+			if err != nil {
+				return err
+			}
+			backup = &current
 		}
+		h.snapshots[i].Files[absPath] = *backup
 	}
-
-	h.tracked[absPath] = hash
 	return nil
 }
 
-// MakeSnapshot creates a named checkpoint of all currently tracked files.
-func (h *FileHistory) MakeSnapshot(label string) string {
+// MakeSnapshot records the current state of every file the session has
+// modified and returns the snapshot's id.
+func (h *FileHistory) MakeSnapshot(label string) (string, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
 	snapshot := FileSnapshot{
 		ID:        fmt.Sprintf("%s-%d", label, time.Now().UnixMilli()),
 		CreatedAt: time.Now(),
+		Files:     make(map[string]FileBackup, len(h.tracked)),
 	}
-
-	for path, hash := range h.tracked {
-		backup := FileBackup{
-			Path:    path,
-			Hash:    hash,
-			Existed: hash != "",
+	for path := range h.tracked {
+		backup, err := h.backupFile(path)
+		if err != nil {
+			return "", err
 		}
-		if hash != "" {
-			backup.BackupPath = filepath.Join(h.baseDir, hash[:2], hash)
-		}
-		snapshot.Files = append(snapshot.Files, backup)
+		snapshot.Files[path] = backup
 	}
 
 	h.snapshots = append(h.snapshots, snapshot)
@@ -127,7 +121,61 @@ func (h *FileHistory) MakeSnapshot(label string) string {
 		h.snapshots = h.snapshots[len(h.snapshots)-maxSnapshots:]
 	}
 
-	return snapshot.ID
+	return snapshot.ID, nil
+}
+
+// backupFile copies the current content of path into the content-addressed
+// backup store and describes it. A missing file is recorded as not existing.
+// Backups can hold secrets, so only the owner may read them.
+func (h *FileHistory) backupFile(path string) (FileBackup, error) {
+	file, err := os.Open(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return FileBackup{Path: path}, nil
+	}
+	if err != nil {
+		return FileBackup{}, fmt.Errorf("open %s for backup: %w", path, err)
+	}
+	defer file.Close()
+
+	info, err := file.Stat()
+	if err != nil {
+		return FileBackup{}, fmt.Errorf("stat %s for backup: %w", path, err)
+	}
+	data, err := io.ReadAll(file)
+	if err != nil {
+		return FileBackup{}, fmt.Errorf("read %s for backup: %w", path, err)
+	}
+
+	hash := hashContent(data)
+	backupPath := filepath.Join(h.baseDir, hash[:2], hash)
+	if _, err := os.Stat(backupPath); errors.Is(err, fs.ErrNotExist) {
+		if err := os.MkdirAll(filepath.Dir(backupPath), 0o700); err != nil {
+			return FileBackup{}, fmt.Errorf("create backup dir: %w", err)
+		}
+		if err := os.WriteFile(backupPath, data, 0o600); err != nil {
+			return FileBackup{}, fmt.Errorf("write backup: %w", err)
+		}
+	} else if err != nil {
+		return FileBackup{}, fmt.Errorf("stat backup: %w", err)
+	}
+
+	return FileBackup{
+		Path:       path,
+		BackupPath: backupPath,
+		Existed:    true,
+		Hash:       hash,
+		Mode:       info.Mode().Perm(),
+	}, nil
+}
+
+// findSnapshot returns the snapshot with the given id, or nil. h.mu must be held.
+func (h *FileHistory) findSnapshot(snapshotID string) *FileSnapshot {
+	for i := range h.snapshots {
+		if h.snapshots[i].ID == snapshotID {
+			return &h.snapshots[i]
+		}
+	}
+	return nil
 }
 
 // Rewind restores all files to the state captured in the given snapshot.
@@ -135,51 +183,47 @@ func (h *FileHistory) Rewind(snapshotID string) (FileRewindResult, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	var target *FileSnapshot
-	for i := range h.snapshots {
-		if h.snapshots[i].ID == snapshotID {
-			target = &h.snapshots[i]
-			break
-		}
-	}
+	target := h.findSnapshot(snapshotID)
 	if target == nil {
 		return FileRewindResult{}, fmt.Errorf("snapshot %q not found", snapshotID)
 	}
 
 	result := FileRewindResult{}
-	for _, backup := range target.Files {
-		if !backup.Existed {
-			// File didn't exist at snapshot time — remove it
-			if err := os.Remove(backup.Path); err != nil && !os.IsNotExist(err) {
-				result.Failed = append(result.Failed, fmt.Sprintf("%s: remove file: %v", backup.Path, err))
-				continue
-			}
-			invalidateFileReadState(backup.Path)
-			result.Restored++
+	for _, path := range sortedKeys(target.Files) {
+		if err := restoreFileBackup(target.Files[path]); err != nil {
+			result.Failed = append(result.Failed, fmt.Sprintf("%s: %v", path, err))
 			continue
 		}
-
-		data, err := os.ReadFile(backup.BackupPath)
-		if err != nil {
-			result.Failed = append(result.Failed, fmt.Sprintf("%s: read backup: %v", backup.Path, err))
-			continue
-		}
-
-		parentDir := filepath.Dir(backup.Path)
-		if err := os.MkdirAll(parentDir, 0o755); err != nil {
-			result.Failed = append(result.Failed, fmt.Sprintf("%s: create parent dir: %v", backup.Path, err))
-			continue
-		}
-
-		if err := os.WriteFile(backup.Path, data, 0o644); err != nil {
-			result.Failed = append(result.Failed, fmt.Sprintf("%s: write restored file: %v", backup.Path, err))
-			continue
-		}
-		invalidateFileReadState(backup.Path)
+		invalidateFileReadState(path)
 		result.Restored++
 	}
 
 	return result, nil
+}
+
+// restoreFileBackup puts a file back into its backed-up state: the recorded
+// content, or no file at all when it did not exist.
+func restoreFileBackup(backup FileBackup) error {
+	if !backup.Existed {
+		if err := os.Remove(backup.Path); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return fmt.Errorf("remove file: %w", err)
+		}
+		return nil
+	}
+
+	data, err := os.ReadFile(backup.BackupPath)
+	if err != nil {
+		return fmt.Errorf("read backup: %w", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(backup.Path), 0o755); err != nil {
+		return fmt.Errorf("create parent dir: %w", err)
+	}
+	// The mode only applies when the file has to be recreated; an existing
+	// file keeps its own.
+	if err := os.WriteFile(backup.Path, data, backup.Mode); err != nil {
+		return fmt.Errorf("write restored file: %w", err)
+	}
+	return nil
 }
 
 // LatestSnapshotID returns the ID of the most recent snapshot, or empty string.
@@ -211,13 +255,7 @@ func (h *FileHistory) DiffStats(snapshotID string) (insertions, deletions int) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	var target *FileSnapshot
-	for i := range h.snapshots {
-		if h.snapshots[i].ID == snapshotID {
-			target = &h.snapshots[i]
-			break
-		}
-	}
+	target := h.findSnapshot(snapshotID)
 	if target == nil {
 		return 0, 0
 	}
