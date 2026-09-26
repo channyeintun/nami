@@ -15,6 +15,7 @@ import (
 
 	"github.com/channyeintun/nami/internal/config"
 	"github.com/channyeintun/nami/internal/debuglog"
+	"github.com/channyeintun/nami/internal/proctree"
 )
 
 const (
@@ -130,6 +131,10 @@ func (r *Runner) runScript(ctx context.Context, script string, payload Payload) 
 	cmd.Stdin = bytes.NewReader(payloadJSON)
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
+	// A hook that times out is stopped with everything it started, such as
+	// the test run a stop hook kicked off; killing the script alone left
+	// that running.
+	proctree.KillTreeOnCancel(cmd)
 	// A background child that inherits the output pipes would otherwise keep
 	// Wait blocked long after the script itself has exited or been killed.
 	cmd.WaitDelay = hookPipeGrace

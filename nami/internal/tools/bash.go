@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/channyeintun/nami/internal/bashsecurity"
+	"github.com/channyeintun/nami/internal/proctree"
 )
 
 const defaultBashTimeout = 30 * time.Second
@@ -204,8 +205,7 @@ func (t *BashTool) Execute(ctx context.Context, input ToolInput) (ToolOutput, er
 // command started, not just the shell, and stops Wait from blocking on output
 // pipes that a surviving background process still holds.
 func killProcessTreeOnCancel(cmd *exec.Cmd) {
-	startInOwnProcessGroup(cmd)
-	cmd.Cancel = func() error { return killProcessTree(cmd) }
+	proctree.KillTreeOnCancel(cmd)
 	cmd.WaitDelay = commandWaitDelay
 }
 

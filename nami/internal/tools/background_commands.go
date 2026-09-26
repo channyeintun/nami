@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"github.com/creack/pty"
+
+	"github.com/channyeintun/nami/internal/proctree"
 )
 
 const backgroundCommandRetention = 5 * time.Minute
@@ -391,7 +393,7 @@ func (bg *backgroundCommand) shutdown() {
 	// Unix, pty.Start made the shell a session leader, so its process group
 	// holds the whole tree.
 	if running && cmd != nil {
-		_ = killProcessTree(cmd)
+		_ = proctree.KillTree(cmd)
 	}
 }
 

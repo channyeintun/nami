@@ -293,3 +293,46 @@ func TestLimitedBufferReportsFullWrites(t *testing.T) {
 		t.Fatal("truncated = false after writing past the limit")
 	}
 }
+
+// A hook that times out is stopped with what it started: a stop hook that runs
+// the test suite must not leave the suite running after it is cut off.
+func TestRunStopsWhatATimedOutHookStarted(t *testing.T) {
+	requireShell(t)
+	if runtime.GOOS != "linux" {
+		t.Skip("reads process state from /proc")
+	}
+	dir := t.TempDir()
+	pidFile := filepath.Join(t.TempDir(), "child.pid")
+	writeScript(t, dir, "stop-tests.sh", `sh -c 'echo $$ > "`+pidFile+`"; exec sleep 30' & wait`)
+
+	runner := NewRunner(dir)
+	runner.timeout = 300 * time.Millisecond
+	if _, err := runner.Run(context.Background(), Payload{Type: HookStop}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	data, err := os.ReadFile(pidFile)
+	if err != nil {
+		t.Fatalf("the hook's child never started: %v", err)
+	}
+	pid := strings.TrimSpace(string(data))
+	deadline := time.Now().Add(2 * time.Second)
+	for processRunning(pid) {
+		if time.Now().After(deadline) {
+			t.Fatalf("process %s, started by the timed-out hook, is still running", pid)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+// processRunning reports whether pid names a live process. A killed process
+// that nobody has reaped yet is a zombie, which counts as stopped.
+func processRunning(pid string) bool {
+	stat, err := os.ReadFile(filepath.Join("/proc", pid, "stat"))
+	if err != nil {
+		return false
+	}
+	// The state follows the parenthesized command name: "123 (sleep) S ...".
+	_, afterName, found := strings.Cut(string(stat), ") ")
+	return found && !strings.HasPrefix(afterName, "Z")
+}
