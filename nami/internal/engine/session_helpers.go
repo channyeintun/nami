@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"iter"
+	"os/exec"
 	"strings"
 	"time"
 	"uuid"
@@ -505,4 +506,22 @@ func persistSessionState(store *session.Store, params sessionStateParams) error 
 
 func newSessionID() string {
 	return uuid.New().String()
+}
+
+// gitBranchTimeout matches the limit the agent puts on its own git lookups.
+const gitBranchTimeout = 750 * time.Millisecond
+
+// currentGitBranch returns the branch the session metadata records, or ""
+// outside a repository. The session is saved after every agent iteration, and
+// agent.LoadTurnContext would also run git status and git log and walk the
+// working tree just to answer this.
+func currentGitBranch() string {
+	ctx, cancel := context.WithTimeout(context.Background(), gitBranchTimeout)
+	defer cancel()
+	output, err := exec.CommandContext(ctx, "git", "branch", "--show-current").Output()
+	if err != nil {
+		// Not a repository, or no git: there is no branch to record.
+		return ""
+	}
+	return strings.TrimSpace(string(output))
 }

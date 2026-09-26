@@ -176,7 +176,7 @@ func (r *sessionControlRuntime) persist() error {
 		Model:         r.state.activeModelID,
 		SubagentModel: r.state.subagentModelID,
 		CWD:           r.state.cwd,
-		Branch:        agent.LoadTurnContext().GitBranch,
+		Branch:        currentGitBranch(),
 		Tracker:       r.tracker,
 		Messages:      r.state.messages,
 	}); err != nil {

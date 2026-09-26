@@ -184,7 +184,7 @@ func RunStdioEngine(ctx context.Context, cfg config.Config) error {
 		Model:         activeModelID,
 		SubagentModel: subagentModelID,
 		CWD:           cwd,
-		Branch:        agent.LoadTurnContext().GitBranch,
+		Branch:        currentGitBranch(),
 		Tracker:       tracker,
 		Messages:      messages,
 	}); err != nil {
@@ -430,7 +430,7 @@ func RunStdioEngine(ctx context.Context, cfg config.Config) error {
 				Model:         loopState.activeModelID,
 				SubagentModel: loopState.subagentModelID,
 				CWD:           loopState.cwd,
-				Branch:        agent.LoadTurnContext().GitBranch,
+				Branch:        currentGitBranch(),
 				Tracker:       tracker,
 				Messages:      loopState.messages,
 			}); err != nil {

@@ -592,7 +592,7 @@ func (t *userTurnContext) persistCurrentMessages() {
 		Model:         t.state.activeModelID,
 		SubagentModel: t.deps.subagentModelState.Get(),
 		CWD:           t.state.cwd,
-		Branch:        agent.LoadTurnContext().GitBranch,
+		Branch:        currentGitBranch(),
 		Tracker:       t.deps.tracker,
 		Messages:      t.state.messages,
 	})

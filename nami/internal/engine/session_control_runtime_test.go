@@ -65,6 +65,22 @@ func TestPrepareWorktreeRefusesAnOptionShapedBranch(t *testing.T) {
 	}
 }
 
+// The session metadata records the branch through currentGitBranch, which
+// runs one git command instead of the full turn-context scan.
+func TestCurrentGitBranchReadsTheCheckedOutBranch(t *testing.T) {
+	repo, git := newTestRepo(t)
+	git("checkout", "-q", "release")
+	t.Chdir(repo)
+	if got := currentGitBranch(); got != "release" {
+		t.Fatalf("currentGitBranch = %q, want release", got)
+	}
+
+	t.Chdir(t.TempDir())
+	if got := currentGitBranch(); got != "" {
+		t.Fatalf("outside a repository currentGitBranch = %q, want empty", got)
+	}
+}
+
 func TestPrepareWorktreeStillAddsAnOrdinaryBranch(t *testing.T) {
 	repo, _ := newTestRepo(t)
 	target := filepath.Join(t.TempDir(), "worktree")
