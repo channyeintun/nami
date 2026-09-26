@@ -10,13 +10,14 @@ It is not a general Silvery tutorial. It is a practical note for working on `nam
 
 - The TUI entrypoint is `nami/tui/src/index.tsx`.
 - The app is wrapped in `ThemeProvider` from `silvery`.
-- The current default theme is `presetTheme("nord")`.
+- The theme is built with `createTheme()` from `silvery/theme`: the `sonokai` preset with a few color overrides.
 - The main app root uses `Screen` so the layout fills the terminal and responds correctly to resize events.
 
 ### Package source
 
-- `nami/tui` depends on the registry `silvery` package with version `^0.21.1`.
-- `nami/tui/package-lock.json` resolves `silvery` at `0.21.1`, with `@silvery/ansi`, `@silvery/color`, and `@silvery/commander` from the registry at compatible `0.21.x` versions.
+- `nami/tui` depends on the registry `silvery` package with version `^0.24.0`.
+- `nami/tui/package-lock.json` resolves `silvery` at `0.24.0`, with `@silvery/ansi`, `@silvery/color`, and `@silvery/commander` from the registry at compatible `0.24.x` versions.
+- silvery 0.24 requires Node.js 24 or newer (or Bun). It uses `using` declarations, so older Node fails with a `SyntaxError` before anything renders.
 - The old local wrapper package has been removed.
 
 ## What Works Well
@@ -176,13 +177,13 @@ The theme should be applied by wrapping the app in `ThemeProvider`.
 
 Do not try to pass theme data through `Screen`.
 
-### 2. `presetTheme()` is safer than theme lookup APIs that return unions
+### 2. Build the theme instead of looking it up
 
 In the Silvery type surface, some theme lookup helpers can return a union that is not typed as a concrete `Theme`.
 
-What worked reliably:
+What works reliably:
 
-- `presetTheme("nord")`
+- `createTheme().preset("sonokai")...build()` from `silvery/theme`, which returns a concrete `Theme`
 
 This avoids the `Theme | ColorPalette` typing problem that showed up during integration.
 
@@ -203,7 +204,9 @@ Do not assume the same source tree layout as `reference/silvery`.
 
 Current example:
 
-- `nami/tui/src/components/StreamOutput.tsx` uses `useBoxRect()` and derives `viewportHeight` from it.
+- `nami/tui/src/components/StreamOutput.tsx` wraps the transcript in `MeasuredBox` and passes the measured `height` to `ListView`.
+
+silvery 0.24 renamed `useBoxRect()` to `useBoxRectDangerously()`: read during render it returns a zero rect on the first paint, so layout that branches on it flashes a collapsed frame. `MeasuredBox` defers its children until the first committed layout.
 
 ### 5. Not every raw model status should be shown directly to users
 
@@ -218,7 +221,7 @@ This keeps the prompt area simpler without removing detailed transcript state en
 
 ## Good Defaults For Future TUI Work
 
-When adding or namiging Silvery UI in `nami`, prefer this order of decisions:
+When adding or changing Silvery UI in `nami`, prefer this order of decisions:
 
 1. Start from `Screen` and bounded layout regions.
 2. Use `ListView` for long, interactive vertical surfaces.
@@ -238,7 +241,7 @@ If you need to work on the TUI again, these are the most useful files to inspect
 - `nami/tui/src/components/MessageRow.tsx`
 - `nami/tui/src/components/messages/StreamingAssistantMessage.tsx`
 - `nami/tui/node_modules/silvery/dist/index.d.mts`
-- `reference/silvery/docs/api/spinner.md`
+- `reference/silvery/docs/api/spinner.md` (in a local Silvery checkout; `reference/` is gitignored)
 - `reference/silvery/docs/guides/theming.md`
 
 ## Summary
@@ -250,4 +253,4 @@ The biggest practical Silvery lessons in `nami` so far are:
 - use semantic theme tokens everywhere possible
 - rely on `usePaste` and `key.text ?? input` for correct input behavior
 - keep scroll ownership local to the pane that actually needs it
-- prefer `presetTheme()` for stable theme setup in this repo
+- build the theme with `createTheme()` for stable theme setup in this repo
