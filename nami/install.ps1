@@ -252,11 +252,9 @@ $InstallDir = if ($env:INSTALL_DIR) {
 } else {
     Join-Path $InstallRoot "bin"
 }
-$PortableNodeDir = if ($env:NAMI_RUNTIME_DIR) {
-    $env:NAMI_RUNTIME_DIR
-} else {
-    Join-Path $InstallRoot "runtime\node"
-}
+# nami.cmd looks for this runtime at ..\runtime\node relative to itself, so it
+# has to live here rather than wherever the caller would like.
+$PortableNodeDir = Join-Path $InstallRoot "runtime\node"
 $PortableNodeExe = Join-Path $PortableNodeDir "node.exe"
 
 $TempDir = Join-Path ([System.IO.Path]::GetTempPath()) ("nami-install-" + [System.Guid]::NewGuid().ToString("N"))
