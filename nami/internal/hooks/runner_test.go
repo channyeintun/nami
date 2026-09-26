@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 )
 
 func writeScript(t *testing.T, dir, name, body string) string {
@@ -215,5 +216,80 @@ func TestDefaultHooksDirIsAbsolute(t *testing.T) {
 	}
 	if !strings.Contains(DefaultHooksDir(), "hooks") {
 		t.Fatalf("DefaultHooksDir() = %q, want it to point at a hooks directory", DefaultHooksDir())
+	}
+}
+
+// A hook runs inline with the operation it hooks, so one that hangs must be
+// abandoned rather than stall the session until the turn is cancelled.
+func TestRunAbandonsAHookThatOutlivesItsTimeout(t *testing.T) {
+	requireShell(t)
+	dir := t.TempDir()
+	writeScript(t, dir, "stop-slow.sh", `sleep 30`)
+	writeScript(t, dir, "stop-working.sh", `echo '{"message":"ok"}'`)
+
+	runner := NewRunner(dir)
+	runner.timeout = 200 * time.Millisecond
+	started := time.Now()
+	responses, err := runner.Run(context.Background(), Payload{Type: HookStop})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if elapsed := time.Since(started); elapsed > 10*time.Second {
+		t.Fatalf("Run took %v, want the slow hook cut off near its timeout", elapsed)
+	}
+	if len(responses) != 1 || responses[0].Message != "ok" {
+		t.Fatalf("responses = %+v, want only the working hook", responses)
+	}
+}
+
+// A background child that inherits the hook's stdout keeps the pipe open after
+// the script exits; waiting for EOF would block for the child's whole life.
+func TestRunDoesNotWaitForABackgroundChildHoldingOutput(t *testing.T) {
+	requireShell(t)
+	dir := t.TempDir()
+	writeScript(t, dir, "session_start", `sleep 30 & echo '{"message":"started"}'`)
+
+	started := time.Now()
+	responses, err := NewRunner(dir).Run(context.Background(), Payload{Type: HookSessionStart})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if elapsed := time.Since(started); elapsed > 10*time.Second {
+		t.Fatalf("Run took %v, want it bounded by the pipe grace period", elapsed)
+	}
+	if len(responses) != 1 || responses[0].Message != "started" {
+		t.Fatalf("responses = %+v, want the hook's response", responses)
+	}
+}
+
+func TestRunRejectsOversizedHookOutput(t *testing.T) {
+	requireShell(t)
+	dir := t.TempDir()
+	// Print well past the cap; the hook must still run to completion rather
+	// than die on a closed pipe, and its output must not be used.
+	writeScript(t, dir, "stop.sh", `head -c 3000000 /dev/zero | tr '\0' 'x'`)
+
+	responses, err := NewRunner(dir).Run(context.Background(), Payload{Type: HookStop})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if len(responses) != 0 {
+		t.Fatalf("got %d responses, want the oversized hook skipped", len(responses))
+	}
+}
+
+func TestLimitedBufferReportsFullWrites(t *testing.T) {
+	buffer := &limitedBuffer{limit: 4}
+	for _, chunk := range []string{"ab", "cdef", "gh"} {
+		n, err := buffer.Write([]byte(chunk))
+		if err != nil || n != len(chunk) {
+			t.Fatalf("Write(%q) = %d, %v; want %d, nil", chunk, n, err, len(chunk))
+		}
+	}
+	if got := buffer.buf.String(); got != "abcd" {
+		t.Fatalf("buffer = %q, want the first 4 bytes", got)
+	}
+	if !buffer.truncated {
+		t.Fatal("truncated = false after writing past the limit")
 	}
 }
