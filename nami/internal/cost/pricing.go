@@ -21,6 +21,7 @@ var (
 	legacyOpusTier = priceTier{inputPerMTok: 15, outputPerMTok: 75, cacheReadPerMTok: 1.5, cacheWritePerMTok: 18.75}
 	modernOpusTier = priceTier{inputPerMTok: 5, outputPerMTok: 25, cacheReadPerMTok: 0.5, cacheWritePerMTok: 6.25}
 	fableTier      = priceTier{inputPerMTok: 10, outputPerMTok: 50, cacheReadPerMTok: 1, cacheWritePerMTok: 12.5}
+	haiku3Tier     = priceTier{inputPerMTok: 0.25, outputPerMTok: 1.25, cacheReadPerMTok: 0.03, cacheWritePerMTok: 0.3}
 	haiku35Tier    = priceTier{inputPerMTok: 0.8, outputPerMTok: 4, cacheReadPerMTok: 0.08, cacheWritePerMTok: 1}
 	haiku45Tier    = priceTier{inputPerMTok: 1, outputPerMTok: 5, cacheReadPerMTok: 0.1, cacheWritePerMTok: 1.25}
 
@@ -72,6 +73,8 @@ func priceTierForModel(model string) (priceTier, bool) {
 		return fableTier, true
 	case strings.Contains(lower, "haiku") && containsVersion(lower, "3.5"):
 		return haiku35Tier, true
+	case namesGenerationFirst(lower, "3", "haiku"):
+		return haiku3Tier, true
 	case strings.Contains(lower, "haiku"):
 		return haiku45Tier, true
 	// Only the pre-4.5 Opus generations were priced at the legacy rate. Matching
@@ -96,15 +99,27 @@ func priceTierForModel(model string) (priceTier, bool) {
 // retired or deprecated — so they are matched by name rather than by a numeric
 // comparison that a date suffix like "20240229" would confuse.
 func isLegacyOpus(lower string) bool {
-	// Opus 3 spells the generation before the tier name.
+	if namesGenerationFirst(lower, "3", "opus") {
+		return true
+	}
+	// Opus 4.0 and 4.1. The original Opus 4 carries a release date instead of a
+	// point release: "claude-opus-4-20250514", or on Vertex AI
+	// "claude-opus-4@20250514". Without either it ends the id.
+	return containsVersion(lower, "4.0", "4.1") ||
+		strings.Contains(lower, "opus-4-2025") ||
+		strings.Contains(lower, "opus-4@") ||
+		strings.HasSuffix(lower, "opus-4")
+}
+
+// namesGenerationFirst reports whether a Claude 3 style id spells the
+// generation before the tier name, as in "claude-3-opus-20240229".
+func namesGenerationFirst(lower, generation, tier string) bool {
 	for _, separator := range []string{"-", ".", "_"} {
-		if strings.Contains(lower, "3"+separator+"opus") {
+		if strings.Contains(lower, generation+separator+tier) {
 			return true
 		}
 	}
-	// Opus 4.0 and 4.1. The original Opus 4 carries a release date instead of a
-	// point release ("claude-opus-4-20250514"), so that shape is matched too.
-	return containsVersion(lower, "4.0", "4.1") || strings.Contains(lower, "opus-4-2025")
+	return false
 }
 
 // gptPriceTier maps a GPT id onto its rate. Variant suffixes are checked before

@@ -57,6 +57,11 @@ func TestPriceTierSeparatesOpusGenerations(t *testing.T) {
 		"claude-opus-4-20250514",
 		"claude-opus-4-1",
 		"claude-opus-4-1-20250805",
+		// Vertex AI puts "@" before the date, and an alias can end at the 4.
+		"claude-opus-4@20250514",
+		"claude-opus-4-1@20250805",
+		"claude-3-opus@20240229",
+		"anthropic/claude-opus-4",
 	}
 	for _, model := range legacy {
 		if tier, ok := priceTierForModel(model); !ok || tier != legacyOpusTier {
@@ -64,7 +69,7 @@ func TestPriceTierSeparatesOpusGenerations(t *testing.T) {
 		}
 	}
 
-	modern := []string{"claude-opus-4-5", "claude-opus-4-8", "claude-opus-5", "claude-opus-6-preview"}
+	modern := []string{"claude-opus-4-5", "claude-opus-4-8", "claude-opus-5", "claude-opus-6-preview", "claude-opus-4-5@20251101"}
 	for _, model := range modern {
 		if tier, ok := priceTierForModel(model); !ok || tier != modernOpusTier {
 			t.Errorf("priceTierForModel(%q) = %+v ok=%v, want the modern opus tier", model, tier, ok)
@@ -113,5 +118,23 @@ func TestPriceTierAcceptsProviderPrefixedIDs(t *testing.T) {
 	}
 	if tier, ok := priceTierForModel("github-copilot/gpt-5.6"); !ok || tier != gptFlagshipTier {
 		t.Errorf("prefixed gpt id = %+v ok=%v", tier, ok)
+	}
+}
+
+// Each Haiku generation has its own rate; Claude 3 Haiku costs a quarter of
+// Haiku 4.5, and its id names the generation first.
+func TestPriceTierSeparatesHaikuGenerations(t *testing.T) {
+	cases := map[string]priceTier{
+		"claude-3-haiku-20240307":   haiku3Tier,
+		"claude-3-haiku@20240307":   haiku3Tier,
+		"claude-3-5-haiku-20241022": haiku35Tier,
+		"claude-3-5-haiku@20241022": haiku35Tier,
+		"claude-haiku-4-5-20251001": haiku45Tier,
+		"claude-haiku-4-5@20251001": haiku45Tier,
+	}
+	for model, want := range cases {
+		if got, ok := priceTierForModel(model); !ok || got != want {
+			t.Errorf("priceTierForModel(%q) = %+v ok=%v, want %+v", model, got, ok, want)
+		}
 	}
 }
