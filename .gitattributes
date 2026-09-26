@@ -1,0 +1,4 @@
+# cmd.exe can miss goto and call labels in a batch file with LF-only line
+# endings, so check batch files out with CRLF on every platform. The release
+# build copies nami/tui/bin/nami.cmd straight from the working tree.
+*.cmd text eol=crlf
