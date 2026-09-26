@@ -129,13 +129,11 @@ If installing from a local clone:
 
 ```bash
 cd nami/tui
-make release-local
-mkdir -p "$HOME/.local/bin"
-install -m 755 release/nami "$HOME/.local/bin/nami"
-install -m 755 release/nami.js "$HOME/.local/bin/nami.js"
-install -m 755 release/nami-engine "$HOME/.local/bin/nami-engine"
+make install PREFIX="$HOME/.local/bin"
 export PATH="$HOME/.local/bin:$PATH"
 ```
+
+`make install` runs `make release-local`, then copies the launcher shim, `nami.js`, `nami-engine`, and `release/node_modules` into `PREFIX`. Keep that `node_modules` directory next to `nami.js`: it holds the native addons the launcher loads under Node.js and Deno, and without it the TUI stops at startup with "Cannot find native binding".
 
 To build Windows release assets from source:
 

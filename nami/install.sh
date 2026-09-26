@@ -148,11 +148,8 @@ else
   echo "If curl reported a 404 above, the latest GitHub release has no archive for your"
   echo "platform yet. Otherwise check your network connection and rerun the installer."
   echo ""
-  echo "If you already have a local build, install manually instead:"
-  echo "  mkdir -p \"\$HOME/.local/bin\""
-  echo "  install -m 755 nami \"\$HOME/.local/bin/nami\""
-  echo "  install -m 755 nami.js \"\$HOME/.local/bin/nami.js\""
-  echo "  install -m 755 nami-engine \"\$HOME/.local/bin/nami-engine\""
+  echo "If you have a clone of the repository, build and install from source instead:"
+  echo "  make -C nami install PREFIX=\"\$HOME/.local/bin\""
   echo "  export PATH=\"\$HOME/.local/bin:\$PATH\""
   exit 1
 fi

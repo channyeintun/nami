@@ -39,7 +39,8 @@ release-local: clean build-portable-launcher-bundle
 		echo "Built: $(BUILD_DIR)/$(BINARY_NAME) + $(BUILD_DIR)/$(LAUNCHER_JS_NAME) + $(BUILD_DIR)/$(ENGINE_NAME)"; \
 	fi
 	@echo "The launcher requires one of these runtimes where it runs: Node.js 24 or newer, bun, or deno."
-	@echo "Copy the launcher shim, $(LAUNCHER_JS_NAME), and the engine binary to a directory in your PATH to install."
+	@echo "Run 'make install PREFIX=<dir>' to install, or copy the launcher shim, $(LAUNCHER_JS_NAME), the engine binary,"
+	@echo "and $(BUILD_DIR)/node_modules (native addons the launcher loads) into one directory on your PATH."
 
 build-portable-launcher-bundle:
 	@mkdir -p $(BUILD_DIR)
