@@ -20,71 +20,92 @@ interface ToolDescriptor {
 
 function summarizeInput(name: string, raw: string): string {
   try {
-    const obj = JSON.parse(raw);
-    if (name === "bash" && obj.command) return obj.command;
-    if (name === "agent" && obj.description) return obj.description;
-    if ((name === "agent_status" || name === "agent_stop") && obj.agent_id)
-      return obj.agent_id;
-    if (
-      (name === "create_file" ||
-        name === "file_read" ||
-        name === "read_file" ||
-        name === "file_write" ||
-        name === "file_edit" ||
-        name === "replace_string_in_file") &&
-      (obj.filePath || obj.file_path || obj.path)
-    )
-      return obj.filePath || obj.file_path || obj.path;
-    if (
-      name === "multi_replace_string_in_file" &&
-      Array.isArray(obj.replacements)
-    ) {
-      const files: string[] = [];
-      for (const replacement of obj.replacements as Array<{
-        filePath?: string;
-        file_path?: string;
-      }>) {
-        const filePath = replacement?.filePath || replacement?.file_path;
-        if (
-          typeof filePath === "string" &&
-          filePath.length > 0 &&
-          !files.includes(filePath)
-        ) {
-          files.push(filePath);
-        }
-      }
-      if (files.length === 1) {
-        return files[0];
-      }
-      if (obj.replacements.length > 0) {
-        return `${obj.replacements.length} replacements`;
-      }
+    const summary = summarizeParsedInput(name, JSON.parse(raw));
+    if (summary) {
+      return summary;
     }
-    if (name === "apply_patch") {
-      const patch =
-        typeof obj.patch === "string"
-          ? obj.patch
-          : typeof obj.input === "string"
-            ? obj.input
-            : undefined;
-      if (patch) {
-        return summarizePatchTarget(patch);
-      }
-    }
-    if (name === "glob" || name === "file_search") {
-      if (obj.pattern || obj.query) return obj.pattern || obj.query;
-    }
-    if (name === "grep" || name === "grep_search") {
-      if (obj.pattern || obj.query) return obj.pattern || obj.query;
-    }
-    if (name === "read_project_structure" && obj.path) return obj.path;
-    if (name === "git" && obj.subcommand) return obj.subcommand;
-    if (name === "web_search" && obj.query) return obj.query;
-    if (name === "web_fetch" && obj.url) return obj.url;
   } catch {
-    // ignore
+    // Not JSON: show the raw input below.
   }
   return raw.length > 60 ? raw.slice(0, 57) + "..." : raw;
+}
+
+// Tool input is model output, so a field can hold any JSON type. Only
+// strings are shown: the summaries are rendered as text, and the file-path
+// ones go through basenameOrFallback, which calls string methods on them.
+function summarizeParsedInput(name: string, input: unknown): string {
+  const field = (...keys: string[]) => stringField(input, keys);
+
+  switch (name) {
+    case "bash":
+      return field("command");
+    case "agent":
+      return field("description");
+    case "agent_status":
+    case "agent_stop":
+      return field("agent_id");
+    case "create_file":
+    case "file_read":
+    case "read_file":
+    case "file_write":
+    case "file_edit":
+    case "replace_string_in_file":
+      return field("filePath", "file_path", "path");
+    case "multi_replace_string_in_file":
+      return summarizeReplacementTargets(input);
+    case "apply_patch": {
+      const patch = field("patch", "input");
+      return patch ? summarizePatchTarget(patch) : "";
+    }
+    case "glob":
+    case "file_search":
+    case "grep":
+    case "grep_search":
+      return field("pattern", "query");
+    case "read_project_structure":
+      return field("path");
+    case "git":
+      return field("subcommand");
+    case "web_search":
+      return field("query");
+    case "web_fetch":
+      return field("url");
+    default:
+      return "";
+  }
+}
+
+function summarizeReplacementTargets(input: unknown): string {
+  if (typeof input !== "object" || input === null) {
+    return "";
+  }
+  const replacements = (input as Record<string, unknown>).replacements;
+  if (!Array.isArray(replacements) || replacements.length === 0) {
+    return "";
+  }
+
+  const files: string[] = [];
+  for (const replacement of replacements) {
+    const filePath = stringField(replacement, ["filePath", "file_path"]);
+    if (filePath && !files.includes(filePath)) {
+      files.push(filePath);
+    }
+  }
+
+  return files.length === 1 ? files[0] : `${replacements.length} replacements`;
+}
+
+function stringField(value: unknown, keys: string[]): string {
+  if (typeof value !== "object" || value === null) {
+    return "";
+  }
+  for (const key of keys) {
+    const field = (value as Record<string, unknown>)[key];
+    if (typeof field === "string" && field.length > 0) {
+      return field;
+    }
+  }
+  return "";
 }
 
 const ToolProgress: FC<ToolProgressProps> = ({ toolCall }) => {
