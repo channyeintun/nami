@@ -178,7 +178,7 @@ func (c *GeminiClient) openStream(ctx context.Context, payload geminiGenerateCon
 
 		currentResp, err := c.httpClient.Do(req)
 		if err != nil {
-			return &APIError{Type: ErrNetwork, Message: "Gemini request failed", Err: err}
+			return networkError("Gemini request failed", err)
 		}
 		if currentResp.StatusCode >= http.StatusMultipleChoices {
 			defer currentResp.Body.Close()

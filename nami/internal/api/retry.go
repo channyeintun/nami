@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math"
 	"net/http"
 	"strconv"
@@ -42,6 +43,12 @@ func (e *APIError) Error() string {
 
 func (e *APIError) Unwrap() error {
 	return e.Err
+}
+
+// networkError reports a failed exchange with a provider. Error() shows only
+// the message, so the cause goes into it as well as into Err.
+func networkError(action string, err error) *APIError {
+	return &APIError{Type: ErrNetwork, Message: fmt.Sprintf("%s: %v", action, err), Err: err}
 }
 
 // RetryPolicy defines retry behavior per error class.

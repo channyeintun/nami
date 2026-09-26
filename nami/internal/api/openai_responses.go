@@ -175,7 +175,7 @@ func (c *OpenAIResponsesClient) openStream(ctx context.Context, payload openAIRe
 
 		currentResp, err := c.httpClient.Do(req)
 		if err != nil {
-			return &APIError{Type: ErrNetwork, Message: fmt.Sprintf("OpenAI Responses request failed: %v", err), Err: err}
+			return networkError("OpenAI Responses request failed", err)
 		}
 		if currentResp.StatusCode >= http.StatusMultipleChoices {
 			defer currentResp.Body.Close()

@@ -225,7 +225,7 @@ func (c *AnthropicClient) openStream(ctx context.Context, payload anthropicReque
 
 		currentResp, err := c.httpClient.Do(req)
 		if err != nil {
-			return &APIError{Type: ErrNetwork, Message: fmt.Sprintf("anthropic request failed: %v", err), Err: err}
+			return networkError("anthropic request failed", err)
 		}
 		if currentResp.StatusCode >= http.StatusMultipleChoices {
 			defer currentResp.Body.Close()
@@ -436,7 +436,7 @@ func readSSE(ctx context.Context, body io.Reader, handle func(eventName, data st
 		return err
 	}
 	if err := scanner.Err(); err != nil {
-		return &APIError{Type: ErrNetwork, Message: "read anthropic stream", Err: err}
+		return networkError("read model stream", err)
 	}
 	return flush()
 }

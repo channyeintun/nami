@@ -111,7 +111,7 @@ func (c *OllamaClient) Stream(ctx context.Context, req ModelRequest) (iter.Seq2[
 			return
 		}
 		if err := scanner.Err(); err != nil {
-			yield(ModelEvent{}, &APIError{Type: ErrNetwork, Message: "read Ollama stream", Err: err})
+			yield(ModelEvent{}, networkError("read Ollama stream", err))
 		}
 	}, nil
 }
@@ -139,7 +139,7 @@ func (c *OllamaClient) openStream(ctx context.Context, payload ollamaChatRequest
 
 		currentResp, err := c.httpClient.Do(req)
 		if err != nil {
-			return &APIError{Type: ErrNetwork, Message: "Ollama request failed", Err: err}
+			return networkError("Ollama request failed", err)
 		}
 		if currentResp.StatusCode >= http.StatusMultipleChoices {
 			defer currentResp.Body.Close()
