@@ -75,8 +75,12 @@ function gray(text: string): string {
   return wrapAnsi(text, ANSI.grayStart, ANSI.grayEnd);
 }
 
+// Checks the whole text: sampling only its start sent an answer whose first
+// paragraph ran past the sample without a markdown character down the
+// plain-text path, and every heading, list and code fence after it rendered
+// as raw source. The scan costs well under 2 ms for a megabyte.
 function hasMarkdownSyntax(text: string): boolean {
-  return MD_SYNTAX_RE.test(text.length > 500 ? text.slice(0, 500) : text);
+  return MD_SYNTAX_RE.test(text);
 }
 
 function stripPromptXMLTags(text: string): string {
