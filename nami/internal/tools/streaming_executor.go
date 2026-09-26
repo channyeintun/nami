@@ -196,7 +196,7 @@ func (e *StreamingExecutor) startLocked(call *streamingCall) {
 	}
 
 	go func(tracked *streamingCall) {
-		output, err := tracked.pending.Tool.Execute(e.ctx, tracked.pending.Input)
+		output, err := executeTool(e.ctx, tracked.pending.Tool, tracked.pending.Input)
 
 		e.mu.Lock()
 		defer e.mu.Unlock()

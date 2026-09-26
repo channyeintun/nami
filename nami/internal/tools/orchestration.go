@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"runtime/debug"
 	"strconv"
 	"sync"
 )
@@ -148,8 +149,22 @@ func executePendingCall(ctx context.Context, call PendingCall, options ExecuteOp
 		}
 	}
 
-	output, err := call.Tool.Execute(ctx, call.Input)
+	output, err := executeTool(ctx, call.Tool, call.Input)
 	return IndexedResult{Index: call.Index, Output: output, Err: err}
+}
+
+// executeTool runs one tool call and turns a panic inside it into an error
+// naming the tool, with the stack for the bug report. Tools run on the engine's
+// goroutines, so an unrecovered panic would crash the engine and lose the
+// session over what should be one failed call.
+func executeTool(ctx context.Context, tool Tool, input ToolInput) (output ToolOutput, err error) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			output = ToolOutput{}
+			err = fmt.Errorf("tool %q panicked: %v\n\n%s", tool.Name(), recovered, debug.Stack())
+		}
+	}()
+	return tool.Execute(ctx, input)
 }
 
 func permissionMessage(action string, call PendingCall, reason string) string {
