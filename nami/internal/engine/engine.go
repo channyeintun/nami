@@ -212,6 +212,11 @@ func RunStdioEngine(ctx context.Context, cfg config.Config) error {
 		"mode":  string(mode),
 		"model": activeModelID,
 	})
+	// The engine picks the starting mode: --mode, else default_mode in
+	// config.json, else plan. The UI shows whichever it is.
+	if err := bridge.Emit(ipc.EventModeChanged, ipc.ModeChangedPayload{Mode: string(mode)}); err != nil {
+		return err
+	}
 	if slashDescriptorErr != nil {
 		if err := bridge.EmitNotice(fmt.Sprintf("load slash skills: %v", slashDescriptorErr)); err != nil {
 			return err

@@ -144,10 +144,14 @@ const StatusBar: FC<StatusBarProps> = ({
               <Text color="$muted">{sessionLabel}</Text>
             </>
           ) : null}
-          <Text color="$muted"> · </Text>
-          <Text color={modeLabelColor(mode)} bold>
-            {formatModeLabel(mode)}
-          </Text>
+          {mode ? (
+            <>
+              <Text color="$muted"> · </Text>
+              <Text color={modeLabelColor(mode)} bold>
+                {formatModeLabel(mode)}
+              </Text>
+            </>
+          ) : null}
           {goalLabel ? (
             <>
               <Text color="$muted"> · </Text>

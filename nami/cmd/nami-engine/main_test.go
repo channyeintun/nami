@@ -205,3 +205,19 @@ func TestMCPAddCommandRequiresArguments(t *testing.T) {
 		t.Errorf("mcp add rejected a valid argument list: %v", err)
 	}
 }
+
+// --mode takes plan or fast. Anything else used to start the session in fast
+// mode without a word.
+func TestParseModeFlag(t *testing.T) {
+	for input, want := range map[string]string{"": "", "plan": "plan", " Fast ": "fast", "PLAN": "plan"} {
+		got, err := parseModeFlag(input)
+		if err != nil || got != want {
+			t.Errorf("parseModeFlag(%q) = %q, %v; want %q", input, got, err, want)
+		}
+	}
+	for _, input := range []string{"plna", "auto", "fast-mode"} {
+		if _, err := parseModeFlag(input); err == nil {
+			t.Errorf("parseModeFlag(%q) accepted an unknown mode", input)
+		}
+	}
+}

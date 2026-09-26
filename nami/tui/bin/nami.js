@@ -71,7 +71,8 @@ Options:
   --model, -m <provider/model>  Model to use (default: the model you used last,
                                 else "model" in config.json, else
                                 anthropic/claude-sonnet-5)
-  --mode <plan|fast>            Execution mode (default: plan)
+  --mode <plan|fast>            Execution mode (default: "default_mode" in
+                                config.json, else plan)
   --auto-mode                   Auto-approve non-destructive tool calls
   --help, -h                    Show this help`;
 

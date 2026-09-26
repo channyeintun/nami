@@ -26,10 +26,10 @@ const enginePath =
   candidates.find((p) => existsSync(p)) ??
   "nami-engine";
 
-// Left empty unless --model is given, so the engine can choose from config;
-// see index.tsx.
+// Left empty unless --model or --mode is given, so the engine can choose
+// from config; see index.tsx.
 let model = "";
-let mode = "plan";
+let mode = "";
 let autoMode = false;
 const theme = createTheme()
   .preset("sonokai")
@@ -57,7 +57,8 @@ Options:
   --model, -m <provider/model>  Model to use (default: the model you used last,
                                 else "model" in config.json, else
                                 anthropic/claude-sonnet-5)
-  --mode <plan|fast>            Execution mode (default: plan)
+  --mode <plan|fast>            Execution mode (default: "default_mode" in
+                                config.json, else plan)
   --auto-mode                   Auto-approve non-destructive tool calls
   --help, -h                    Show this help`);
     process.exit(0);

@@ -12,7 +12,10 @@ const enginePath = process.env["NAMI_ENGINE_PATH"] ?? "nami-engine";
 // NAMI_MODEL from -m/--model). Without one the engine picks from config, the
 // last model that worked, or its own default, and reports it in model_changed.
 const model = process.env["NAMI_MODEL"]?.trim() ?? "";
-const mode = process.env["NAMI_MODE"] ?? "plan";
+// Likewise only a mode the user chose (NAMI_MODE from --mode): the engine
+// otherwise starts in default_mode from config.json, else plan, and reports
+// it in mode_changed.
+const mode = process.env["NAMI_MODE"]?.trim() ?? "";
 const autoMode = process.env["NAMI_AUTO_MODE"] === "true";
 const theme = createTheme()
   .preset("sonokai")

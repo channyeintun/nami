@@ -85,8 +85,12 @@ func runEngine(modelFlag, modeFlag string, stdioMode, autoMode bool) error {
 
 	// CLI flag overrides
 	cfg = applyModelFlag(cfg, modelFlag)
-	if modeFlag != "" {
-		cfg.DefaultMode = modeFlag
+	mode, err := parseModeFlag(modeFlag)
+	if err != nil {
+		return err
+	}
+	if mode != "" {
+		cfg.DefaultMode = mode
 	}
 	if autoMode {
 		cfg.AutoMode = true
@@ -107,7 +111,20 @@ func runEngine(modelFlag, modeFlag string, stdioMode, autoMode bool) error {
 		return engine.RunStdioEngine(ctx, cfg)
 	}
 
-	return launchTUI(ctx, cfg)
+	return launchTUI(ctx, cfg, mode)
+}
+
+// parseModeFlag checks --mode. Anything but plan or fast used to start the
+// session in fast mode without a word. An empty value means the flag was not
+// given.
+func parseModeFlag(value string) (string, error) {
+	mode := strings.ToLower(strings.TrimSpace(value))
+	switch mode {
+	case "", "plan", "fast":
+		return mode, nil
+	default:
+		return "", fmt.Errorf("--mode must be plan or fast, not %q", value)
+	}
 }
 
 // applyModelFlag applies --model the same way NAMI_MODEL is applied: a
@@ -146,7 +163,11 @@ func tuiModelSelection(cfg config.Config) string {
 	return provider + "/" + model
 }
 
-func launchTUI(ctx context.Context, cfg config.Config) error {
+// launchTUI runs the TUI, which starts its own engine. Only what the user
+// chose on this command line is handed on, as the TUI's own launcher does:
+// that engine reads config.json itself, and a value passed on from it would
+// look chosen.
+func launchTUI(ctx context.Context, cfg config.Config, modeFlag string) error {
 	nodePath, err := exec.LookPath("node")
 	if err != nil {
 		return fmt.Errorf("node is required for TUI mode: %w", err)
@@ -178,12 +199,14 @@ func launchTUI(ctx context.Context, cfg config.Config) error {
 	cmd.Stderr = os.Stderr
 	cmd.Env = append(os.Environ(),
 		"NAMI_ENGINE_PATH="+enginePath,
-		"NAMI_MODE="+cfg.DefaultMode,
 		"NAMI_AUTO_MODE="+strconv.FormatBool(cfg.AutoMode),
 		"NAMI_COST_WARNING_THRESHOLD_USD="+strconv.FormatFloat(cfg.CostWarningThresholdUSD, 'f', -1, 64),
 	)
 	if model := tuiModelSelection(cfg); model != "" {
 		cmd.Env = append(cmd.Env, "NAMI_MODEL="+model)
+	}
+	if modeFlag != "" {
+		cmd.Env = append(cmd.Env, "NAMI_MODE="+modeFlag)
 	}
 
 	err = cmd.Run()

@@ -69,13 +69,14 @@ type ProviderOverride struct {
 	DefaultModel string `json:"default_model,omitempty"`
 }
 
-// DefaultConfig returns the configuration with sensible defaults.
+// DefaultConfig returns the configuration with sensible defaults. Plan mode
+// is the documented default for new sessions.
 func DefaultConfig() Config {
 	return Config{
 		Provider:                "anthropic",
 		Model:                   "claude-sonnet-5",
 		ModelSource:             "default",
-		DefaultMode:             "fast",
+		DefaultMode:             "plan",
 		CostWarningThresholdUSD: 5,
 		EnableSessionMemory:     true,
 		EnableMicrocompact:      true,

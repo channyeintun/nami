@@ -932,7 +932,8 @@ install -m 755 nami-engine "$HOME/.local/bin/nami-engine"</code><button type="bu
               your <a href="#config" class="text-brand hover:text-white transition">config file</a>,
               else <code>anthropic/claude-sonnet-5</code>. If that model's
               provider is not set up, it switches to the first provider that is
-              and says so.
+              and says so. Without <code>--mode</code>, it starts in the
+              <code>default_mode</code> from your config file, else in plan mode.
             </p>
           </section>
 
