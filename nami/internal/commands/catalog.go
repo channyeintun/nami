@@ -2,6 +2,7 @@ package commands
 
 import (
 	"fmt"
+	"net/url"
 	"os/exec"
 	"runtime"
 	"strings"
@@ -94,8 +95,8 @@ func DescribeReasoningEffort(configured string, modelID string) string {
 }
 
 func OpenBrowserURL(target string) error {
-	if strings.TrimSpace(target) == "" {
-		return fmt.Errorf("empty browser URL")
+	if err := validateBrowserURL(target); err != nil {
+		return err
 	}
 
 	var cmd *exec.Cmd
@@ -107,7 +108,28 @@ func OpenBrowserURL(target string) error {
 	default:
 		cmd = exec.Command("xdg-open", target)
 	}
-	return cmd.Start()
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	// Reap the opener when it exits so it does not linger as a zombie for the
+	// rest of the session. Its exit status says nothing about the browser.
+	go func() { _ = cmd.Wait() }()
+	return nil
+}
+
+// validateBrowserURL accepts only absolute http and https URLs. Device-flow
+// verification URLs come from a remote server's reply, and the platform
+// openers will just as readily launch a local file or another scheme's
+// handler, or read a leading "-" as one of their own flags.
+func validateBrowserURL(target string) error {
+	parsed, err := url.Parse(target)
+	if err != nil {
+		return fmt.Errorf("invalid browser URL %q: %w", target, err)
+	}
+	if (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
+		return fmt.Errorf("refusing to open %q: not an http or https URL", target)
+	}
+	return nil
 }
 
 func FormatHelpText(catalog []Descriptor) string {
