@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"errors"
 	"fmt"
 	"hash/fnv"
 	"os"
@@ -156,7 +157,13 @@ func appendProjectFiles(files []MemoryFile, skipped []SkippedMemoryFile, dir str
 			continue
 		}
 		content, err := readMemoryFile(path)
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
 		if err != nil {
+			// An instruction file that is there but cannot be read, for lack
+			// of permission say, would otherwise be ignored without a word.
+			skipped = append(skipped, SkippedMemoryFile{Path: path, Reason: fmt.Sprintf("could not be read: %v", err)})
 			continue
 		}
 		files = append(files, MemoryFile{Path: path, Type: instructions.fileType, Content: content, UpdatedAt: fileUpdatedAt(path)})

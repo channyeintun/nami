@@ -57,7 +57,7 @@ func emitSkippedMemoryFilesNotice(emit func(ipc.StreamEvent) error, skipped []Sk
 	for _, file := range skipped {
 		files = append(files, fmt.Sprintf("%s (%s)", file.Path, file.Reason))
 	}
-	return emitNoticeTelemetry(emit, "Ignored instruction files another user could have written: "+strings.Join(files, "; ")+".")
+	return emitNoticeTelemetry(emit, "Ignored instruction files: "+strings.Join(files, "; ")+".")
 }
 
 func emitMemoryRecallTelemetry(

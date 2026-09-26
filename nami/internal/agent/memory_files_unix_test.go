@@ -168,3 +168,21 @@ func TestQueryStreamSkipsInstructionsFromASharedDirectory(t *testing.T) {
 		t.Errorf("expected a notice naming %s, got %q", planted, notices)
 	}
 }
+
+// An instruction file that is there but cannot be read is reported with the
+// skipped ones rather than ignored without a word.
+func TestAppendProjectFilesReportsAnUnreadableInstructionFile(t *testing.T) {
+	dir := t.TempDir()
+	// A directory in the file's place fails to read whoever runs the test;
+	// a file without read permission would not stop root.
+	if err := os.Mkdir(filepath.Join(dir, "AGENTS.md"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	files, skipped := appendProjectFiles(nil, nil, dir)
+	if len(files) != 0 {
+		t.Fatalf("loaded %d files from an unreadable one", len(files))
+	}
+	if len(skipped) != 1 || !strings.Contains(skipped[0].Reason, "could not be read") {
+		t.Fatalf("skipped = %+v, want the unreadable AGENTS.md reported", skipped)
+	}
+}

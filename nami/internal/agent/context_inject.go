@@ -21,8 +21,9 @@ type SystemContext struct {
 	OS           string
 	Architecture string
 	MemoryFiles  []MemoryFile
-	// SkippedMemoryFiles are instruction files found but not loaded because
-	// another user could have written them. The query loop reports them.
+	// SkippedMemoryFiles are instruction files found but not loaded, because
+	// another user could have written them or they could not be read. The
+	// query loop reports them.
 	SkippedMemoryFiles []SkippedMemoryFile
 }
 
