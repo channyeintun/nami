@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/channyeintun/nami/internal/ipc"
 	"github.com/channyeintun/nami/internal/session"
@@ -11,7 +12,9 @@ import (
 func handleSwarmDashboardInspectMessage(ctx context.Context, bridge *ipc.Bridge, store *session.Store, sessionID string) error {
 	handoffs, err := swarm.ListHandoffs(store, sessionID, "", nil)
 	if err != nil {
-		return err
+		// Returning the error would end the whole session over an inbox the
+		// UI merely asked to display, so report it and keep running.
+		return bridge.EmitNotice(fmt.Sprintf("Swarm dashboard unavailable: %v", err))
 	}
 	payload := ipc.SwarmDashboardSnapshotPayload{Handoffs: make([]ipc.SwarmHandoffPayload, 0, len(handoffs))}
 	for _, handoff := range handoffs {
