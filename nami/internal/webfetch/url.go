@@ -87,13 +87,30 @@ func ValidateHost(host string) error {
 
 var errPrivateAddress = fmt.Errorf("web_fetch blocks private or local addresses")
 
+var (
+	// sharedAddressSpace is carrier-grade NAT space (RFC 6598). netip does not
+	// count it as private, yet it never leads to the public internet: every
+	// Tailscale node address and Alibaba Cloud's metadata service
+	// (100.100.100.200) live in it.
+	sharedAddressSpace = netip.MustParsePrefix("100.64.0.0/10")
+	// nat64Prefix is the well-known NAT64 prefix (RFC 6052). Its addresses
+	// reach the IPv4 address embedded in their last four bytes.
+	nat64Prefix = netip.MustParsePrefix("64:ff9b::/96")
+)
+
 func isPublicAddr(ip netip.Addr) bool {
+	ip = ip.Unmap()
+	if nat64Prefix.Contains(ip) {
+		embedded := ip.As16()
+		return isPublicAddr(netip.AddrFrom4([4]byte(embedded[12:])))
+	}
 	return ip.IsGlobalUnicast() &&
 		!ip.IsPrivate() &&
 		!ip.IsLoopback() &&
 		!ip.IsLinkLocalUnicast() &&
 		!ip.IsMulticast() &&
-		!ip.IsInterfaceLocalMulticast()
+		!ip.IsInterfaceLocalMulticast() &&
+		!sharedAddressSpace.Contains(ip)
 }
 
 // guardedDialer re-checks the address the resolver actually returned, at the

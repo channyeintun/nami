@@ -66,6 +66,16 @@ func TestIsPublicAddr(t *testing.T) {
 		"0.0.0.0",
 		"::ffff:127.0.0.1",
 		"::ffff:10.0.0.1",
+		// Carrier-grade NAT space: Tailscale nodes and Alibaba Cloud's
+		// metadata service live here.
+		"100.64.0.1",
+		"100.100.100.200",
+		"100.127.255.254",
+		"::ffff:100.100.100.200",
+		// NAT64 addresses reach the IPv4 address they embed.
+		"64:ff9b::a9fe:a9fe",
+		"64:ff9b::a00:5",
+		"64:ff9b::7f00:1",
 	}
 	for _, raw := range blocked {
 		addr, err := netip.ParseAddr(raw)
@@ -77,7 +87,7 @@ func TestIsPublicAddr(t *testing.T) {
 		}
 	}
 
-	allowed := []string{"8.8.8.8", "1.1.1.1", "2606:4700:4700::1111"}
+	allowed := []string{"8.8.8.8", "1.1.1.1", "2606:4700:4700::1111", "100.63.255.255", "100.128.0.1", "64:ff9b::808:808"}
 	for _, raw := range allowed {
 		addr, err := netip.ParseAddr(raw)
 		if err != nil {
