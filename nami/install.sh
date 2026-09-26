@@ -72,6 +72,8 @@ ARCHIVE_URL="https://github.com/${REPO}/releases/latest/download/${ARCHIVE}"
 
 TMPDIR=$(mktemp -d)
 trap 'rm -rf "$TMPDIR"' EXIT
+# sh runs the EXIT trap only on a normal exit; turn Ctrl-C and friends into one.
+trap 'exit 1' HUP INT TERM
 
 download_asset() {
   url="$1"
