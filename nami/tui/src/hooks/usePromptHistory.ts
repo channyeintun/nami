@@ -4,6 +4,30 @@ function clampOffset(value: string, offset: number): number {
   return Math.max(0, Math.min(offset, value.length));
 }
 
+const graphemeSegmenter = new Intl.Segmenter(undefined, {
+  granularity: "grapheme",
+});
+
+// Offsets are UTF-16 indices, so stepping by one can land between the halves
+// of a surrogate pair or inside a cluster such as a flag, an emoji with a skin
+// tone, or a letter with a combining accent. Single-step moves and deletes go
+// by whole grapheme clusters instead.
+function previousGraphemeOffset(value: string, offset: number): number {
+  if (offset <= 0) {
+    return 0;
+  }
+  const segment = graphemeSegmenter.segment(value).containing(offset - 1);
+  return segment ? segment.index : offset - 1;
+}
+
+function nextGraphemeOffset(value: string, offset: number): number {
+  if (offset >= value.length) {
+    return value.length;
+  }
+  const segment = graphemeSegmenter.segment(value).containing(offset);
+  return segment ? segment.index + segment.segment.length : offset + 1;
+}
+
 function replaceRange(
   value: string,
   start: number,
@@ -401,7 +425,7 @@ export function usePromptHistory(): PromptController {
 
       return replaceRange(
         current.value,
-        current.cursorOffset - 1,
+        previousGraphemeOffset(current.value, current.cursorOffset),
         current.cursorOffset,
         "",
       );
@@ -420,7 +444,7 @@ export function usePromptHistory(): PromptController {
       return replaceRange(
         current.value,
         current.cursorOffset,
-        current.cursorOffset + 1,
+        nextGraphemeOffset(current.value, current.cursorOffset),
         "",
       );
     });
@@ -448,14 +472,14 @@ export function usePromptHistory(): PromptController {
   const moveLeft = useCallback(() => {
     setState((current) => ({
       ...current,
-      cursorOffset: clampOffset(current.value, current.cursorOffset - 1),
+      cursorOffset: previousGraphemeOffset(current.value, current.cursorOffset),
     }));
   }, []);
 
   const moveRight = useCallback(() => {
     setState((current) => ({
       ...current,
-      cursorOffset: clampOffset(current.value, current.cursorOffset + 1),
+      cursorOffset: nextGraphemeOffset(current.value, current.cursorOffset),
     }));
   }, []);
 
