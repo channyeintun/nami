@@ -62,6 +62,36 @@ func TestSaveKeepsCredentialsPrivate(t *testing.T) {
 	}
 }
 
+// Settings that default to on must stay off once the user turns them off, even
+// after something unrelated — a token refresh, a /reasoning change — saves.
+func TestSavePreservesSettingsTurnedOffInTheFile(t *testing.T) {
+	useTempConfigDir(t)
+	for _, name := range []string{"NAMI_ENABLE_SESSION_MEMORY", "NAMI_ENABLE_MICROCOMPACT", "NAMI_COST_WARNING_THRESHOLD_USD"} {
+		t.Setenv(name, "")
+	}
+	if err := os.MkdirAll(ConfigDir(), 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	written := `{"enable_session_memory": false, "enable_microcompact": false, "cost_warning_threshold_usd": 0}`
+	if err := os.WriteFile(ConfigPath(), []byte(written), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	cfg := Load()
+	cfg.ReasoningEffort = "high"
+	if err := Save(cfg); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	reloaded := Load()
+	if reloaded.EnableSessionMemory || reloaded.EnableMicrocompact {
+		t.Fatalf("disabled settings came back on: session memory %t, microcompact %t", reloaded.EnableSessionMemory, reloaded.EnableMicrocompact)
+	}
+	if reloaded.CostWarningThresholdUSD != 0 {
+		t.Fatalf("CostWarningThresholdUSD = %v, want the saved 0", reloaded.CostWarningThresholdUSD)
+	}
+}
+
 func TestSaveRoundTripsThroughLoad(t *testing.T) {
 	useTempConfigDir(t)
 	for _, name := range []string{"NAMI_PROVIDER", "NAMI_MODEL", "NAMI_API_KEY", "NAMI_BASE_URL"} {

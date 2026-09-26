@@ -27,10 +27,13 @@ type Config struct {
 	Providers map[string]ProviderOverride `json:"providers,omitempty"`
 
 	// Session
-	DefaultMode             string  `json:"default_mode,omitempty"` // "plan" or "fast"
-	CostWarningThresholdUSD float64 `json:"cost_warning_threshold_usd,omitempty"`
-	EnableSessionMemory     bool    `json:"enable_session_memory,omitempty"`
-	EnableMicrocompact      bool    `json:"enable_microcompact,omitempty"`
+	DefaultMode string `json:"default_mode,omitempty"` // "plan" or "fast"
+	// These default to non-zero values, so they are always written: with
+	// omitempty a saved false or 0 would vanish from the file and the default
+	// would come back on the next load.
+	CostWarningThresholdUSD float64 `json:"cost_warning_threshold_usd"`
+	EnableSessionMemory     bool    `json:"enable_session_memory"`
+	EnableMicrocompact      bool    `json:"enable_microcompact"`
 
 	// Permissions
 	PermissionMode string `json:"permission_mode,omitempty"` // "default", "bypassPermissions", "autoApprove"
