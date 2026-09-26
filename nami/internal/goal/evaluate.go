@@ -168,18 +168,47 @@ func truncateLine(value string) string {
 }
 
 // ParseVerdict extracts a verdict from a model reply. Models routinely wrap
-// JSON in prose or a code fence, so this scans for the first balanced object
-// rather than requiring the whole reply to parse.
+// JSON in prose or a code fence, and quote JSON evidence before answering, so
+// this tries each balanced object in turn and takes the first one that is a
+// verdict rather than requiring the whole reply to parse.
 func ParseVerdict(raw string) (Verdict, bool) {
-	object, ok := firstJSONObject(raw)
-	if !ok {
+	for start := range len(raw) {
+		if raw[start] != '{' {
+			continue
+		}
+		object, ok := jsonObjectAt(raw, start)
+		if !ok {
+			continue
+		}
+		if verdict, ok := decodeVerdict(object); ok {
+			return verdict, true
+		}
+	}
+	return Verdict{}, false
+}
+
+// decodeVerdict decodes an object that answers the judge's question. An object
+// without a met or impossible field is not a verdict: decoding it anyway would
+// read as "not met" and block the turn on a quoted piece of evidence.
+func decodeVerdict(object string) (Verdict, bool) {
+	var fields struct {
+		Met        *bool  `json:"met"`
+		Impossible *bool  `json:"impossible"`
+		Reason     string `json:"reason"`
+	}
+	if err := json.Unmarshal([]byte(object), &fields); err != nil {
 		return Verdict{}, false
 	}
-	var verdict Verdict
-	if err := json.Unmarshal([]byte(object), &verdict); err != nil {
+	if fields.Met == nil && fields.Impossible == nil {
 		return Verdict{}, false
 	}
-	verdict.Reason = strings.TrimSpace(verdict.Reason)
+	verdict := Verdict{Reason: strings.TrimSpace(fields.Reason)}
+	if fields.Met != nil {
+		verdict.Met = *fields.Met
+	}
+	if fields.Impossible != nil {
+		verdict.Impossible = *fields.Impossible
+	}
 	// "Impossible" is a terminal answer, so it can never also mean satisfied;
 	// a reply claiming both would otherwise clear the goal as achieved.
 	if verdict.Impossible {
@@ -188,14 +217,10 @@ func ParseVerdict(raw string) (Verdict, bool) {
 	return verdict, true
 }
 
-// firstJSONObject returns the first balanced {...} run, ignoring braces inside
-// strings so a reason containing one does not end the scan early.
-func firstJSONObject(raw string) (string, bool) {
-	start := strings.IndexByte(raw, '{')
-	if start < 0 {
-		return "", false
-	}
-
+// jsonObjectAt returns the balanced {...} run that starts at raw[start],
+// ignoring braces inside strings so a reason containing one does not end the
+// scan early.
+func jsonObjectAt(raw string, start int) (string, bool) {
 	depth := 0
 	inString := false
 	escaped := false

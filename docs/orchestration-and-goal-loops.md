@@ -146,10 +146,12 @@ Every failure path returns "met":
 A judge that cannot answer must not be able to trap the user in a loop. Failing
 closed here would mean an API blip locks the session into an unstoppable turn.
 
-The verdict parser scans for the first balanced JSON object rather than requiring the
-whole reply to be one, because models routinely wrap JSON in prose or a code fence.
-It tracks string state while scanning so a brace inside a `reason` cannot end the
-object early.
+The verdict parser scans for the first balanced JSON object that carries a `met` or
+`impossible` field rather than requiring the whole reply to be one, because models
+routinely wrap JSON in prose or a code fence, and quote JSON evidence before they
+answer. An object without either field is not a verdict, so it is skipped rather than
+read as "not met". The parser tracks string state while scanning so a brace inside a
+`reason` cannot end the object early.
 
 ### The block cap
 

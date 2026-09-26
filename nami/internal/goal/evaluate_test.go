@@ -35,6 +35,41 @@ func TestParseVerdictHandlesBracesInsideStrings(t *testing.T) {
 	}
 }
 
+// Judges quote evidence, and evidence is often JSON. An object that is not a
+// verdict must be skipped, not decoded as {"met": false}, which would block the
+// turn on the strength of a quote.
+func TestParseVerdictSkipsObjectsThatAreNotVerdicts(t *testing.T) {
+	raw := `The test run printed {"exit_code": 0, "failed": 0}, so:
+{"met": true, "reason": "exit code 0 with no failures"}`
+	verdict, ok := ParseVerdict(raw)
+	if !ok || !verdict.Met || verdict.Reason != "exit code 0 with no failures" {
+		t.Fatalf("verdict = %+v, ok = %v, want the met verdict after the quoted object", verdict, ok)
+	}
+}
+
+func TestParseVerdictSkipsAnUnbalancedBraceBeforeTheVerdict(t *testing.T) {
+	raw := "The output contained a stray { character.\n{\"met\": false, \"reason\": \"lint still fails\"}"
+	verdict, ok := ParseVerdict(raw)
+	if !ok || verdict.Met || verdict.Reason != "lint still fails" {
+		t.Fatalf("verdict = %+v, ok = %v", verdict, ok)
+	}
+}
+
+// A reply with no met field carries no verdict. It must fail open like any
+// other unusable reply rather than read as "not met".
+func TestParseVerdictRejectsAnObjectWithoutMet(t *testing.T) {
+	if verdict, ok := ParseVerdict(`{"reason": "looks finished to me"}`); ok {
+		t.Fatalf("ParseVerdict accepted %+v from an object with no met field", verdict)
+	}
+}
+
+func TestParseVerdictAcceptsImpossibleWithoutMet(t *testing.T) {
+	verdict, ok := ParseVerdict(`{"impossible": true, "reason": "contradicts itself"}`)
+	if !ok || verdict.Met || !verdict.Impossible {
+		t.Fatalf("verdict = %+v, ok = %v", verdict, ok)
+	}
+}
+
 func TestParseVerdictRejectsNonJSON(t *testing.T) {
 	for _, raw := range []string{"", "the goal is met", "{unbalanced", `{"met": "yes"}`} {
 		if _, ok := ParseVerdict(raw); ok {
