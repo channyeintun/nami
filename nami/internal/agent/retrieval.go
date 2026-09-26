@@ -26,8 +26,20 @@ const (
 	retrievalTopN = 4
 )
 
-// anchorPattern matches likely file paths in text (relative or absolute).
-var anchorPattern = regexp.MustCompile(`(?:^|[\s"'\x60(])([a-zA-Z0-9_./\-]+\.(?:go|ts|tsx|js|jsx|py|rb|rs|java|c|cpp|h|md|yaml|yml|json|toml|sh|sql))(?:[\s"'\x60):]|$)`)
+// anchorPattern matches likely file paths in text (relative or absolute). The
+// trailing \b keeps an extension from matching the start of a longer one, as
+// ".js" would in ".json". The characters around a path are checked by
+// isFilePathBoundary instead of being matched: a pattern that consumes them
+// takes the separator the next path needs, so a list lost every other path.
+var anchorPattern = regexp.MustCompile(`[a-zA-Z0-9_./\-]+\.(?:go|ts|tsx|js|jsx|py|rb|rs|java|c|cpp|h|md|yaml|yml|json|toml|sh|sql)\b`)
+
+const (
+	// filePathLeadingBoundaries may directly precede a file path anchor.
+	filePathLeadingBoundaries = " \t\r\n\"'`("
+	// filePathTrailingBoundaries may directly follow one, including the
+	// punctuation that ends a clause or sentence in a prompt.
+	filePathTrailingBoundaries = " \t\r\n\"'`):,;.!?"
+)
 
 // errorPattern matches common error prefixes.
 var errorPattern = regexp.MustCompile(`(?i)(?:error|panic|fatal|fail|undefined|not found|cannot|permission denied)\s*[:;]?\s*([^\n]{0,120})`)
@@ -245,7 +257,7 @@ func FormatLiveRetrievalSection(snippets []LiveSnippet) string {
 }
 
 func extractFilePathMatches(text string) []string {
-	matches := anchorPattern.FindAllStringSubmatch(text, -1)
+	matches := anchorPattern.FindAllStringIndex(text, -1)
 	if len(matches) == 0 {
 		return nil
 	}
@@ -253,13 +265,11 @@ func extractFilePathMatches(text string) []string {
 	paths := make([]string, 0, len(matches))
 	seen := make(map[string]struct{}, len(matches))
 	for _, match := range matches {
-		if len(match) < 2 {
+		start, end := match[0], match[1]
+		if !isFilePathBoundary(text, start-1, filePathLeadingBoundaries) || !isFilePathBoundary(text, end, filePathTrailingBoundaries) {
 			continue
 		}
-		path := strings.TrimSpace(match[1])
-		if path == "" || path == "." || path == ".." {
-			continue
-		}
+		path := text[start:end]
 		if _, ok := seen[path]; ok {
 			continue
 		}
@@ -267,6 +277,15 @@ func extractFilePathMatches(text string) []string {
 		paths = append(paths, path)
 	}
 	return paths
+}
+
+// isFilePathBoundary reports whether the byte at index may border a file path
+// anchor. Either end of the text is always a boundary.
+func isFilePathBoundary(text string, index int, allowed string) bool {
+	if index < 0 || index >= len(text) {
+		return true
+	}
+	return strings.IndexByte(allowed, text[index]) >= 0
 }
 
 func gitStatusPaths(gitStatusText, cwd string) []string {
