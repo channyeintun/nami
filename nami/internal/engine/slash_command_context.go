@@ -15,6 +15,7 @@ import (
 	costpkg "github.com/channyeintun/nami/internal/cost"
 	"github.com/channyeintun/nami/internal/ipc"
 	mcppkg "github.com/channyeintun/nami/internal/mcp"
+	"github.com/channyeintun/nami/internal/modelselection"
 	"github.com/channyeintun/nami/internal/session"
 	"github.com/channyeintun/nami/internal/timing"
 )
@@ -143,6 +144,13 @@ func curatedModelAccessProvider(
 	}
 
 	for _, providerID := range candidates {
+		// A provider only gives access to a preset if it can serve the model:
+		// offering a GPT preset "via Anthropic" produced a model the
+		// Anthropic API rejects. The picker files each option under its
+		// display provider, so the user could not see the mismatch.
+		if providerID != displayProvider && !modelselection.IsModelCompatibleWithProvider(model, providerID) {
+			continue
+		}
 		status, ok := snapshot.LookupProvider(providerID)
 		if !ok || !match(status) {
 			continue
