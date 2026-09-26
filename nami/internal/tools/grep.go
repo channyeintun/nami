@@ -151,23 +151,20 @@ func (t *GrepTool) Execute(ctx context.Context, input ToolInput) (ToolOutput, er
 		return ToolOutput{}, fmt.Errorf("head_limit and offset must be >= 0")
 	}
 
-	var rawOutput string
+	var rawOutput, skipped string
 	var toolErr error
 	if _, lookupErr := exec.LookPath("rg"); lookupErr == nil {
-		rawOutput, toolErr = runRipgrep(ctx, searchPath, pattern, outputMode, normalizedParams)
+		rawOutput, skipped, toolErr = runRipgrep(ctx, searchPath, pattern, outputMode, normalizedParams)
 	} else {
-		rawOutput, toolErr = runGrepFallback(ctx, searchPath, pattern, outputMode, normalizedParams)
+		rawOutput, skipped, toolErr = runGrepFallback(ctx, searchPath, pattern, outputMode, normalizedParams)
 	}
 	if toolErr != nil {
-		if exitErr, ok := errors.AsType[*exec.ExitError](toolErr); ok && exitErr.ExitCode() == 1 {
-			return ToolOutput{Output: "No matches found"}, nil
-		}
 		return ToolOutput{}, toolErr
 	}
 
 	lines := splitOutputLines(rawOutput)
 	if len(lines) == 0 {
-		return ToolOutput{Output: "No matches found"}, nil
+		return ToolOutput{Output: appendSkippedPathsNote("No matches found", skipped)}, nil
 	}
 
 	lines = applyOffset(lines, offset)
@@ -182,7 +179,58 @@ func (t *GrepTool) Execute(ctx context.Context, input ToolInput) (ToolOutput, er
 		output += fmt.Sprintf("\n(Results are truncated. Use offset=%d to continue.)", offset+len(lines))
 	}
 
-	return ToolOutput{Output: output, Truncated: truncated}, nil
+	return ToolOutput{Output: appendSkippedPathsNote(output, skipped), Truncated: truncated}, nil
+}
+
+const maxSkippedPathLines = 5
+
+// appendSkippedPathsNote lists the errors a search backend reported for
+// paths it could not read, so a partial result is not mistaken for a
+// complete one.
+func appendSkippedPathsNote(output, skipped string) string {
+	lines := splitOutputLines(skipped)
+	if len(lines) == 0 {
+		return output
+	}
+	note := "(Some paths could not be searched:\n" + strings.Join(lines[:min(len(lines), maxSkippedPathLines)], "\n")
+	if extra := len(lines) - maxSkippedPathLines; extra > 0 {
+		note += fmt.Sprintf("\n... and %d more", extra)
+	}
+	return output + "\n" + note + ")"
+}
+
+// runSearchCommand runs rg or grep and interprets its exit status. Both exit 1
+// when nothing matched, and 2 when any path failed — even after printing the
+// matches from the rest of the tree. A failure that still produced output is
+// therefore a partial result: the output is kept and the error text is
+// returned as skipped. A failure with no output is a real error, such as an
+// invalid pattern.
+func runSearchCommand(ctx context.Context, name string, args []string) (output, skipped string, err error) {
+	cmd := exec.CommandContext(ctx, name, args...)
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	runErr := cmd.Run()
+	if runErr == nil {
+		return stdout.String(), "", nil
+	}
+	if ctx.Err() != nil {
+		return "", "", ctx.Err()
+	}
+	errorText := strings.TrimSpace(stderr.String())
+	if exitErr, ok := errors.AsType[*exec.ExitError](runErr); ok {
+		if exitErr.ExitCode() == 1 {
+			return "", "", nil
+		}
+		if stdout.Len() > 0 {
+			return stdout.String(), errorText, nil
+		}
+	}
+	if errorText == "" {
+		return "", "", fmt.Errorf("%s: %w", name, runErr)
+	}
+	return "", "", fmt.Errorf("%s: %s: %w", name, errorText, runErr)
 }
 
 func resolveSearchPath(params map[string]any) (string, error) {
@@ -203,7 +251,7 @@ func resolveSearchPath(params map[string]any) (string, error) {
 	return searchPath, nil
 }
 
-func runRipgrep(ctx context.Context, searchPath, pattern, outputMode string, params map[string]any) (string, error) {
+func runRipgrep(ctx context.Context, searchPath, pattern, outputMode string, params map[string]any) (string, string, error) {
 	args := []string{"--color=never"}
 
 	switch outputMode {
@@ -236,24 +284,10 @@ func runRipgrep(ctx context.Context, searchPath, pattern, outputMode string, par
 	}
 	args = append(args, searchPath)
 
-	cmd := exec.CommandContext(ctx, "rg", args...)
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		if ctx.Err() != nil {
-			return "", ctx.Err()
-		}
-		if stderr.Len() > 0 {
-			return "", fmt.Errorf("rg: %s", strings.TrimSpace(stderr.String()))
-		}
-		return "", err
-	}
-	return stdout.String(), nil
+	return runSearchCommand(ctx, "rg", args)
 }
 
-func runGrepFallback(ctx context.Context, searchPath, pattern, outputMode string, params map[string]any) (string, error) {
+func runGrepFallback(ctx context.Context, searchPath, pattern, outputMode string, params map[string]any) (string, string, error) {
 	args := []string{"-R", "-E"}
 	if outputMode == "files_with_matches" {
 		args = append(args, "-l")
@@ -279,27 +313,17 @@ func runGrepFallback(ctx context.Context, searchPath, pattern, outputMode string
 	// -e keeps a pattern such as "--verbose" from being parsed as an option.
 	args = append(args, "-e", pattern, "--", searchPath)
 
-	cmd := exec.CommandContext(ctx, "grep", args...)
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		if ctx.Err() != nil {
-			return "", ctx.Err()
-		}
-		if stderr.Len() > 0 {
-			return "", fmt.Errorf("grep: %s", strings.TrimSpace(stderr.String()))
-		}
-		return "", err
+	output, skipped, err := runSearchCommand(ctx, "grep", args)
+	if err != nil {
+		return "", "", err
 	}
 
-	lines := splitOutputLines(stdout.String())
+	lines := splitOutputLines(output)
 	if glob, ok := stringParam(params, "glob"); ok && strings.TrimSpace(glob) != "" {
 		patterns := splitGlobPatterns(glob)
 		lines = filterGrepLinesByGlob(lines, patterns)
 	}
-	return strings.Join(lines, "\n"), nil
+	return strings.Join(lines, "\n"), skipped, nil
 }
 
 func appendContextArgs(args *[]string, params map[string]any, outputMode string) {
