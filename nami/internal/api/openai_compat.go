@@ -138,7 +138,12 @@ func (c *OpenAICompatClient) Stream(ctx context.Context, req ModelRequest) (iter
 			// sending [DONE]. The response is complete, so finish it here.
 			err = state.emitStop(yield)
 		}
-		if err != nil && !errors.Is(err, errStopStream) {
+		if err == nil {
+			// Neither [DONE] nor a finish reason arrived, so the response
+			// was cut short.
+			err = incompleteStreamError(c.provider, "a finish reason")
+		}
+		if !errors.Is(err, errStopStream) {
 			yield(ModelEvent{}, err)
 		}
 	}, nil

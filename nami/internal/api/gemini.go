@@ -119,6 +119,13 @@ func (c *GeminiClient) Stream(ctx context.Context, req ModelRequest) (iter.Seq2[
 			}
 			if eventCount == 0 {
 				yield(ModelEvent{}, &APIError{Type: ErrOverloaded, Message: "Gemini returned an empty response stream"})
+				return
+			}
+			if sseErr == nil {
+				// A finish reason ends every complete response and stops the
+				// read with errStopStream, so a body that ends cleanly before
+				// one was cut short.
+				yield(ModelEvent{}, incompleteStreamError("Gemini", "a finish reason"))
 			}
 			return
 		}

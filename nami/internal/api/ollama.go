@@ -112,7 +112,11 @@ func (c *OllamaClient) Stream(ctx context.Context, req ModelRequest) (iter.Seq2[
 		}
 		if err := scanner.Err(); err != nil {
 			yield(ModelEvent{}, networkError("read Ollama stream", err))
+			return
 		}
+		// A done chunk ends every complete response and returns above, so a
+		// body that ends cleanly before one was cut short.
+		yield(ModelEvent{}, incompleteStreamError("Ollama", "its done chunk"))
 	}, nil
 }
 

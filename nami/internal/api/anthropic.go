@@ -150,11 +150,13 @@ func (c *AnthropicClient) Stream(ctx context.Context, req ModelRequest) (iter.Se
 		err := readSSE(ctx, sseBody, func(eventName, data string) error {
 			return c.handleEvent(eventName, data, &state, yield)
 		})
-		if err != nil && !errors.Is(err, errStopStream) {
-			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-				yield(ModelEvent{}, err)
-				return
-			}
+		if err == nil {
+			// message_stop ends every complete response and stops the read
+			// with errStopStream, so a body that ends cleanly before it was
+			// cut short.
+			err = incompleteStreamError("anthropic", "message_stop")
+		}
+		if !errors.Is(err, errStopStream) {
 			yield(ModelEvent{}, err)
 		}
 	}, nil

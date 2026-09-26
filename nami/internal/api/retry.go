@@ -51,6 +51,15 @@ func networkError(action string, err error) *APIError {
 	return &APIError{Type: ErrNetwork, Message: fmt.Sprintf("%s: %v", action, err), Err: err}
 }
 
+// incompleteStreamError reports a stream that ended cleanly before the final
+// event every complete response carries, so the response was cut short.
+func incompleteStreamError(provider, finalEvent string) *APIError {
+	return &APIError{
+		Type:    ErrNetwork,
+		Message: fmt.Sprintf("%s stream ended before %s; the response is incomplete", provider, finalEvent),
+	}
+}
+
 // RetryPolicy defines retry behavior per error class.
 type RetryPolicy struct {
 	MaxAttempts int

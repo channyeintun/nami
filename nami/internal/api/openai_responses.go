@@ -142,14 +142,14 @@ func (c *OpenAIResponsesClient) Stream(ctx context.Context, req ModelRequest) (i
 		err := readSSE(ctx, sseBody, func(_ string, data string) error {
 			return c.handleEvent(data, &state, yield)
 		})
-		if err != nil && !errors.Is(err, errStopStream) {
-			yield(ModelEvent{}, err)
-			return
-		}
-		// errStopStream also means the consumer stopped ranging, and yielding
-		// after that panics, so only a body that ended cleanly is finished here.
 		if err == nil {
-			state.emitStop("end_turn", yield)
+			// response.completed, or [DONE], ends every complete response
+			// and stops the read with errStopStream, so a body that ends
+			// cleanly before it was cut short.
+			err = incompleteStreamError("OpenAI Responses", "response.completed")
+		}
+		if !errors.Is(err, errStopStream) {
+			yield(ModelEvent{}, err)
 		}
 	}, nil
 }
