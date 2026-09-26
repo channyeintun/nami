@@ -40,7 +40,10 @@ exit /b %ERRORLEVEL%
 :deno
 where deno >nul 2>nul
 if errorlevel 1 goto no_runtime
-deno run --allow-env --allow-read --allow-run "%LAUNCHER_PATH%" %*
+rem --allow-run already hands the engine, and so every shell command it runs,
+rem the user's full access; narrower flags only break the TUI, which also
+rem needs sys, ffi and write access.
+deno run -A "%LAUNCHER_PATH%" %*
 exit /b %ERRORLEVEL%
 
 :no_runtime

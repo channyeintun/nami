@@ -22,7 +22,10 @@ if command -v bun >/dev/null 2>&1; then
 fi
 
 if command -v deno >/dev/null 2>&1; then
-	exec deno run --allow-env --allow-read --allow-run "$LAUNCHER_PATH" "$@"
+	# --allow-run already hands the engine, and so every shell command it runs,
+	# the user's full access; narrower flags only break the TUI, which also
+	# needs sys, ffi and write access.
+	exec deno run -A "$LAUNCHER_PATH" "$@"
 fi
 
 echo "nami requires one of these runtimes on PATH: node 24 or newer, bun, deno." >&2
