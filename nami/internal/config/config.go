@@ -129,10 +129,25 @@ func loadUserConfig() Config {
 			fmt.Fprintf(os.Stderr, "warning: failed to parse %s: %v\n", ConfigPath(), err)
 		} else {
 			var probe struct {
-				Model *string `json:"model"`
+				Provider *string `json:"provider"`
+				Model    *string `json:"model"`
 			}
-			if err := json.Unmarshal(data, &probe); err == nil && probe.Model != nil {
-				cfg.ModelSource = "config"
+			if err := json.Unmarshal(data, &probe); err == nil {
+				if probe.Model != nil {
+					cfg.ModelSource = "config"
+				}
+				// A "provider/model" value names its provider when the file
+				// does not name one itself; DefaultConfig's provider must not
+				// claim it, or "anthropic/claude-sonnet-4-6" would be sent
+				// whole as the model id. A provider set in the file keeps the
+				// model whole instead: some providers serve model ids that
+				// contain a slash, such as Groq's "openai/gpt-oss-120b".
+				if probe.Provider == nil || strings.TrimSpace(*probe.Provider) == "" {
+					if prov, mod := ParseModel(cfg.Model); prov != "" {
+						cfg.Provider = prov
+						cfg.Model = mod
+					}
+				}
 			}
 		}
 	}

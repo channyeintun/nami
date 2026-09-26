@@ -176,3 +176,41 @@ func TestSaveRefusesToOverwriteUnparseableConfig(t *testing.T) {
 		t.Fatalf("Save over an empty config: %v", err)
 	}
 }
+
+// The README's config example sets "model": "anthropic/claude-sonnet-4-6" with
+// no "provider" key. DefaultConfig pre-fills the provider, so the prefix was
+// never split off and the whole string went to the API as the model id.
+func TestLoadSplitsAProviderPrefixedModelOnlyWhenNoProviderIsSet(t *testing.T) {
+	cases := []struct {
+		name         string
+		file         string
+		wantProvider string
+		wantModel    string
+	}{
+		{name: "prefixed model alone", file: `{"model": "openai/gpt-5"}`, wantProvider: "openai", wantModel: "gpt-5"},
+		{name: "readme example", file: `{"model": "anthropic/claude-sonnet-4-6", "default_mode": "plan"}`, wantProvider: "anthropic", wantModel: "claude-sonnet-4-6"},
+		{name: "blank provider", file: `{"provider": "", "model": "openai/gpt-5"}`, wantProvider: "openai", wantModel: "gpt-5"},
+		// A provider in the file keeps a slash-containing model id whole.
+		{name: "provider and slashed model", file: `{"provider": "groq", "model": "openai/gpt-oss-120b"}`, wantProvider: "groq", wantModel: "openai/gpt-oss-120b"},
+		{name: "bare model", file: `{"model": "claude-opus-5"}`, wantProvider: "anthropic", wantModel: "claude-opus-5"},
+		{name: "no model", file: `{}`, wantProvider: "anthropic", wantModel: "claude-sonnet-5"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			useTempConfigDir(t)
+			for _, name := range []string{"NAMI_PROVIDER", "NAMI_MODEL"} {
+				t.Setenv(name, "")
+			}
+			if err := os.MkdirAll(ConfigDir(), 0o700); err != nil {
+				t.Fatalf("mkdir: %v", err)
+			}
+			if err := os.WriteFile(ConfigPath(), []byte(tc.file), 0o600); err != nil {
+				t.Fatalf("write config: %v", err)
+			}
+			cfg := LoadUser()
+			if cfg.Provider != tc.wantProvider || cfg.Model != tc.wantModel {
+				t.Fatalf("loaded %q/%q, want %q/%q", cfg.Provider, cfg.Model, tc.wantProvider, tc.wantModel)
+			}
+		})
+	}
+}
