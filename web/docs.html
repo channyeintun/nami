@@ -1007,10 +1007,11 @@ install -m 755 nami-engine "$HOME/.local/bin/nami-engine"</code><button type="bu
                 <tbody class="text-gray-300">
                   <tr>
                     <td class="p-4 border-t border-[#1a1a1a]">
-                      <code>/connect</code>
+                      <code>/connect [provider]</code>
                     </td>
                     <td class="p-4 border-t border-[#1a1a1a]">
-                      Connect GitHub Copilot login
+                      Connect a model provider; with no provider, pick one
+                      from a list
                     </td>
                   </tr>
                   <tr>
@@ -1031,10 +1032,20 @@ install -m 755 nami-engine "$HOME/.local/bin/nami-engine"</code><button type="bu
                   </tr>
                   <tr>
                     <td class="p-4 border-t border-[#1a1a1a]">
+                      <code>/logout [provider]</code>
+                    </td>
+                    <td class="p-4 border-t border-[#1a1a1a]">
+                      Clear stored <code>github-copilot</code> or
+                      <code>codex</code> credentials, or both
+                      (<code>all</code>, the default)
+                    </td>
+                  </tr>
+                  <tr>
+                    <td class="p-4 border-t border-[#1a1a1a]">
                       <code>/plan</code>
                     </td>
                     <td class="p-4 border-t border-[#1a1a1a]">
-                      Switch to read-only planning mode
+                      Switch to careful, plan-first mode
                     </td>
                   </tr>
                   <tr>
@@ -1056,10 +1067,20 @@ install -m 755 nami-engine "$HOME/.local/bin/nami-engine"</code><button type="bu
                   </tr>
                   <tr>
                     <td class="p-4 border-t border-[#1a1a1a]">
+                      <code>/subagent [model]</code>
+                    </td>
+                    <td class="p-4 border-t border-[#1a1a1a]">
+                      Show or switch the model child agents use
+                    </td>
+                  </tr>
+                  <tr>
+                    <td class="p-4 border-t border-[#1a1a1a]">
                       <code>/reasoning [level]</code>
                     </td>
                     <td class="p-4 border-t border-[#1a1a1a]">
-                      Set o1 reasoning effort
+                      Show or set reasoning effort: <code>low</code>,
+                      <code>medium</code>, <code>high</code>, <code>xhigh</code>,
+                      or <code>default</code>
                     </td>
                   </tr>
                   <tr>
@@ -1068,6 +1089,14 @@ install -m 755 nami-engine "$HOME/.local/bin/nami-engine"</code><button type="bu
                     </td>
                     <td class="p-4 border-t border-[#1a1a1a]">
                       Compact the context window
+                    </td>
+                  </tr>
+                  <tr>
+                    <td class="p-4 border-t border-[#1a1a1a]">
+                      <code>/rewind</code>
+                    </td>
+                    <td class="p-4 border-t border-[#1a1a1a]">
+                      Jump back to an earlier turn and drop what followed it
                     </td>
                   </tr>
                   <tr>
@@ -1857,6 +1886,10 @@ install -m 755 nami-engine "$HOME/.local/bin/nami-engine"</code><button type="bu
               <li>
                 &bull; Nami auto-selects up to three relevant skills for a turn
                 based on the user prompt.
+              </li>
+              <li>
+                &bull; Every skill also runs directly as a slash command:
+                <code>/&lt;skill-name&gt; [instructions]</code>.
               </li>
               <li>
                 &bull; Skills are markdown files with optional frontmatter such

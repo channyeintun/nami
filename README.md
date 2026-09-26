@@ -276,19 +276,26 @@ Notes:
 
 | Command               | Description                                    |
 | --------------------- | ---------------------------------------------- |
-| `/connect`            | Connect provider auth and switch providers     |
+| `/connect [provider]` | Connect provider auth and switch providers; with no provider, pick one from a list |
+| `/providers`          | Show which providers are set up and usable     |
+| `/logout [provider]`  | Clear stored `github-copilot` or `codex` credentials, or both (`all`, the default) |
 | `/plan`               | Switch to plan mode                            |
 | `/fast`               | Switch to fast mode                            |
 | `/model [name]`       | Show or switch the active model                |
-| `/reasoning [level]`  | Show or set reasoning effort [low|medium|high|xhigh]            |
+| `/subagent [model]`   | Show or switch the model child agents use      |
+| `/reasoning [level]`  | Show or set reasoning effort: `low`, `medium`, `high`, `xhigh`, or `default` |
 | `/compact`            | Compact conversation to save context           |
+| `/rewind`             | Jump back to an earlier turn and drop what followed it |
 | `/resume [id]`        | Resume a previous session                      |
 | `/clear`              | Clear the conversation and start fresh         |
 | `/status`             | Show current session and MCP server status     |
 | `/sessions`           | List recent sessions                           |
+| `/tasks`              | Open the background tasks dialog               |
 | `/debug [subcommand]` | Enable debug logging or inspect its path       |
 | `/goal [condition]`   | Keep working until a condition holds           |
 | `/help`               | Show slash-command help                        |
+
+Skills, the Markdown playbooks in a project's `.agents/` directory or the `agents/` directory beside the config file, also run as slash commands: `/<skill-name> [instructions]`.
 
 #### `/goal` — keep working until a condition holds
 
