@@ -197,6 +197,13 @@ func (t *GoDefinitionTool) Execute(ctx context.Context, input ToolInput) (ToolOu
 	return ToolOutput{Output: string(encoded), Truncated: truncated}, nil
 }
 
+// physicalPosition returns where pos is in the parsed file itself. The tools
+// report the file they parsed, so //line directives, which point positions at
+// the source a file was generated from, must not apply.
+func physicalPosition(fset *token.FileSet, pos token.Pos) token.Position {
+	return fset.PositionFor(pos, false)
+}
+
 func goDefinitionRoot(searchPath string) (string, error) {
 	info, err := os.Stat(searchPath)
 	if err != nil {
@@ -224,8 +231,8 @@ func findGoDefinitionsInFile(fset *token.FileSet, filePath, packageName string, 
 			}
 			matches = append(matches, goDefinitionMatch{
 				Path:      filePath,
-				Line:      fset.Position(typed.Name.Pos()).Line,
-				Column:    fset.Position(typed.Name.Pos()).Column,
+				Line:      physicalPosition(fset, typed.Name.Pos()).Line,
+				Column:    physicalPosition(fset, typed.Name.Pos()).Column,
 				Package:   packageName,
 				Kind:      kind,
 				Signature: formatGoFuncDecl(fset, typed),
@@ -251,8 +258,8 @@ func goDefinitionSpecMatch(fset *token.FileSet, filePath, packageName string, de
 		}
 		return goDefinitionMatch{
 			Path:      filePath,
-			Line:      fset.Position(typed.Name.Pos()).Line,
-			Column:    fset.Position(typed.Name.Pos()).Column,
+			Line:      physicalPosition(fset, typed.Name.Pos()).Line,
+			Column:    physicalPosition(fset, typed.Name.Pos()).Column,
 			Package:   packageName,
 			Kind:      "type",
 			Signature: formatGoTypeSpec(fset, typed),
@@ -266,8 +273,8 @@ func goDefinitionSpecMatch(fset *token.FileSet, filePath, packageName string, de
 			kind := strings.ToLower(decl.Tok.String())
 			return goDefinitionMatch{
 				Path:      filePath,
-				Line:      fset.Position(name.Pos()).Line,
-				Column:    fset.Position(name.Pos()).Column,
+				Line:      physicalPosition(fset, name.Pos()).Line,
+				Column:    physicalPosition(fset, name.Pos()).Column,
 				Package:   packageName,
 				Kind:      kind,
 				Signature: formatGoValueSpec(fset, decl, typed, name.Name),

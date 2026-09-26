@@ -217,7 +217,7 @@ func findGoReferencesInFile(fset *token.FileSet, filePath, packageName string, f
 			return true
 		}
 
-		position := fset.Position(ident.Pos())
+		position := physicalPosition(fset, ident.Pos())
 		_, isDefinition := definitions[position.Offset]
 		if !includeDefinitions {
 			if isDefinition {
@@ -246,19 +246,19 @@ func goDefinitionPositions(fset *token.FileSet, file *ast.File, symbol string) m
 		switch typed := decl.(type) {
 		case *ast.FuncDecl:
 			if typed.Name != nil && typed.Name.Name == symbol {
-				positions[fset.Position(typed.Name.Pos()).Offset] = struct{}{}
+				positions[physicalPosition(fset, typed.Name.Pos()).Offset] = struct{}{}
 			}
 		case *ast.GenDecl:
 			for _, spec := range typed.Specs {
 				switch specTyped := spec.(type) {
 				case *ast.TypeSpec:
 					if specTyped.Name != nil && specTyped.Name.Name == symbol {
-						positions[fset.Position(specTyped.Name.Pos()).Offset] = struct{}{}
+						positions[physicalPosition(fset, specTyped.Name.Pos()).Offset] = struct{}{}
 					}
 				case *ast.ValueSpec:
 					for _, name := range specTyped.Names {
 						if name != nil && name.Name == symbol {
-							positions[fset.Position(name.Pos()).Offset] = struct{}{}
+							positions[physicalPosition(fset, name.Pos()).Offset] = struct{}{}
 						}
 					}
 				}
