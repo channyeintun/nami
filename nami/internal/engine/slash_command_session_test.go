@@ -287,3 +287,70 @@ func TestClearSlashCommandStartsAFreshTimeline(t *testing.T) {
 		t.Fatalf("new session transcript = %+v, want just the new message", payload.Transcript)
 	}
 }
+
+// rewindTestConversation has two user turns, the first with a tool call.
+func rewindTestConversation() []api.Message {
+	return []api.Message{
+		{Role: api.RoleUser, Content: "first question"},
+		{Role: api.RoleAssistant, Content: "looking", ToolCalls: []api.ToolCall{{ID: "call-1", Name: "read_file", Input: "{}"}}},
+		{Role: api.RoleTool, ToolResult: &api.ToolResult{ToolCallID: "call-1", Output: "contents"}},
+		{Role: api.RoleAssistant, Content: "first answer"},
+		{Role: api.RoleUser, Content: "second question"},
+		{Role: api.RoleAssistant, Content: "second answer"},
+	}
+}
+
+// The rewind picker's reply names a message by index. Only a user turn is a
+// place to rewind to: cutting after an assistant message would keep its tool
+// call without the result, which every provider rejects from then on.
+func TestRewindRefusesATargetThatIsNotAUserTurn(t *testing.T) {
+	isolateUserConfig(t)
+	messages := rewindTestConversation()
+	cmd, picker := newPickerSlashCommandContext(t, session.NewStore(t.TempDir()), messages, rebuildConversationTimeline(messages))
+
+	events, err := picker.run(t, cmd, handleRewindSlashCommand, ipc.EventRewindSelectionRequested, ipc.MsgRewindSelectionResponse,
+		func(requestID string) any {
+			return ipc.RewindSelectionResponsePayload{RequestID: requestID, MessageIndex: 1}
+		})
+	if err != nil {
+		t.Fatalf("handleRewindSlashCommand: %v", err)
+	}
+	if len(cmd.state.Messages) != len(messages) {
+		t.Fatalf("rewind to an assistant message cut the conversation to %d messages", len(cmd.state.Messages))
+	}
+	if missing := unansweredToolCalls(cmd.state.Messages); len(missing) > 0 {
+		t.Fatalf("the conversation has unanswered tool calls %v", missing)
+	}
+	reported := false
+	for _, event := range events {
+		if event.Type == ipc.EventError {
+			reported = true
+		}
+		if event.Type == ipc.EventSessionRewound {
+			t.Fatal("the session was reported as rewound")
+		}
+	}
+	if !reported {
+		t.Fatal("the invalid target was not reported")
+	}
+}
+
+func TestRewindToAUserTurn(t *testing.T) {
+	isolateUserConfig(t)
+	messages := rewindTestConversation()
+	cmd, picker := newPickerSlashCommandContext(t, session.NewStore(t.TempDir()), messages, rebuildConversationTimeline(messages))
+
+	events, err := picker.run(t, cmd, handleRewindSlashCommand, ipc.EventRewindSelectionRequested, ipc.MsgRewindSelectionResponse,
+		func(requestID string) any {
+			return ipc.RewindSelectionResponsePayload{RequestID: requestID, MessageIndex: 4}
+		})
+	if err != nil {
+		t.Fatalf("handleRewindSlashCommand: %v", err)
+	}
+	if len(cmd.state.Messages) != 5 || cmd.state.Messages[4].Content != "second question" {
+		t.Fatalf("conversation after rewind = %+v, want it to end at the second question", cmd.state.Messages)
+	}
+	if text := responseText(t, events); !strings.Contains(text, "user turn 2") {
+		t.Fatalf("response = %q, want it to name user turn 2", text)
+	}
+}

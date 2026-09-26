@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -188,8 +189,15 @@ func handleRewindSlashCommand(cmd *slashCommandContext) error {
 	if selectedIndex < 0 {
 		return emitTextResponse(cmd.bridge, "Rewind cancelled.")
 	}
-	if selectedIndex >= len(cmd.state.Messages) {
-		return cmd.bridge.EmitError("invalid rewind target", true)
+	// The picker's reply is an index into the conversation, and only the user
+	// turns offered are places to rewind to. Cutting after an assistant message
+	// would keep a tool call without its result, which providers reject on
+	// every later request.
+	turnIndex := slices.IndexFunc(turns, func(turn ipc.RewindSelectionTurnPayload) bool {
+		return turn.MessageIndex == selectedIndex
+	})
+	if turnIndex < 0 {
+		return cmd.bridge.EmitError(fmt.Sprintf("invalid rewind target: message %d is not a user turn", selectedIndex), true)
 	}
 	if selectedIndex == len(cmd.state.Messages)-1 {
 		return emitTextResponse(cmd.bridge, "Conversation is already at the selected turn.")
@@ -232,17 +240,7 @@ func handleRewindSlashCommand(cmd *slashCommandContext) error {
 		return err
 	}
 
-	targetTurn := 0
-	for _, turn := range turns {
-		if turn.MessageIndex == selectedIndex {
-			targetTurn = turn.TurnNumber
-			break
-		}
-	}
-	if targetTurn <= 0 {
-		targetTurn = 1
-	}
-	return emitTextResponse(cmd.bridge, fmt.Sprintf("Rewound conversation to user turn %d. Later messages were removed from context.", targetTurn))
+	return emitTextResponse(cmd.bridge, fmt.Sprintf("Rewound conversation to user turn %d. Later messages were removed from context.", turns[turnIndex].TurnNumber))
 }
 
 func promptResumeSelection(cmd *slashCommandContext) (string, error) {
