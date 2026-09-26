@@ -546,3 +546,45 @@ func TestLaunchWorkflowReportsARunWithoutAJournal(t *testing.T) {
 		t.Fatalf("warnings = %q, want one saying the run cannot be resumed", result.Warnings)
 	}
 }
+
+// A resume has to come from a journal of this session's own runs. For an id
+// with no journal here, the run used to start cold without a word, and the
+// model took it for a resume; an id with path parts read a journal from
+// outside the session's workflows directory.
+func TestLaunchWorkflowOnlyResumesFromThisSessionsRuns(t *testing.T) {
+	sessionDir := t.TempDir()
+	var executed []string
+	runner := func(_ context.Context, req toolpkg.AgentRunRequest) (toolpkg.AgentRunResult, error) {
+		executed = append(executed, req.Description)
+		return toolpkg.AgentRunResult{Status: "completed", Summary: "out:" + req.Description}, nil
+	}
+	spec := workflowpkg.Spec{Description: "resume checks", Nodes: []workflowpkg.NodeSpec{workflowNode("a")}}
+	first, err := launchWorkflow(t.Context(), runner, nil, sessionDir, toolpkg.WorkflowLaunchRequest{Spec: spec})
+	if err != nil {
+		t.Fatalf("launchWorkflow: %v", err)
+	}
+	// A copy of that journal outside the workflows directory.
+	journal, err := os.ReadFile(first.JournalPath)
+	if err != nil {
+		t.Fatalf("read journal: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(sessionDir, "elsewhere.ndjson"), journal, 0o600); err != nil {
+		t.Fatalf("copy journal: %v", err)
+	}
+
+	for _, runID := range []string{"wf_000000000000", "../elsewhere"} {
+		t.Run(runID, func(t *testing.T) {
+			executed = nil
+			result, err := launchWorkflow(t.Context(), runner, nil, sessionDir, toolpkg.WorkflowLaunchRequest{Spec: spec, ResumeFromRunID: runID})
+			if err != nil {
+				t.Fatalf("launchWorkflow: %v", err)
+			}
+			if len(executed) != 1 || result.Cached != 0 {
+				t.Fatalf("executed %v with %d cached, want the node run again", executed, result.Cached)
+			}
+			if len(result.Warnings) != 1 || !strings.Contains(result.Warnings[0], "nothing was replayed") {
+				t.Fatalf("warnings = %q, want one saying nothing was replayed", result.Warnings)
+			}
+		})
+	}
+}

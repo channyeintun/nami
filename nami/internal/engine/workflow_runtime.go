@@ -3,7 +3,9 @@ package engine
 import (
 	"context"
 	"encoding/hex"
+	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -143,8 +145,8 @@ func launchWorkflow(
 	if run.journalPath != "" {
 		resumePath := ""
 		if previous := strings.TrimSpace(req.ResumeFromRunID); previous != "" {
-			resumePath = journalPathForRun(sessionDir, previous)
 			run.resumedFrom = previous
+			resumePath = resumeJournalPath(run, sessionDir, previous)
 		}
 		journal = openRunJournal(run, resumePath)
 	}
@@ -168,6 +170,26 @@ func launchWorkflow(
 
 	run.finish(&result, nil)
 	return run.snapshot(), nil
+}
+
+// resumeJournalPath returns the journal of the run being resumed, which has to
+// be an earlier run of this session. For any other id it returns "" and warns
+// that nothing was replayed: the journal loader reads a missing journal as a
+// cold start, and the model would take the run for a resume.
+func resumeJournalPath(run *workflowRun, sessionDir string, runID string) string {
+	// A run id names a file in the session's workflows directory. One with
+	// path parts would read a journal from somewhere else.
+	if runID != filepath.Base(runID) {
+		run.addWarning(fmt.Sprintf("%q is not a workflow run id, so nothing was replayed and every node ran.", runID))
+		return ""
+	}
+	path := journalPathForRun(sessionDir, runID)
+	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
+		run.addWarning(fmt.Sprintf("Run %s has no journal in this session, so nothing was replayed and every node ran.", runID))
+		return ""
+	}
+	// Any other failure to reach the journal is openRunJournal's to report.
+	return path
 }
 
 // openRunJournal opens run's journal, seeded with the records of the journal at
