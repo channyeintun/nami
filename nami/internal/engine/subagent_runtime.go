@@ -160,13 +160,17 @@ func makeSubagentRunner(
 			return toolpkg.AgentRunResult{}, err
 		}
 		swarmSessionID := toolpkg.CurrentSwarmRuntimeSessionID()
+		// Snapshot the parent's permissions here, on the calling goroutine. A
+		// background child otherwise copied them from its own goroutine while
+		// the parent's later turns can be adding approval rules to them.
+		childPermissionCtx := permissions.CloneContext(permissionCtx)
 
 		execute := func(runCtx context.Context) (toolpkg.AgentRunResult, error) {
-			return executeSubagent(runCtx, req, subagentType, invocationID, bridge, registry, permissionCtx, parentTracker, sessionStore, artifactManager, hookRunner, childClient, childActiveModelID, currentCWD, rolePolicy, childToolNames, swarmSessionID, nil, nil)
+			return executeSubagent(runCtx, req, subagentType, invocationID, bridge, registry, childPermissionCtx, parentTracker, sessionStore, artifactManager, hookRunner, childClient, childActiveModelID, currentCWD, rolePolicy, childToolNames, swarmSessionID, nil, nil)
 		}
 		if req.Background {
 			launch := launchBackgroundAgent(bridge, strings.TrimSpace(req.Description), strings.TrimSpace(req.Role), subagentType, invocationID, sessionStore, func(runCtx context.Context, stopControl *agent.StopController, reportStatus func(toolpkg.AgentRunResult)) (toolpkg.AgentRunResult, error) {
-				return executeSubagent(runCtx, req, subagentType, invocationID, bridge, registry, permissionCtx, parentTracker, sessionStore, artifactManager, hookRunner, childClient, childActiveModelID, currentCWD, rolePolicy, childToolNames, swarmSessionID, stopControl, reportStatus)
+				return executeSubagent(runCtx, req, subagentType, invocationID, bridge, registry, childPermissionCtx, parentTracker, sessionStore, artifactManager, hookRunner, childClient, childActiveModelID, currentCWD, rolePolicy, childToolNames, swarmSessionID, stopControl, reportStatus)
 			})
 			launch.SubagentType = subagentType
 			launch.Tools = append([]string(nil), childToolNames...)
@@ -233,7 +237,7 @@ func executeSubagent(
 	invocationID string,
 	bridge *ipc.Bridge,
 	registry *toolpkg.Registry,
-	permissionCtx *permissions.Context,
+	childPermissionCtx *permissions.Context,
 	parentTracker *costpkg.Tracker,
 	sessionStore *session.Store,
 	artifactManager *artifactspkg.Manager,
@@ -267,7 +271,6 @@ func executeSubagent(
 	childStartedAt := time.Now()
 	childTracker := costpkg.NewTracker()
 	childRegistry := registry.CloneFiltered(childToolNames)
-	childPermissionCtx := permissions.CloneContext(permissionCtx)
 	childBridge := ipc.NewBridge(strings.NewReader(""), io.Discard)
 	childTimingLogger := timing.NewSessionLogger(sessionStore.SessionDir(childSessionID))
 	childSkills, err := loadAvailableSkills(bridge, childCWD)
