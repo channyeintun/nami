@@ -569,6 +569,14 @@ func evaluateChildStopHooks(
 	swarmSessionID string,
 	childStartedAt time.Time,
 ) (agent.StopDecision, error) {
+	// A cancel is the user overriding the child, so nothing may hold it open.
+	// Getting here consumed the stop request, and the next one only escalates
+	// to a hard cancel while a request is still pending - so a hook that kept
+	// blocking would turn every later stop into another soft, blockable one
+	// and the child could not be stopped at all.
+	if isCancelledStopReason(stopReq.StopReason) {
+		return agent.StopDecision{}, nil
+	}
 	if blocked, reason, followUp, err := rolePolicy.completionBlocked(store, swarmSessionID, childStartedAt, stopReq.StopReason); err != nil {
 		return agent.StopDecision{}, err
 	} else if blocked {

@@ -4,10 +4,15 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/channyeintun/nami/internal/agent"
+	"github.com/channyeintun/nami/internal/hooks"
 	"github.com/channyeintun/nami/internal/swarm"
+	toolpkg "github.com/channyeintun/nami/internal/tools"
 )
 
 // writeSwarmProject creates a repository root holding a swarm spec and returns
@@ -74,6 +79,43 @@ func TestWithRolePromptSections(t *testing.T) {
 			}
 			if tt.wantContains != "" && !strings.Contains(got, tt.wantContains) {
 				t.Fatalf("prompt = %q, want it to contain %q", got, tt.wantContains)
+			}
+		})
+	}
+}
+
+// A subagent_stop hook may hold a child open until its own condition holds,
+// but not against the user: a cancelled stop must go through, or the child of
+// a hook that keeps blocking can never be stopped.
+func TestEvaluateChildStopHooksNeverBlocksACancel(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the hook in this test is a POSIX shell script")
+	}
+	hooksDir := t.TempDir()
+	script := "#!/bin/sh\ncat >/dev/null\necho '{\"action\":\"deny\",\"message\":\"tests must pass first\"}'\n"
+	if err := os.WriteFile(filepath.Join(hooksDir, "subagent_stop"), []byte(script), 0o755); err != nil {
+		t.Fatalf("write hook: %v", err)
+	}
+	runner := hooks.NewRunner(hooksDir)
+
+	tests := []struct {
+		stopReason   string
+		wantContinue bool
+	}{
+		{stopReason: "end_turn", wantContinue: true},
+		{stopReason: "cancelled", wantContinue: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.stopReason, func(t *testing.T) {
+			decision, err := evaluateChildStopHooks(
+				t.Context(), runner, "child-session", "invocation", toolpkg.AgentRunRequest{}, exploreSubagentType,
+				agent.StopRequest{StopReason: tt.stopReason}, &childLifecycleTracker{}, "", "", nil, nil, nil, "", time.Now(),
+			)
+			if err != nil {
+				t.Fatalf("evaluateChildStopHooks: %v", err)
+			}
+			if decision.Continue != tt.wantContinue {
+				t.Fatalf("stop %q: Continue = %v, want %v", tt.stopReason, decision.Continue, tt.wantContinue)
 			}
 		})
 	}
