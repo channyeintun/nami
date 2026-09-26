@@ -146,7 +146,7 @@ func (t *FileReadTool) Execute(ctx context.Context, input ToolInput) (ToolOutput
 	if err != nil {
 		return ToolOutput{}, err
 	}
-	if readState := GetGlobalFileReadState(); readState != nil && readState.SeenUnchanged(filePath, offset, limit, info) {
+	if readState := FileReadStateFor(ctx); readState != nil && readState.SeenUnchanged(filePath, offset, limit, info) {
 		stub := fmt.Sprintf("[File unchanged since last read: %s (offset=%d limit=%d).]", filePath, offset, limit)
 		recordFileReadMetric(FileReadMetric{RequestedOffset: offset, RequestedLimit: limit, BytesReturned: len(stub), UnchangedHit: true})
 		return ToolOutput{Output: stub, FilePath: filePath, Preview: textutil.TruncateHead(stub, PreviewChars)}, nil

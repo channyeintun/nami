@@ -146,7 +146,7 @@ func TestReadStateRemembersTheFileAsItWasRead(t *testing.T) {
 	if err := os.Chtimes(path, later, later); err != nil {
 		t.Fatalf("chtimes: %v", err)
 	}
-	rememberInlineReadResult(output, false)
+	rememberInlineReadResult(state, output, false)
 
 	current, err := os.Stat(path)
 	if err != nil {
@@ -273,5 +273,60 @@ func TestResultsAfterTheAggregateBudgetIsSpentStayOutOfContext(t *testing.T) {
 	}
 	if last := results[len(results)-1]; len(last.Output) > budget.PreviewLen {
 		t.Fatalf("a result after the budget was spent kept %d of %d characters inline", len(last.Output), sizes[len(sizes)-1])
+	}
+}
+
+// A child agent is a conversation of its own. A file its parent has read must
+// still reach the child in full, not as an "unchanged since last read" stub
+// pointing at a result only the parent holds, and the child's own reads are
+// remembered apart from the parent's.
+func TestChildAgentReadsAreTrackedApartFromTheParents(t *testing.T) {
+	previous := toolpkg.GetGlobalFileReadState()
+	t.Cleanup(func() { toolpkg.SetGlobalFileReadState(previous) })
+	parentState := toolpkg.NewFileReadState()
+	toolpkg.SetGlobalFileReadState(parentState)
+
+	dir := t.TempDir()
+	shared := filepath.Join(dir, "shared.txt")
+	childOnly := filepath.Join(dir, "child-only.txt")
+	for path, content := range map[string]string{shared: "read by both\n", childOnly: "read by the child\n"} {
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+	parentRead, err := toolpkg.NewFileReadTool().Execute(t.Context(), toolpkg.ToolInput{Params: map[string]any{"filePath": shared}})
+	if err != nil {
+		t.Fatalf("parent read_file: %v", err)
+	}
+	rememberInlineReadResult(parentState, parentRead, false)
+
+	registry := toolpkg.NewEmptyRegistry()
+	registry.Register(toolpkg.NewFileReadTool())
+	childCtx := toolpkg.WithFileReadState(t.Context(), toolpkg.NewFileReadState())
+	readInChild := func(path string) string {
+		t.Helper()
+		results, err := executeToolCallsForSubagent(childCtx, generalPurposeSubagentType, nil, registry, newPermissionContext("bypassPermissions", false), nil, nil, "child-session", t.TempDir(), costpkg.NewTracker(), 8_000,
+			[]api.ToolCall{{ID: "call-read", Name: "read_file", Input: fmt.Sprintf(`{"filePath": %q}`, path)}})
+		if err != nil {
+			t.Fatalf("executeToolCallsForSubagent: %v", err)
+		}
+		return results[0].Output
+	}
+
+	if got := readInChild(shared); !strings.Contains(got, "read by both") {
+		t.Fatalf("the child got %q for a file only its parent had read", got)
+	}
+	if got := readInChild(childOnly); !strings.Contains(got, "read by the child") {
+		t.Fatalf("first child read = %q", got)
+	}
+	if got := readInChild(childOnly); !strings.Contains(got, "File unchanged since last read") {
+		t.Fatalf("a repeated child read = %q, want the unchanged stub", got)
+	}
+	parentReadOfChildFile, err := toolpkg.NewFileReadTool().Execute(t.Context(), toolpkg.ToolInput{Params: map[string]any{"filePath": childOnly}})
+	if err != nil {
+		t.Fatalf("parent read_file: %v", err)
+	}
+	if !strings.Contains(parentReadOfChildFile.Output, "read by the child") {
+		t.Fatalf("the parent got %q for a file only its child had read", parentReadOfChildFile.Output)
 	}
 }

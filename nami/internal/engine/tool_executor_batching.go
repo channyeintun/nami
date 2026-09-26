@@ -109,7 +109,7 @@ func handleToolBatchResult(
 	}); err != nil {
 		return err
 	}
-	rememberInlineReadResult(result.Output, spilled)
+	rememberInlineReadResult(toolpkg.FileReadStateFor(ctx), result.Output, spilled)
 	runPostToolUseHooks(ctx, hookRunner, sessionID, call, output)
 	return nil
 }
@@ -155,11 +155,13 @@ func forgetFileReads() {
 	toolpkg.GetGlobalFileReadState().Reset()
 }
 
-func rememberInlineReadResult(output toolpkg.ToolOutput, spilled bool) {
+// rememberInlineReadResult records a read whose content the conversation now
+// holds in full, so reading the file again unchanged can be answered with a
+// stub. readState is the conversation's; see toolpkg.FileReadStateFor.
+func rememberInlineReadResult(readState *toolpkg.FileReadState, output toolpkg.ToolOutput, spilled bool) {
 	if spilled || strings.TrimSpace(output.FilePath) == "" || output.ReadLimit <= 0 || output.ReadInfo == nil {
 		return
 	}
-	readState := toolpkg.GetGlobalFileReadState()
 	if readState == nil {
 		return
 	}

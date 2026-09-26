@@ -328,16 +328,23 @@ func executeSubagent(
 		Title:         req.Description,
 	})
 
+	// The child's own record of what it has read; see toolpkg.WithFileReadState.
+	childReadState := toolpkg.NewFileReadState()
 	childDeps := agent.QueryDeps{
 		CallModel: func(callCtx context.Context, modelReq api.ModelRequest) (iter.Seq2[api.ModelEvent, error], error) {
 			return trackModelStream(callCtx, childBridge, childTracker, client, modelReq)
 		},
 		ExecuteToolBatch: func(callCtx context.Context, calls []api.ToolCall) ([]api.ToolResult, error) {
+			callCtx = toolpkg.WithFileReadState(callCtx, childReadState)
 			return executeToolCallsForSubagent(callCtx, subagentType, rolePolicy, executionRegistry, childPermissionCtx, hookRunner, artifactManager, childSessionID, sessionStore.SessionDir(childSessionID), childTracker, client.Capabilities().MaxOutputTokens, calls)
 		},
 		CompactMessages: func(callCtx context.Context, current []api.Message, reason agent.CompactReason) (compact.CompactResult, error) {
 			sessionMemory, _ := loadSessionMemorySnapshot(callCtx, artifactManager, childSessionID)
-			return compactWithMetrics(callCtx, childBridge, childTracker, client, childTimingLogger, childSessionID, 0, string(reason), sessionMemory, childPrompt, queryTools, current)
+			result, err := compactWithMetrics(callCtx, childBridge, childTracker, client, childTimingLogger, childSessionID, 0, string(reason), sessionMemory, childPrompt, queryTools, current)
+			// The compacted conversation may no longer hold the reads the
+			// child's "unchanged" answers would point back to.
+			childReadState.Reset()
+			return result, err
 		},
 		RecallMemory: func(callCtx context.Context, files []agent.MemoryFile, userPrompt string) ([]agent.MemoryRecallResult, error) {
 			selector := memorypkg.RecallSelector{}
@@ -1020,13 +1027,14 @@ func executeToolCallsForSubagent(
 			// budgetToolOutput still returns the truncated preview. Falling
 			// back to the raw output instead would put an arbitrarily large
 			// result into the child's context.
-			output, _, _, err := budgetToolOutput(ctx, artifactManager, sessionID, budget, aggregateBudget, call, result.Output.Output)
+			output, _, budgetInfo, err := budgetToolOutput(ctx, artifactManager, sessionID, budget, aggregateBudget, call, result.Output.Output)
 			if err != nil {
 				output += fmt.Sprintf("\n[The full output could not be saved: %v]", err)
 			}
 			toolResult.Output = output
 			toolResult.IsError = result.Output.IsError
 			results[result.Index] = toolResult
+			rememberInlineReadResult(toolpkg.FileReadStateFor(ctx), result.Output, budgetInfo.Spilled)
 			if !result.Output.IsError {
 				runPostToolUseHooks(ctx, hookRunner, sessionID, call, output)
 			}

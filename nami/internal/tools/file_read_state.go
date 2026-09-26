@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"context"
 	"os"
 	"sync"
 	"time"
@@ -99,6 +100,25 @@ func (s *FileReadState) RecordMetric(metric FileReadMetric) {
 	}
 	s.metrics = append(s.metrics, metric)
 	s.mu.Unlock()
+}
+
+type fileReadStateContextKey struct{}
+
+// WithFileReadState makes read_file calls under ctx use state rather than the
+// session's. A child agent is a conversation of its own: that its parent read
+// a file says nothing about what the child has seen, and answering the child
+// "unchanged since last read" would hide the file from it.
+func WithFileReadState(ctx context.Context, state *FileReadState) context.Context {
+	return context.WithValue(ctx, fileReadStateContextKey{}, state)
+}
+
+// FileReadStateFor returns the read state of the conversation a call belongs
+// to: the one set with WithFileReadState, else the session's.
+func FileReadStateFor(ctx context.Context) *FileReadState {
+	if state, ok := ctx.Value(fileReadStateContextKey{}).(*FileReadState); ok {
+		return state
+	}
+	return GetGlobalFileReadState()
 }
 
 var globalFileReadState struct {
