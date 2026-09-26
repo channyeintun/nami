@@ -119,7 +119,9 @@ func (t *NotebookEditTool) Execute(ctx context.Context, input ToolInput) (ToolOu
 	operation := strings.ToLower(strings.TrimSpace(firstStringOrEmpty(input.Params, "operation")))
 	cellIndex, hasCellIndex := firstIntParam(input.Params, "cellIndex", "cell_index")
 	cellType := normalizeNotebookEditCellType(firstStringOrEmpty(input.Params, "cellType", "cell_type"))
-	source := firstStringOrEmpty(input.Params, "source")
+	// Source is cell content: read it untrimmed so indentation and blank
+	// lines survive.
+	source, _ := stringParam(input.Params, "source")
 
 	trackFileBeforeWrite(filePath)
 
