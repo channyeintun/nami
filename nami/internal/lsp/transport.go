@@ -164,16 +164,34 @@ func (c *client) nextRequestID() int64 {
 }
 
 // Close asks the server to shut down, then makes sure the process is gone.
+//
+// call only notices its context between messages, so a server that accepts
+// "shutdown" and never answers would block the read indefinitely. The polite
+// shutdown therefore runs on its own goroutine with a deadline; killing the
+// process afterwards closes its stdout, which ends that blocked read.
 func (c *client) Close() error {
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
-	defer cancel()
-	_ = c.call(shutdownCtx, "shutdown", map[string]any{}, nil)
-	_ = c.notify("exit", map[string]any{})
+	politeShutdown := make(chan struct{})
+	go func() {
+		defer close(politeShutdown)
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+		defer cancel()
+		// Best effort: the server is killed below whether or not it complies.
+		_ = c.call(shutdownCtx, "shutdown", map[string]any{}, nil)
+		_ = c.notify("exit", map[string]any{})
+	}()
+	timer := time.NewTimer(shutdownTimeout)
+	defer timer.Stop()
+	select {
+	case <-politeShutdown:
+	case <-timer.C:
+	}
+
 	_ = c.stdin.Close()
 	if c.cmd.Process != nil {
 		_ = c.cmd.Process.Kill()
 	}
 	_ = c.cmd.Wait()
+	<-politeShutdown
 	return nil
 }
 

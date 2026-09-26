@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"strings"
 	"sync"
 	"testing"
@@ -247,5 +248,36 @@ func TestSyncBufferIsSafeForConcurrentUse(t *testing.T) {
 func TestRunRejectsInvalidRequestBeforeStartingServer(t *testing.T) {
 	if _, err := Run(context.Background(), Request{Operation: OperationHover}); err == nil {
 		t.Fatal("Run succeeded for an invalid request, want error")
+	}
+}
+
+// A server that accepts "shutdown" but never answers must not hold Close past
+// the shutdown timeout: call only checks its context between messages, so the
+// read has to be ended by killing the process.
+func TestCloseDoesNotWaitOnAnUnresponsiveServer(t *testing.T) {
+	sleepPath, err := exec.LookPath("sleep")
+	if err != nil {
+		t.Skip("no sleep binary to stand in for an unresponsive server")
+	}
+	cmd := exec.Command(sleepPath, "30")
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		t.Fatalf("stdin pipe: %v", err)
+	}
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		t.Fatalf("stdout pipe: %v", err)
+	}
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	c := &client{cmd: cmd, stdin: stdin, stdout: bufio.NewReader(stdout)}
+
+	started := time.Now()
+	if err := c.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	if elapsed := time.Since(started); elapsed > shutdownTimeout+5*time.Second {
+		t.Fatalf("Close took %v, want it bounded by the %v shutdown timeout", elapsed, shutdownTimeout)
 	}
 }
