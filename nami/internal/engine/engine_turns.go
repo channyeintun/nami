@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"iter"
 	"slices"
@@ -575,8 +576,11 @@ func (t *userTurnContext) rebaseAfterCompaction(result compact.CompactResult) {
 	}
 }
 
+// persistCurrentMessages saves the conversation mid-turn. A failed save must
+// not end the turn, since the work is still in memory, but the user has to
+// learn that the session on disk stopped keeping up before relying on it.
 func (t *userTurnContext) persistCurrentMessages() {
-	_ = persistSessionState(t.deps.sessionStore, sessionStateParams{
+	stateErr := persistSessionState(t.deps.sessionStore, sessionStateParams{
 		SessionID:     t.state.sessionID,
 		CreatedAt:     t.state.startedAt,
 		Mode:          t.state.mode,
@@ -587,7 +591,12 @@ func (t *userTurnContext) persistCurrentMessages() {
 		Tracker:       t.deps.tracker,
 		Messages:      t.state.messages,
 	})
-	_ = persistConversationHydratedPayload(t.deps.sessionStore, t.state.sessionID, t.state.timeline, t.state.messages, t.state.activeModelID)
+	timelineErr := persistConversationHydratedPayload(t.deps.sessionStore, t.state.sessionID, t.state.timeline, t.state.messages, t.state.activeModelID)
+	if err := errors.Join(stateErr, timelineErr); err != nil {
+		// The callers have no error to return, and a bridge that cannot
+		// carry this notice fails the turn on its next event anyway.
+		_ = t.deps.bridge.EmitNotice(fmt.Sprintf("Session not saved: %v", err))
+	}
 }
 
 func (t *userTurnContext) markTurnMetric(checkpoint string) bool {

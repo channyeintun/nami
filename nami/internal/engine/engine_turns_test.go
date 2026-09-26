@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"io"
 	"iter"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -568,4 +570,32 @@ func TestATurnThatCannotStartStillEndsInTheUI(t *testing.T) {
 			}
 		})
 	}
+}
+
+// Saves during a turn used to discard their errors, so a session whose files
+// could no longer be written looked saved until the user tried to resume it.
+func TestATurnReportsThatTheSessionCouldNotBeSaved(t *testing.T) {
+	client := &scriptedClient{
+		caps:  api.ModelCapabilities{SupportsToolUse: true, MaxContextWindow: 200_000, MaxOutputTokens: 8_000},
+		turns: []scriptedTurn{{text: "Done."}},
+	}
+	h := newTurnHarness(t, client, echoTool{})
+	// A file where the session directory belongs makes every save fail.
+	sessionDir := h.deps.sessionStore.SessionDir(h.state.sessionID)
+	if err := os.MkdirAll(filepath.Dir(sessionDir), 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(sessionDir, nil, 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	if err := handleUserInputMessage(t.Context(), ipc.UserInputPayload{Text: "hello"}, h.deps, h.state); err != nil {
+		t.Fatalf("a failed save ended the turn: %v", err)
+	}
+	for _, event := range h.events(t) {
+		if event.Type == ipc.EventNotice && strings.Contains(string(event.Payload), "Session not saved") {
+			return
+		}
+	}
+	t.Fatalf("no notice said the session was not saved; the TUI received:\n%s", h.output.String())
 }
