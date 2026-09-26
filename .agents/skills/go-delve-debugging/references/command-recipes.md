@@ -1,74 +1,74 @@
 # Delve Command Recipes
 
-## Build the Bundled Delve Binary
+## Install Delve
 
 ```bash
-cd reference/delve && make build
+go install github.com/go-delve/delve/cmd/dlv@latest
 ```
 
-The resulting debugger binary is `reference/delve/dlv`.
+With a local checkout at `reference/delve` (gitignored, not part of the repository), `cd reference/delve && make build` builds `reference/delve/dlv`; substitute that path for `dlv` below.
 
 ## Common Launch Commands
 
 Debug a Go package that Delve should build:
 
 ```bash
-reference/delve/dlv debug ./cmd/server -- --config dev.yaml
+dlv debug ./cmd/server -- --config dev.yaml
 ```
 
 Debug a Go package with optimizations disabled at build time:
 
 ```bash
-reference/delve/dlv debug --build-flags='-gcflags=all=-N -l' ./cmd/server -- --config dev.yaml
+dlv debug --build-flags='-gcflags=all=-N -l' ./cmd/server -- --config dev.yaml
 ```
 
 Debug a single Go test:
 
 ```bash
-reference/delve/dlv test ./pkg/cache -- -test.run TestEvictExpired
+dlv test ./pkg/cache -- -test.run TestEvictExpired
 ```
 
 Debug an existing binary:
 
 ```bash
-reference/delve/dlv exec ./bin/server -- --config dev.yaml
+dlv exec ./bin/server -- --config dev.yaml
 ```
 
 Attach to a running process:
 
 ```bash
-reference/delve/dlv attach 12345
+dlv attach 12345
 ```
 
 Inspect a core dump or minidump:
 
 ```bash
-reference/delve/dlv core ./bin/server ./crash.core
+dlv core ./bin/server ./crash.core
 ```
 
 Replay an `rr` recording:
 
 ```bash
-reference/delve/dlv replay /tmp/rr-trace
+dlv replay /tmp/rr-trace
 ```
 
 Trace matching functions without an interactive stop-and-step session:
 
 ```bash
-reference/delve/dlv trace ./cmd/server 'cache.*' --timestamp -s 5
+dlv trace ./cmd/server 'cache.*' --timestamp -s 5
 ```
 
 Start a headless server and connect to it from another terminal:
 
 ```bash
-reference/delve/dlv --headless --listen=127.0.0.1:43000 --api-version=2 --accept-multiclient --continue debug ./cmd/server -- --config dev.yaml
-reference/delve/dlv connect 127.0.0.1:43000
+dlv --headless --listen=127.0.0.1:43000 --api-version=2 --accept-multiclient --continue debug ./cmd/server -- --config dev.yaml
+dlv connect 127.0.0.1:43000
 ```
 
 Start a DAP-only server for a DAP client such as VS Code Go:
 
 ```bash
-reference/delve/dlv dap --listen=127.0.0.1:43001
+dlv dap --listen=127.0.0.1:43001
 ```
 
 Use `dlv dap` only with a DAP client. Use `dlv --headless <command>` when you need `dlv connect`, JSON-RPC, or remote attach to a target that is already running under Delve.
@@ -202,7 +202,7 @@ When variables are optimized away or stepping is misleading, rebuild without inl
 
 ```bash
 go build -gcflags='all=-N -l' -o ./tmp/debug-bin ./cmd/server
-reference/delve/dlv exec ./tmp/debug-bin -- --config dev.yaml
+dlv exec ./tmp/debug-bin -- --config dev.yaml
 ```
 
 ## CLI and Remote Recipes
@@ -210,14 +210,14 @@ reference/delve/dlv exec ./tmp/debug-bin -- --config dev.yaml
 Debug a CLI program by assigning it a TTY:
 
 ```bash
-reference/delve/dlv debug --tty /dev/pts/1 ./cmd/server
+dlv debug --tty /dev/pts/1 ./cmd/server
 ```
 
 Run Delve headless inside a container and connect from outside:
 
 ```bash
-reference/delve/dlv exec --headless --listen=:4040 --continue --accept-multiclient /path/to/executable
-reference/delve/dlv connect :4040
+dlv exec --headless --listen=:4040 --continue --accept-multiclient /path/to/executable
+dlv connect :4040
 ```
 
 If source paths do not resolve or breakpoints miss in a containerized or remote build, start with `sources` and Delve path-substitution config before assuming the binary is wrong.
@@ -225,5 +225,5 @@ If source paths do not resolve or breakpoints miss in a containerized or remote 
 When transport, client, or path mapping is the problem, enable Delve logging:
 
 ```bash
-reference/delve/dlv --headless --listen=127.0.0.1:43000 --api-version=2 --log --log-output=rpc,dap debug ./cmd/server
+dlv --headless --listen=127.0.0.1:43000 --api-version=2 --log --log-output=rpc,dap debug ./cmd/server
 ```

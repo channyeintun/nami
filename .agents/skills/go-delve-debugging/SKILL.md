@@ -30,13 +30,13 @@ At minimum, capture the stop reason plus the relevant stack, goroutine, variable
 
 ## Setup
 
-If Delve is not already installed, build the bundled copy in this workspace:
+If `dlv` is not already on `PATH`, install it:
 
 ```bash
-cd reference/delve && make build
+go install github.com/go-delve/delve/cmd/dlv@latest
 ```
 
-That produces the debugger binary at `reference/delve/dlv`.
+If this workspace has a local Delve checkout at `reference/delve` (that directory is gitignored, so a fresh clone has none), `cd reference/delve && make build` builds `reference/delve/dlv` instead; use that path wherever the commands below say `dlv`.
 
 ## Choose the Right Mode
 
@@ -77,19 +77,19 @@ That produces the debugger binary at `reference/delve/dlv`.
 
 ## Launch Patterns
 
-Use the bundled Delve binary when you want a known local build:
+Typical launches:
 
 ```bash
-reference/delve/dlv debug ./cmd/server -- --config dev.yaml
-reference/delve/dlv test ./pkg/cache -- -test.run TestEvictExpired
-reference/delve/dlv exec ./bin/server -- --config dev.yaml
-reference/delve/dlv attach 12345
-reference/delve/dlv core ./bin/server ./crash.core
-reference/delve/dlv replay /tmp/rr-trace
-reference/delve/dlv trace ./cmd/server 'cache.*' --timestamp -s 5
-reference/delve/dlv --headless --listen=127.0.0.1:43000 --api-version=2 --accept-multiclient --continue debug ./cmd/server -- --config dev.yaml
-reference/delve/dlv connect 127.0.0.1:43000
-reference/delve/dlv dap --listen=127.0.0.1:43001
+dlv debug ./cmd/server -- --config dev.yaml
+dlv test ./pkg/cache -- -test.run TestEvictExpired
+dlv exec ./bin/server -- --config dev.yaml
+dlv attach 12345
+dlv core ./bin/server ./crash.core
+dlv replay /tmp/rr-trace
+dlv trace ./cmd/server 'cache.*' --timestamp -s 5
+dlv --headless --listen=127.0.0.1:43000 --api-version=2 --accept-multiclient --continue debug ./cmd/server -- --config dev.yaml
+dlv connect 127.0.0.1:43000
+dlv dap --listen=127.0.0.1:43001
 ```
 
 Use `dlv dap` only when the client will speak DAP directly. Use `dlv --headless <command>` when you want `dlv connect`, JSON-RPC, or a remote DAP attach session against an already-started target.
