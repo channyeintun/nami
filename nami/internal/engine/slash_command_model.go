@@ -338,6 +338,8 @@ func promptSelection(
 	}
 }
 
+// promptReasoningSelection opens the reasoning picker and returns the value the
+// TUI sent back, unparsed, or cancelled when the user made no choice.
 func promptReasoningSelection(
 	cmd *slashCommandContext,
 	configuredEffort string,
@@ -413,17 +415,11 @@ func promptReasoningSelection(
 				deferred = append(deferred, msg)
 				continue
 			}
-			if payload.Cancel {
+			selected := strings.TrimSpace(payload.Effort)
+			if payload.Cancel || selected == "" {
 				return "", true, nil
 			}
-			effort, clearSetting, err := commandspkg.ParseReasoningArgs(payload.Effort)
-			if err != nil {
-				return "", false, err
-			}
-			if clearSetting {
-				return "", false, nil
-			}
-			return effort, false, nil
+			return selected, false, nil
 		case ipc.MsgShutdown:
 			return "", false, context.Canceled
 		default:
@@ -438,8 +434,9 @@ func handleReasoningSlashCommand(cmd *slashCommandContext) error {
 	if cmd.client != nil && *cmd.client != nil {
 		currentModelID = strings.TrimSpace((*cmd.client).ModelID())
 	}
-	if strings.TrimSpace(cmd.args) == "" {
-		selected, cancelled, err := promptReasoningSelection(
+	selection := cmd.args
+	if strings.TrimSpace(selection) == "" {
+		picked, cancelled, err := promptReasoningSelection(
 			cmd,
 			strings.TrimSpace(persisted.ReasoningEffort),
 			currentModelID,
@@ -450,18 +447,19 @@ func handleReasoningSlashCommand(cmd *slashCommandContext) error {
 		if cancelled {
 			return emitTextResponse(cmd.bridge, "Reasoning selection cancelled.")
 		}
-		persisted.ReasoningEffort = selected
+		selection = picked
+	}
+	// The picker's answer is parsed like a typed argument, so a value that is
+	// not an effort is reported to the user. Returned as an error, it would
+	// end the engine's main loop and the session with it.
+	nextEffort, clearSetting, err := commandspkg.ParseReasoningArgs(selection)
+	if err != nil {
+		return emitTextResponse(cmd.bridge, err.Error())
+	}
+	if clearSetting {
+		persisted.ReasoningEffort = ""
 	} else {
-		nextEffort, clearSetting, err := commandspkg.ParseReasoningArgs(cmd.args)
-		if err != nil {
-			return emitTextResponse(cmd.bridge, err.Error())
-		}
-
-		if clearSetting {
-			persisted.ReasoningEffort = ""
-		} else {
-			persisted.ReasoningEffort = nextEffort
-		}
+		persisted.ReasoningEffort = nextEffort
 	}
 	if err := config.Save(persisted); err != nil {
 		return emitTextResponse(cmd.bridge, fmt.Sprintf("save reasoning effort: %v", err))

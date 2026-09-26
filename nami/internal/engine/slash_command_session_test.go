@@ -2,7 +2,9 @@ package engine
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"io"
 	"strings"
 	"testing"
 	"time"
@@ -52,6 +54,125 @@ func newTestSlashCommandContext(t *testing.T, store *session.Store, messages []a
 		nil,
 		&client,
 	), &emitted
+}
+
+// pickerHarness plays the TUI's side of a picker a slash command opens.
+type pickerHarness struct {
+	input  *io.PipeWriter
+	output *lockedBuffer
+}
+
+// newPickerSlashCommandContext is newTestSlashCommandContext with a message
+// router, so a handler can wait on a picker that the test answers.
+func newPickerSlashCommandContext(t *testing.T, store *session.Store, messages []api.Message, timeline *conversationTimeline) (*slashCommandContext, *pickerHarness) {
+	t.Helper()
+	inputReader, inputWriter := io.Pipe()
+	t.Cleanup(func() { _ = inputWriter.Close() })
+	output := &lockedBuffer{}
+	bridge := ipc.NewBridge(inputReader, output)
+	routerCtx, cancelRouter := context.WithCancel(context.Background())
+	t.Cleanup(cancelRouter)
+	var client api.LLMClient
+	cmd := newSlashCommandContext(
+		t.Context(),
+		bridge,
+		ipc.NewMessageRouter(routerCtx, bridge),
+		store,
+		nil,
+		config.DefaultConfig(),
+		nil,
+		nil,
+		costpkg.NewTracker(),
+		ipc.SlashCommandPayload{},
+		"old-session",
+		time.Now(),
+		agent.ModeFast,
+		"anthropic/claude-sonnet-5",
+		"",
+		t.TempDir(),
+		messages,
+		timeline,
+		nil,
+		&client,
+	)
+	return cmd, &pickerHarness{input: inputWriter, output: output}
+}
+
+// run calls handler and answers the picker it opens: it waits for the
+// requestType event, then sends responseType with the payload reply builds
+// from the request's id. It returns every event and the handler's error.
+func (h *pickerHarness) run(
+	t *testing.T,
+	cmd *slashCommandContext,
+	handler func(*slashCommandContext) error,
+	requestType ipc.EventType,
+	responseType ipc.ClientMessageType,
+	reply func(requestID string) any,
+) ([]ipc.StreamEvent, error) {
+	t.Helper()
+	done := make(chan error, 1)
+	go func() { done <- handler(cmd) }()
+
+	requestID := h.waitForRequest(t, requestType)
+	payload, err := json.Marshal(reply(requestID))
+	if err != nil {
+		t.Fatalf("encode %s: %v", responseType, err)
+	}
+	message, err := json.Marshal(ipc.ClientMessage{Type: responseType, Payload: payload})
+	if err != nil {
+		t.Fatalf("encode %s message: %v", responseType, err)
+	}
+	if _, err := h.input.Write(append(message, '\n')); err != nil {
+		t.Fatalf("send %s: %v", responseType, err)
+	}
+
+	select {
+	case handlerErr := <-done:
+		return emittedEvents(t, bytes.NewBufferString(h.output.String())), handlerErr
+	case <-time.After(5 * time.Second):
+		t.Fatalf("the handler did not finish after its picker was answered; it emitted:\n%s", h.output.String())
+		return nil, nil
+	}
+}
+
+// waitForRequest returns the request id of the first requestType event.
+func (h *pickerHarness) waitForRequest(t *testing.T, requestType ipc.EventType) string {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		for _, event := range emittedEvents(t, bytes.NewBufferString(h.output.String())) {
+			if event.Type != requestType {
+				continue
+			}
+			var request struct {
+				RequestID string `json:"request_id"`
+			}
+			if err := json.Unmarshal(event.Payload, &request); err != nil {
+				t.Fatalf("decode %s: %v", requestType, err)
+			}
+			return request.RequestID
+		}
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatalf("no %s event; the handler emitted:\n%s", requestType, h.output.String())
+	return ""
+}
+
+// responseText joins the text a handler streamed as its reply.
+func responseText(t *testing.T, events []ipc.StreamEvent) string {
+	t.Helper()
+	var text strings.Builder
+	for _, event := range events {
+		if event.Type != ipc.EventTokenDelta {
+			continue
+		}
+		var delta ipc.TokenDeltaPayload
+		if err := json.Unmarshal(event.Payload, &delta); err != nil {
+			t.Fatalf("decode token delta: %v", err)
+		}
+		text.WriteString(delta.Text)
+	}
+	return text.String()
 }
 
 // emittedEvents decodes the NDJSON event stream a bridge wrote.

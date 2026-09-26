@@ -1,9 +1,12 @@
 package engine
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/channyeintun/nami/internal/config"
+	"github.com/channyeintun/nami/internal/ipc"
+	"github.com/channyeintun/nami/internal/session"
 )
 
 func TestResolveSelectedModelChoice(t *testing.T) {
@@ -64,5 +67,46 @@ func TestConfiguredModelChoice(t *testing.T) {
 				t.Fatalf("configuredModelChoice(%+v) = %+v, want %+v", tt.cfg, got, tt.want)
 			}
 		})
+	}
+}
+
+// The reasoning picker's answer comes from the TUI. One that is not an effort
+// used to end the engine's main loop, and with it the session; it has to be
+// reported like a bad argument to /reasoning instead.
+func TestReasoningPickerReportsAnInvalidChoice(t *testing.T) {
+	isolateUserConfig(t)
+	cmd, picker := newPickerSlashCommandContext(t, session.NewStore(t.TempDir()), nil, newConversationTimeline())
+
+	events, err := picker.run(t, cmd, handleReasoningSlashCommand, ipc.EventReasoningSelectionRequested, ipc.MsgReasoningSelectionResponse,
+		func(requestID string) any {
+			return ipc.ReasoningSelectionResponsePayload{RequestID: requestID, Effort: "extreme"}
+		})
+	if err != nil {
+		t.Fatalf("an invalid picker choice ended the session: %v", err)
+	}
+	if text := responseText(t, events); !strings.Contains(text, "usage: /reasoning") {
+		t.Fatalf("response = %q, want the /reasoning usage", text)
+	}
+	if !turnEndedForTheUI(t, events) {
+		t.Fatal("the command never completed for the TUI")
+	}
+	if got := config.LoadUser().ReasoningEffort; got != "" {
+		t.Fatalf("saved reasoning effort = %q, want nothing saved", got)
+	}
+}
+
+func TestReasoningPickerSavesAValidChoice(t *testing.T) {
+	isolateUserConfig(t)
+	cmd, picker := newPickerSlashCommandContext(t, session.NewStore(t.TempDir()), nil, newConversationTimeline())
+
+	_, err := picker.run(t, cmd, handleReasoningSlashCommand, ipc.EventReasoningSelectionRequested, ipc.MsgReasoningSelectionResponse,
+		func(requestID string) any {
+			return ipc.ReasoningSelectionResponsePayload{RequestID: requestID, Effort: "HIGH"}
+		})
+	if err != nil {
+		t.Fatalf("handleReasoningSlashCommand: %v", err)
+	}
+	if got := config.LoadUser().ReasoningEffort; got != "high" {
+		t.Fatalf("saved reasoning effort = %q, want high", got)
 	}
 }
