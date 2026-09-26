@@ -34,7 +34,8 @@ func (t *FileWriteTool) InputSchema() any {
 			},
 			"content": map[string]any{
 				"type":        "string",
-				"description": "The full text content to write to the file.",
+				"description": "The full text content to write to the file. May be empty.",
+				"minLength":   0,
 			},
 		},
 		"required": []string{"file_path", "content"},

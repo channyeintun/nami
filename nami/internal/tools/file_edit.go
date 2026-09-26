@@ -45,11 +45,13 @@ func (t *FileEditTool) InputSchema() any {
 			},
 			"newString": map[string]any{
 				"type":        "string",
-				"description": "The replacement text.",
+				"description": "The replacement text. Use an empty string to delete oldString.",
+				"minLength":   0,
 			},
 			"new_string": map[string]any{
 				"type":        "string",
 				"description": "Compatibility alias for the replacement text.",
+				"minLength":   0,
 			},
 			"replaceAll": map[string]any{
 				"type":        "boolean",
@@ -100,7 +102,7 @@ func (t *FileEditTool) Validate(input ToolInput) error {
 	if err != nil {
 		return err
 	}
-	oldString, ok := firstStringParam(input.Params, "oldString", "old_string")
+	oldString, ok := firstPresentStringParam(input.Params, "oldString", "old_string")
 	if !ok {
 		return NewEditFailure(EditFailureInvalidRequest, resolvedPath, "replace_string_in_file requires oldString", "Include the exact oldString you want to replace.")
 	}
@@ -136,11 +138,11 @@ func (t *FileEditTool) Execute(ctx context.Context, input ToolInput) (ToolOutput
 		return ToolOutput{}, err
 	}
 
-	oldString, ok := firstStringParam(input.Params, "oldString", "old_string")
+	oldString, ok := firstPresentStringParam(input.Params, "oldString", "old_string")
 	if !ok {
 		return ToolOutput{}, fmt.Errorf("replace_string_in_file requires oldString")
 	}
-	newString, ok := firstStringParam(input.Params, "newString", "new_string")
+	newString, ok := firstPresentStringParam(input.Params, "newString", "new_string")
 	if !ok {
 		return ToolOutput{}, NewEditFailure(EditFailureInvalidRequest, filePath, "replace_string_in_file requires newString", "Provide the replacement text in newString.")
 	}

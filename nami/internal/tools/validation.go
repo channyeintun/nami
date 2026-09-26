@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"unicode/utf8"
 )
 
 // ValidateToolCall performs schema-backed validation plus any optional
@@ -110,8 +111,8 @@ func validatePropertyValue(toolName, propertyName string, value any, schema map[
 		if !ok {
 			return fmt.Errorf("%s %s must be a string", toolName, propertyName)
 		}
-		if required && strings.TrimSpace(stringValue) == "" {
-			return fmt.Errorf("%s requires %s", toolName, propertyName)
+		if err := validateStringLength(toolName, propertyName, stringValue, schema, required); err != nil {
+			return err
 		}
 	case "array":
 		if reflect.TypeOf(value) == nil || reflect.TypeOf(value).Kind() != reflect.Slice {
@@ -137,6 +138,23 @@ func validatePropertyValue(toolName, propertyName string, value any, schema map[
 		if _, ok := value.(bool); !ok {
 			return fmt.Errorf("%s %s must be a boolean", toolName, propertyName)
 		}
+	}
+	return nil
+}
+
+// validateStringLength rejects a blank required string, catching models that
+// send "" for a path or query. A property that declares minLength is checked
+// against it instead: replacement text and file content may legitimately be
+// empty or whitespace-only, and say so with minLength.
+func validateStringLength(toolName, propertyName, value string, schema map[string]any, required bool) error {
+	if minLength, ok := intParam(schema, "minLength"); ok {
+		if utf8.RuneCountInString(value) < minLength {
+			return fmt.Errorf("%s %s must be at least %d character%s long", toolName, propertyName, minLength, pluralSuffix(minLength))
+		}
+		return nil
+	}
+	if required && strings.TrimSpace(value) == "" {
+		return fmt.Errorf("%s requires %s", toolName, propertyName)
 	}
 	return nil
 }

@@ -42,10 +42,12 @@ func (t *MultiReplaceStringInFileTool) InputSchema() any {
 						"oldString": map[string]any{
 							"type":        "string",
 							"description": "The exact literal text to replace. Include enough surrounding context to uniquely identify the target occurrence.",
+							"minLength":   1,
 						},
 						"newString": map[string]any{
 							"type":        "string",
-							"description": "The replacement text.",
+							"description": "The replacement text. Use an empty string to delete oldString.",
+							"minLength":   0,
 						},
 						"replaceAll": map[string]any{
 							"type":        "boolean",

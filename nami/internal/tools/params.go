@@ -15,6 +15,18 @@ func firstStringParam(params map[string]any, keys ...string) (string, bool) {
 	return "", false
 }
 
+// firstPresentStringParam is firstStringParam for values that may be empty or
+// whitespace-only, such as replacement text: the first alias supplied as a
+// string wins, whatever it holds.
+func firstPresentStringParam(params map[string]any, keys ...string) (string, bool) {
+	for _, key := range keys {
+		if value, ok := stringParam(params, key); ok {
+			return value, true
+		}
+	}
+	return "", false
+}
+
 func firstIntParam(params map[string]any, keys ...string) (int, bool) {
 	for _, key := range keys {
 		if value, ok := intParam(params, key); ok {

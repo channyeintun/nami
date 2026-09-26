@@ -29,6 +29,24 @@ func TestFirstStringParamSkipsBlankAndWrongTypes(t *testing.T) {
 	}
 }
 
+func TestFirstPresentStringParamKeepsEmptyValues(t *testing.T) {
+	// Replacement text may be empty: the preferred alias wins even then, and a
+	// whitespace-only value comes back untouched.
+	params := map[string]any{"newString": "", "new_string": "fallback"}
+	if got, ok := firstPresentStringParam(params, "newString", "new_string"); !ok || got != "" {
+		t.Fatalf("firstPresentStringParam = %q ok=%v, want the empty preferred alias", got, ok)
+	}
+	if got, ok := firstPresentStringParam(map[string]any{"new_string": "\n\t"}, "newString", "new_string"); !ok || got != "\n\t" {
+		t.Fatalf("firstPresentStringParam = %q ok=%v, want the whitespace value", got, ok)
+	}
+	if _, ok := firstPresentStringParam(map[string]any{"newString": 42}, "newString"); ok {
+		t.Fatal("firstPresentStringParam accepted a non-string value")
+	}
+	if _, ok := firstPresentStringParam(map[string]any{}, "newString"); ok {
+		t.Fatal("firstPresentStringParam succeeded on an empty map")
+	}
+}
+
 func TestFirstIntParamCoercesJSONNumbers(t *testing.T) {
 	// Tool params arrive from JSON, so integers surface as float64.
 	cases := map[string]any{"float": float64(12), "int": 12, "int64": int64(12), "string": "12"}
