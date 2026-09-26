@@ -227,18 +227,19 @@ const App: FC<AppProps> = ({ enginePath, model, mode, autoMode }) => {
     }
   }, [dismissAll, uiState.isStreaming]);
 
+  // Depend on the stable callback: `engine` is a new object every render, and
+  // re-running this effect sends an inspect whose reply renders again.
+  const { sendSwarmDashboardInspect } = engine;
   useEffect(() => {
     if (!showBackgroundTasks) {
       return;
     }
 
-    engine.sendSwarmDashboardInspect();
-    const timer = setInterval(() => {
-      engine.sendSwarmDashboardInspect();
-    }, 1000);
+    sendSwarmDashboardInspect();
+    const timer = setInterval(sendSwarmDashboardInspect, 1000);
 
     return () => clearInterval(timer);
-  }, [engine, showBackgroundTasks]);
+  }, [sendSwarmDashboardInspect, showBackgroundTasks]);
 
   useEffect(() => {
     if (
