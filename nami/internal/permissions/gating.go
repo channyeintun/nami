@@ -171,20 +171,39 @@ func AssessRisk(toolName string, input tools.ToolInput, permLevel tools.Permissi
 		return RiskAssessment{Level: "write"}
 	}
 
-	filePath, ok := firstStringParam(input.Params,
-		"file_path",
-		"target_file",
-		"TargetFile",
-	)
-	if !ok || strings.TrimSpace(filePath) == "" {
-		return RiskAssessment{Level: "write"}
-	}
-
-	assessment := assessSensitiveFilePath(filePath)
-	if assessment.Level != "" {
-		return assessment
+	for _, filePath := range writeTargetPaths(input.Params) {
+		if assessment := assessSensitiveFilePath(filePath); assessment.Level != "" {
+			return assessment
+		}
 	}
 	return RiskAssessment{Level: "write"}
+}
+
+// writeTargetPaths lists every file a write tool call names. Tools spell the
+// path differently — replace_string_in_file and notebook_edit take filePath,
+// create_file and file_write take file_path — and multi_replace_string_in_file
+// names one per replacement, so a sensitive file cannot slip past the check
+// under a spelling or a nesting it does not read.
+func writeTargetPaths(params map[string]any) []string {
+	var paths []string
+	for _, key := range []string{"filePath", "file_path", "target_file", "TargetFile"} {
+		if path, ok := firstStringParam(params, key); ok {
+			paths = append(paths, path)
+		}
+	}
+	replacements, _ := params["replacements"].([]any)
+	for _, replacement := range replacements {
+		fields, ok := replacement.(map[string]any)
+		if !ok {
+			continue
+		}
+		for _, key := range []string{"filePath", "file_path"} {
+			if path, ok := firstStringParam(fields, key); ok {
+				paths = append(paths, path)
+			}
+		}
+	}
+	return paths
 }
 
 func assessSensitiveFilePath(filePath string) RiskAssessment {

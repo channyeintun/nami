@@ -86,3 +86,42 @@ func TestIsSessionSafeAutoApprove(t *testing.T) {
 		}
 	}
 }
+
+// Editing a sensitive file such as .env must prompt every time, whichever
+// spelling of the path a write tool uses and however it nests it. The check
+// used to read only file_path, so replace_string_in_file's and notebook_edit's
+// filePath, and every path inside multi_replace_string_in_file, went unchecked
+// and could be auto-approved.
+func TestAssessRiskFindsSensitiveFilesUnderEveryPathSpelling(t *testing.T) {
+	cases := []struct {
+		name   string
+		tool   string
+		params map[string]any
+	}{
+		{name: "filePath", tool: "replace_string_in_file", params: map[string]any{"filePath": ".env", "oldString": "A", "newString": "B"}},
+		{name: "file_path", tool: "create_file", params: map[string]any{"file_path": ".git/hooks/pre-commit", "content": "#!/bin/sh"}},
+		{name: "notebook", tool: "notebook_edit", params: map[string]any{"filePath": ".git/config", "operation": "insert"}},
+		{name: "nested replacement", tool: "multi_replace_string_in_file", params: map[string]any{
+			"explanation": "tweak",
+			"replacements": []any{
+				map[string]any{"filePath": "main.go", "oldString": "a", "newString": "b"},
+				map[string]any{"filePath": ".git/config", "oldString": "a", "newString": "b"},
+			},
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := AssessRisk(tc.tool, tools.ToolInput{Name: tc.tool, Params: tc.params}, tools.PermissionWrite)
+			if got.Level != "high" {
+				t.Fatalf("assessed as %+v, want high", got)
+			}
+		})
+	}
+
+	ordinary := AssessRisk("multi_replace_string_in_file", tools.ToolInput{Params: map[string]any{
+		"replacements": []any{map[string]any{"filePath": "main.go", "oldString": "a", "newString": "b"}},
+	}}, tools.PermissionWrite)
+	if ordinary.Level != "write" {
+		t.Fatalf("ordinary edit assessed as %+v, want write", ordinary)
+	}
+}
