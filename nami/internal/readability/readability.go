@@ -975,7 +975,9 @@ func webFetchRemoveEmptyParagraphs(root *xhtml.Node) {
 
 func webFetchCollapseSingleCellTables(root *xhtml.Node) {
 	for _, table := range webFetchCollectNodesByTag(root, "table") {
-		if table.Parent == nil || webFetchIsDataTable(table) {
+		// The root is what gets rendered, so moving its cell out into a
+		// replacement node would leave an empty table behind.
+		if table == root || table.Parent == nil || webFetchIsDataTable(table) {
 			continue
 		}
 		body := table
@@ -995,8 +997,11 @@ func webFetchCollapseSingleCellTables(root *xhtml.Node) {
 			replacementTag = "p"
 		}
 		replacement := &xhtml.Node{Type: xhtml.ElementNode, Data: replacementTag}
-		for cell.FirstChild != nil {
-			replacement.AppendChild(cell.FirstChild)
+		// AppendChild panics on a node that still has a parent, so each child
+		// is detached from the cell before it moves.
+		for child := cell.FirstChild; child != nil; child = cell.FirstChild {
+			cell.RemoveChild(child)
+			replacement.AppendChild(child)
 		}
 		table.Parent.InsertBefore(replacement, table)
 		table.Parent.RemoveChild(table)

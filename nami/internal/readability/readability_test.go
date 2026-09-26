@@ -64,6 +64,42 @@ func TestExtractHTMLForMarkdownIsDeterministic(t *testing.T) {
 	}
 }
 
+// Single-cell layout tables are collapsed into a paragraph or div. Moving the
+// cell's children used to panic in the HTML package, which took the whole
+// engine down on any page that still uses a table for layout.
+func TestExtractHTMLForMarkdownCollapsesSingleCellTables(t *testing.T) {
+	prose := strings.Repeat("Article prose that carries the page content. ", 8)
+	cases := []struct {
+		name string
+		html string
+		want string
+	}{
+		{
+			name: "layout table inside the article",
+			html: `<html><body><div><p>` + prose + `</p><table><tr><td>Cell note about the release.</td></tr></table><p>` + prose + `</p></div></body></html>`,
+			want: "Cell note about the release.",
+		},
+		{
+			name: "whole page in one cell",
+			html: `<html><body><table><tr><td><p>` + prose + `</p><p>` + prose + `</p></td></tr></table></body></html>`,
+			want: "Article prose that carries the page content.",
+		},
+		{
+			name: "short page in one cell",
+			html: `<html><body><table><tbody><tr><td>Short note about the release.</td></tr></tbody></table></body></html>`,
+			want: "Short note about the release.",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := ExtractHTMLForMarkdown(tc.html)
+			if !strings.Contains(got, tc.want) {
+				t.Fatalf("cell content %q was lost: %q", tc.want, got)
+			}
+		})
+	}
+}
+
 func TestExtractHTMLForMarkdownHandlesNestedArticles(t *testing.T) {
 	html := `<html><body><main><section><article><p>` +
 		strings.Repeat("Deeply nested but genuine article prose. ", 20) +
