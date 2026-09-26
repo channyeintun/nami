@@ -229,14 +229,19 @@ func (t *SwarmUpdateHandoffTool) Concurrency(input ToolInput) ConcurrencyDecisio
 	return ConcurrencySerial
 }
 
+func (t *SwarmUpdateHandoffTool) Validate(input ToolInput) error {
+	_, err := requestedHandoffStatus(input.Params)
+	return err
+}
+
 func (t *SwarmUpdateHandoffTool) Execute(ctx context.Context, input ToolInput) (ToolOutput, error) {
 	sessionID, manager, store, _, err := getSwarmRuntime()
 	if err != nil {
 		return ToolOutput{}, err
 	}
-	requestedStatus := swarm.NormalizeHandoffStatus(firstStringOrEmpty(input.Params, "status"))
-	if requestedStatus == swarm.HandoffStatusSuperseded {
-		return ToolOutput{}, fmt.Errorf("status %q is managed by queue policy and cannot be set manually", requestedStatus)
+	requestedStatus, err := requestedHandoffStatus(input.Params)
+	if err != nil {
+		return ToolOutput{}, err
 	}
 	updated, err := swarm.UpdateHandoffStatus(store, sessionID, firstStringOrEmpty(input.Params, "handoff_id"), requestedStatus, firstStringOrEmpty(input.Params, "note"))
 	if err != nil {
@@ -255,6 +260,21 @@ func (t *SwarmUpdateHandoffTool) Execute(ctx context.Context, input ToolInput) (
 			Focused:  false,
 		}},
 	}, nil
+}
+
+// requestedHandoffStatus reads the status to set. NormalizeHandoffStatus turns
+// anything it does not recognize into "", which the store reads as pending, so
+// an unknown status has to be refused here or it quietly reopens the handoff.
+func requestedHandoffStatus(params map[string]any) (swarm.HandoffStatus, error) {
+	raw := firstStringOrEmpty(params, "status")
+	status := swarm.NormalizeHandoffStatus(raw)
+	if raw == "" || !swarm.IsValidHandoffStatus(status) {
+		return "", fmt.Errorf("unknown handoff status %q; use pending, acked, in_progress, completed, or blocked", raw)
+	}
+	if status == swarm.HandoffStatusSuperseded {
+		return "", fmt.Errorf("status %q is managed by queue policy and cannot be set manually", status)
+	}
+	return status, nil
 }
 
 func saveHandoffArtifact(ctx context.Context, manager *artifactspkg.Manager, sessionID string, handoff swarm.Handoff) (artifactspkg.Artifact, artifactspkg.ArtifactVersion, bool, error) {
