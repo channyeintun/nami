@@ -150,12 +150,15 @@ type ModelRequest struct {
 type ModelEventType int
 
 const (
-	ModelEventToken      ModelEventType = iota // text delta
-	ModelEventThinking                         // thinking delta
-	ModelEventToolCall                         // complete tool call
-	ModelEventStop                             // generation complete
-	ModelEventUsage                            // the call's final token counts, reported at most once per stream
-	ModelEventRateLimits                       // rate limit windows from provider headers
+	ModelEventToken    ModelEventType = iota // text delta
+	ModelEventThinking                       // thinking delta
+	ModelEventToolCall                       // complete tool call
+	ModelEventStop                           // generation complete
+	// ModelEventUsage carries the call's cumulative token counts so far, never
+	// a delta, so a consumer keeps the latest one it sees. The clients report
+	// it once per stream, with the final totals, just before the stop event.
+	ModelEventUsage
+	ModelEventRateLimits // rate limit windows from provider headers
 )
 
 // ModelEvent is one event from a streaming model response.
