@@ -395,6 +395,12 @@ export interface EngineUIState {
   pendingPermission: PermissionRequestPayload | null;
   error: string | null;
   isStreaming: boolean;
+  /**
+   * How many tool calls there were when the model was last sent a prompt, or
+   * null when the running turn is not one (a slash command, say). A model
+   * turn that ends with no text and no tool call past this came back empty.
+   */
+  toolCallsBeforeModelTurn: number | null;
 }
 
 const MAX_RETAINED_BACKGROUND_AGENTS = 24;
@@ -454,6 +460,7 @@ const initialState = (model: string, mode: string): EngineUIState => ({
   pendingPermission: null,
   error: null,
   isStreaming: false,
+  toolCallsBeforeModelTurn: null,
 });
 
 let nextMessageId = 0;
@@ -738,6 +745,7 @@ export function useEvents(initialModel: string, initialMode: string) {
               pendingPermission: null,
               submittingArtifactReviewRequestId: null,
               isStreaming: false,
+              toolCallsBeforeModelTurn: null,
               compact: null,
               statusLine: buildTurnCompleteStatusLine("cancelled"),
             };
@@ -746,17 +754,32 @@ export function useEvents(initialModel: string, initialMode: string) {
           const completedBlocks = completedAssistantBlocks(
             s.liveAssistantBlocks,
           );
-          const blocks: UIAssistantBlock[] =
-            completedBlocks.length > 0
-              ? completedBlocks
-              : [{ kind: "text", text: "(Model returned an empty response)" }];
-          const message = createAssistantMessage(blocks, {
-            id: s.liveAssistantMessageId ?? undefined,
-            model: s.model,
-          });
+          // A model that answers a prompt with no text and no tool call
+          // would otherwise leave nothing on screen. Slash commands such as
+          // /tasks end with no output by design, so they get no placeholder.
+          const modelReplyWasEmpty =
+            completedBlocks.length === 0 &&
+            s.toolCallsBeforeModelTurn !== null &&
+            s.toolCalls.length === s.toolCallsBeforeModelTurn;
+          const blocks: UIAssistantBlock[] = modelReplyWasEmpty
+            ? [{ kind: "text", text: "(Model returned an empty response)" }]
+            : completedBlocks;
+          const message =
+            blocks.length > 0
+              ? createAssistantMessage(blocks, {
+                  id: s.liveAssistantMessageId ?? undefined,
+                  model: s.model,
+                })
+              : null;
           return {
             ...s,
-            messages: [...s.messages, message],
+            messages: message ? [...s.messages, message] : s.messages,
+            transcript: message
+              ? appendTranscriptEntry(s.transcript, {
+                  id: message.id,
+                  kind: "message",
+                })
+              : s.transcript,
             liveAssistantMessageId: null,
             liveAssistantBlocks: [],
             activeTurnStatus: "idle",
@@ -764,6 +787,7 @@ export function useEvents(initialModel: string, initialMode: string) {
             workflowRun: null,
             submittingArtifactReviewRequestId: null,
             isStreaming: false,
+            toolCallsBeforeModelTurn: null,
             compact: null,
             statusLine: buildTurnCompleteStatusLine(p.stop_reason),
           };
@@ -1611,6 +1635,7 @@ export function useEvents(initialModel: string, initialMode: string) {
                   s.toolCalls,
                   "Interrupted by an error",
                 ),
+                toolCallsBeforeModelTurn: null,
               };
           // A recoverable error is the engine reporting a problem it carried
           // on from — an unknown slash command, a model that could not be
@@ -1690,6 +1715,7 @@ export function useEvents(initialModel: string, initialMode: string) {
       goalProgress: null,
       workflowRun: null,
       isStreaming: false,
+      toolCallsBeforeModelTurn: null,
       compact: null,
       pendingModelSelection: null,
       pendingReasoningSelection: null,
@@ -1807,6 +1833,7 @@ export function useEvents(initialModel: string, initialMode: string) {
       goalProgress: null,
       workflowRun: null,
       isStreaming: true,
+      toolCallsBeforeModelTurn: s.toolCalls.length,
     }));
   }, []);
 
