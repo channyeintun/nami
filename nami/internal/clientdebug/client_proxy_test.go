@@ -188,6 +188,33 @@ func TestProxyForwardsOptionalSetters(t *testing.T) {
 	}
 }
 
+// The engine wraps Copilot clients in api.WithCapabilities before the debug
+// proxy, and later installs a fresh token refresher through the proxy. A
+// one-level type assertion found no setter on the decorator and silently did
+// nothing; the api helpers unwrap decorators to reach the real client.
+func TestProxyForwardsSettersThroughDecorators(t *testing.T) {
+	inner := &fakeClient{}
+	wrapped := WrapClient(api.WithCapabilities(inner, api.ModelCapabilities{MaxOutputTokens: 1}))
+
+	api.SetAPIKeyFunc(wrapped, func() (string, error) { return "key", nil })
+	api.SetGitHubCopilotEnterpriseDomain(wrapped, "corp.example")
+	api.SetCodexAccountID(wrapped, "acct-1")
+	api.SetCodexAccountIDFunc(wrapped, func() string { return "acct-2" })
+
+	if !inner.apiKeyFuncSet {
+		t.Error("SetAPIKeyFunc did not reach the decorated client")
+	}
+	if inner.copilotDomain != "corp.example" {
+		t.Errorf("copilot domain = %q", inner.copilotDomain)
+	}
+	if inner.codexAccount != "acct-1" {
+		t.Errorf("codex account = %q", inner.codexAccount)
+	}
+	if !inner.codexFuncSet {
+		t.Error("SetCodexAccountIDFunc did not reach the decorated client")
+	}
+}
+
 func TestProxySettersTolerateMinimalClients(t *testing.T) {
 	wrapped := WrapClient(minimalClient{})
 

@@ -91,36 +91,24 @@ func (p *proxy) Capabilities() api.ModelCapabilities {
 	return p.inner.Capabilities()
 }
 
+// The setters go through the api helpers rather than asserting on p.inner:
+// the inner client is often a decorator such as api.WithCapabilities, which
+// does not implement the setters itself, and the helpers unwrap it.
+
 func (p *proxy) SetAPIKeyFunc(fn func() (string, error)) {
-	setter, ok := p.inner.(api.APIKeyFuncSetter)
-	if !ok || api.IsNilValue(setter) {
-		return
-	}
-	setter.SetAPIKeyFunc(fn)
+	api.SetAPIKeyFunc(p.inner, fn)
 }
 
 func (p *proxy) SetGitHubCopilotEnterpriseDomain(domain string) {
-	setter, ok := p.inner.(api.GitHubCopilotEnterpriseDomainSetter)
-	if !ok || api.IsNilValue(setter) {
-		return
-	}
-	setter.SetGitHubCopilotEnterpriseDomain(domain)
+	api.SetGitHubCopilotEnterpriseDomain(p.inner, domain)
 }
 
 func (p *proxy) SetCodexAccountID(accountID string) {
-	setter, ok := p.inner.(api.CodexAccountIDSetter)
-	if !ok || api.IsNilValue(setter) {
-		return
-	}
-	setter.SetCodexAccountID(accountID)
+	api.SetCodexAccountID(p.inner, accountID)
 }
 
 func (p *proxy) SetCodexAccountIDFunc(fn func() string) {
-	setter, ok := p.inner.(api.CodexAccountIDFuncSetter)
-	if !ok || api.IsNilValue(setter) {
-		return
-	}
-	setter.SetCodexAccountIDFunc(fn)
+	api.SetCodexAccountIDFunc(p.inner, fn)
 }
 
 func (p *proxy) Warmup(ctx context.Context) error {
