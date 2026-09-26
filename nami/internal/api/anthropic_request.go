@@ -41,12 +41,22 @@ func (c *AnthropicClient) buildRequest(req ModelRequest) (anthropicRequest, map[
 	}
 
 	if req.ThinkingBudget > 0 {
-		payload.Thinking = &anthropicThinking{Type: "enabled", BudgetTokens: req.ThinkingBudget}
+		payload.Thinking = anthropicThinkingFor(c.model, req.ThinkingBudget)
 	} else if req.Temperature != nil {
 		payload.Temperature = req.Temperature
 	}
 
 	return payload, extraHeaders, nil
+}
+
+// anthropicThinkingFor turns a request for extended thinking into the form the
+// model accepts: a fixed token budget for the generations before 4.6, and
+// adaptive thinking, which has no budget, for every later one.
+func anthropicThinkingFor(model string, budget int) *anthropicThinking {
+	if claudeTakesThinkingBudget(model) {
+		return &anthropicThinking{Type: "enabled", BudgetTokens: budget}
+	}
+	return &anthropicThinking{Type: "adaptive"}
 }
 
 func buildAnthropicMessages(systemPrompt string, messages []Message) ([]anthropicTextBlock, []anthropicMessage, error) {

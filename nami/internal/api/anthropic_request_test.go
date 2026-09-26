@@ -162,3 +162,60 @@ func TestDecodeToolInput(t *testing.T) {
 		t.Fatal("expected an error for malformed JSON")
 	}
 }
+
+func TestBuildRequestSendsThinkingInTheFormTheModelAccepts(t *testing.T) {
+	adaptive := anthropicThinking{Type: "adaptive"}
+	budget := anthropicThinking{Type: "enabled", BudgetTokens: 4096}
+	cases := []struct {
+		model string
+		want  anthropicThinking
+	}{
+		// Opus 4.7 and every later model reject budget_tokens with a 400; 4.6
+		// deprecated it in favour of adaptive thinking.
+		{"claude-sonnet-5", adaptive},
+		{"claude-opus-5", adaptive},
+		{"claude-opus-5-5", adaptive},
+		{"claude-fable-5", adaptive},
+		{"claude-opus-4-8", adaptive},
+		{"claude-opus-4-7", adaptive},
+		{"claude-opus-4-6", adaptive},
+		{"claude-sonnet-4.6", adaptive},
+		{"some-future-alias", adaptive},
+		// The older generations only understand a fixed budget.
+		{"claude-haiku-4-5", budget},
+		{"claude-haiku-4.5", budget},
+		{"claude-sonnet-4-5-20250929", budget},
+		{"claude-opus-4-1-20250805", budget},
+		{"claude-sonnet-4-20250514", budget},
+		{"claude-3-7-sonnet-20250219", budget},
+		{"claude-3.7-sonnet", budget},
+	}
+	for _, tc := range cases {
+		client := &AnthropicClient{provider: "anthropic", model: tc.model}
+		payload, _, err := client.buildRequest(ModelRequest{
+			Messages:       []Message{{Role: RoleUser, Content: "ultrathink"}},
+			MaxTokens:      8000,
+			ThinkingBudget: 4096,
+		})
+		if err != nil {
+			t.Fatalf("%s: buildRequest: %v", tc.model, err)
+		}
+		if payload.Thinking == nil || *payload.Thinking != tc.want {
+			t.Errorf("%s: thinking = %+v, want %+v", tc.model, payload.Thinking, tc.want)
+		}
+	}
+}
+
+func TestBuildRequestOmitsThinkingUnlessRequested(t *testing.T) {
+	client := &AnthropicClient{provider: "anthropic", model: "claude-sonnet-5"}
+	payload, _, err := client.buildRequest(ModelRequest{
+		Messages:  []Message{{Role: RoleUser, Content: "hi"}},
+		MaxTokens: 8000,
+	})
+	if err != nil {
+		t.Fatalf("buildRequest: %v", err)
+	}
+	if payload.Thinking != nil {
+		t.Fatalf("thinking = %+v, want none", payload.Thinking)
+	}
+}
