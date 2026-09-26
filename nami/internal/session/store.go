@@ -30,6 +30,14 @@ type Metadata struct {
 	Title         string    `json:"title,omitempty"`
 }
 
+// A session holds the conversation, which routinely carries secrets: a pasted
+// key, a tool that printed an .env file. Everything the store writes is
+// owner-only, as the transcript already was through os.CreateTemp.
+const (
+	sessionDirMode  os.FileMode = 0o700
+	sessionFileMode os.FileMode = 0o600
+)
+
 // Store handles session transcript persistence.
 type Store struct {
 	baseDir string
@@ -75,14 +83,14 @@ func (s *Store) UpdateMetadata(sessionID string, update func(Metadata) Metadata)
 
 func (s *Store) saveMetadataLocked(meta Metadata) error {
 	dir := s.SessionDir(meta.SessionID)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, sessionDirMode); err != nil {
 		return fmt.Errorf("create session dir: %w", err)
 	}
 	data, err := json.MarshalIndent(meta, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal metadata: %w", err)
 	}
-	return writeFileAtomic(filepath.Join(dir, "metadata.json"), data, 0o644)
+	return writeFileAtomic(filepath.Join(dir, "metadata.json"), data, sessionFileMode)
 }
 
 // LoadMetadata reads session metadata.
@@ -101,10 +109,10 @@ func (s *Store) LoadMetadata(sessionID string) (Metadata, error) {
 // AppendTranscript appends a message to the session transcript (NDJSON).
 func (s *Store) AppendTranscript(sessionID string, msg api.Message) error {
 	dir := s.SessionDir(sessionID)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, sessionDirMode); err != nil {
 		return err
 	}
-	f, err := os.OpenFile(filepath.Join(dir, "transcript.ndjson"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	f, err := os.OpenFile(filepath.Join(dir, "transcript.ndjson"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, sessionFileMode)
 	if err != nil {
 		return err
 	}
@@ -120,7 +128,7 @@ func (s *Store) AppendTranscript(sessionID string, msg api.Message) error {
 // SaveTranscript rewrites the full transcript for a session as NDJSON.
 func (s *Store) SaveTranscript(sessionID string, messages []api.Message) error {
 	dir := s.SessionDir(sessionID)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, sessionDirMode); err != nil {
 		return err
 	}
 
@@ -148,14 +156,14 @@ func (s *Store) SaveTranscript(sessionID string, messages []api.Message) error {
 // SaveConversationTimeline persists the hydrated conversation timeline for a session.
 func (s *Store) SaveConversationTimeline(sessionID string, payload ipc.ConversationHydratedPayload) error {
 	dir := s.SessionDir(sessionID)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, sessionDirMode); err != nil {
 		return err
 	}
 	data, err := json.MarshalIndent(payload, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal conversation timeline: %w", err)
 	}
-	return writeFileAtomic(filepath.Join(dir, "timeline.json"), data, 0o644)
+	return writeFileAtomic(filepath.Join(dir, "timeline.json"), data, sessionFileMode)
 }
 
 func writeFileAtomic(path string, data []byte, perm os.FileMode) error {

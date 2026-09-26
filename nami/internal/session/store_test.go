@@ -1,10 +1,14 @@
 package session
 
 import (
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
 	"github.com/channyeintun/nami/internal/api"
+	"github.com/channyeintun/nami/internal/ipc"
 )
 
 func TestTranscriptRoundTrips(t *testing.T) {
@@ -48,6 +52,43 @@ func TestTranscriptRoundTripsAMessageLargerThanALineBuffer(t *testing.T) {
 	}
 	if len(loaded) != 2 || len(loaded[0].Images) != 1 || loaded[0].Images[0].Data != screenshot {
 		t.Fatalf("large message did not survive the round trip (%d messages)", len(loaded))
+	}
+}
+
+// Transcripts routinely hold secrets — a pasted key, a tool that printed an
+// .env file — and the timeline mirrors the same conversation. Every file the
+// store writes must be as private as the transcript.
+func TestSessionFilesAreOwnerOnly(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX permission bits do not apply on Windows")
+	}
+	store := NewStore(filepath.Join(t.TempDir(), "sessions"))
+	messages := []api.Message{{Role: api.RoleUser, Content: "my key is sk-secret"}}
+	if err := store.SaveTranscript("s1", messages); err != nil {
+		t.Fatalf("SaveTranscript: %v", err)
+	}
+	if err := store.SaveMetadata(Metadata{SessionID: "s1", Title: "key rotation"}); err != nil {
+		t.Fatalf("SaveMetadata: %v", err)
+	}
+	timeline := ipc.ConversationHydratedPayload{Messages: []ipc.ConversationHydratedMessagePayload{{Text: "my key is sk-secret"}}}
+	if err := store.SaveConversationTimeline("s1", timeline); err != nil {
+		t.Fatalf("SaveConversationTimeline: %v", err)
+	}
+
+	dir := store.SessionDir("s1")
+	for path, want := range map[string]os.FileMode{
+		dir:                                     0o700,
+		filepath.Join(dir, "transcript.ndjson"): 0o600,
+		filepath.Join(dir, "metadata.json"):     0o600,
+		filepath.Join(dir, "timeline.json"):     0o600,
+	} {
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatalf("stat %s: %v", path, err)
+		}
+		if got := info.Mode().Perm(); got != want {
+			t.Errorf("%s has mode %o, want %o", filepath.Base(path), got, want)
+		}
 	}
 }
 
