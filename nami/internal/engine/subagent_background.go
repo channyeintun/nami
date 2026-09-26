@@ -512,8 +512,15 @@ func lookupBackgroundTeamStatus(ctx context.Context, req toolpkg.AgentTeamStatus
 	}
 	results := make([]toolpkg.AgentRunResult, 0, len(team.members))
 	overall := "completed"
+	// wait_ms bounds the whole call. Giving each member the full wait in turn
+	// would block for up to one wait per member still running.
+	deadline := time.Now().Add(time.Duration(req.WaitMs) * time.Millisecond)
 	for _, member := range team.members {
-		result, err := lookupBackgroundTeamMemberStatus(ctx, member, req.WaitMs)
+		waitMs := 0
+		if req.WaitMs > 0 {
+			waitMs = max(0, int(time.Until(deadline).Milliseconds()))
+		}
+		result, err := lookupBackgroundTeamMemberStatus(ctx, member, waitMs)
 		if err != nil {
 			return toolpkg.AgentTeamStatusResult{}, err
 		}

@@ -31,6 +31,62 @@ func waitForBackgroundAgent(t *testing.T, agentID string) toolpkg.AgentRunResult
 	return bg.result
 }
 
+// registerRunningTestAgents registers background agents that stay running
+// until the test ends, and a team made of them.
+func registerRunningTestAgents(t *testing.T, count int) *backgroundTeam {
+	t.Helper()
+	team := &backgroundTeam{id: newBackgroundTeamID(), createdAt: time.Now()}
+	agents := make([]*backgroundAgent, 0, count)
+	for range count {
+		bg := &backgroundAgent{
+			id:      newBackgroundAgentID(),
+			running: true,
+			done:    make(chan struct{}),
+			result:  toolpkg.AgentRunResult{Status: "running"},
+		}
+		registerBackgroundAgent(bg)
+		agents = append(agents, bg)
+		team.members = append(team.members, backgroundTeamMember{agentID: bg.id})
+	}
+	registerBackgroundTeam(team)
+	t.Cleanup(func() {
+		backgroundTeamsMu.Lock()
+		delete(backgroundTeams, team.id)
+		backgroundTeamsMu.Unlock()
+		backgroundAgentsMu.Lock()
+		defer backgroundAgentsMu.Unlock()
+		for _, bg := range agents {
+			bg.mu.Lock()
+			bg.running = false
+			bg.mu.Unlock()
+			close(bg.done)
+			delete(backgroundAgents, bg.id)
+		}
+	})
+	return team
+}
+
+// wait_ms is how long agent_team_status may wait in total, not per member.
+func TestLookupBackgroundTeamStatusWaitIsBoundedForTheWholeTeam(t *testing.T) {
+	const members = 4
+	const waitMs = 250
+	team := registerRunningTestAgents(t, members)
+
+	started := time.Now()
+	status, err := lookupBackgroundTeamStatus(t.Context(), toolpkg.AgentTeamStatusRequest{TeamID: team.id, WaitMs: waitMs})
+	elapsed := time.Since(started)
+	if err != nil {
+		t.Fatalf("lookupBackgroundTeamStatus: %v", err)
+	}
+	if status.Status != "running" || len(status.Agents) != members {
+		t.Fatalf("status = %q with %d agents, want running with %d", status.Status, len(status.Agents), members)
+	}
+	// Waiting per member would take members*waitMs = 1s.
+	if limit := 3 * waitMs * time.Millisecond; elapsed > limit {
+		t.Fatalf("waited %v for a %dms wait_ms, want at most %v", elapsed, waitMs, limit)
+	}
+}
+
 // A cancelled child rarely unwinds with a bare context.Canceled: the model
 // client, the retry loop and compaction all wrap or replace it. It is still a
 // cancellation and must not be reported as a failure.
