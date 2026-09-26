@@ -1,6 +1,23 @@
 package tools
 
-import "testing"
+import (
+	"strings"
+	"testing"
+	"unicode/utf8"
+)
+
+func TestArtifactTitleCutsOnACharacterBoundary(t *testing.T) {
+	title := artifactTitle("Diff: git diff " + strings.Repeat("é", 60))
+	if !utf8.ValidString(title) {
+		t.Fatalf("title %q is not valid UTF-8", title)
+	}
+	if !strings.HasSuffix(title, "…") || len(title) > 80+len("…") {
+		t.Fatalf("title %q is not capped with an ellipsis", title)
+	}
+	if short := "Fetch: https://go.dev/"; artifactTitle(short) != short {
+		t.Fatalf("artifactTitle(%q) changed a short title", short)
+	}
+}
 
 // A fetch report is upserted by slot, so two URLs that map to the same slot
 // overwrite each other's report. The readable part of the slot keeps only the

@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	artifactspkg "github.com/channyeintun/nami/internal/artifacts"
+	"github.com/channyeintun/nami/internal/textutil"
 )
 
 const (
@@ -315,10 +316,7 @@ func saveSearchReportArtifact(ctx context.Context, url string, query string, con
 		return ArtifactMutation{}, false
 	}
 
-	title := "Fetch: " + url
-	if len(title) > 80 {
-		title = title[:80] + "…"
-	}
+	title := artifactTitle("Fetch: " + url)
 	description := url
 	if query != "" {
 		description = url + "\n\nQuery: " + query
@@ -352,10 +350,7 @@ func saveDiffPreviewArtifact(ctx context.Context, description string, diff strin
 		return ArtifactMutation{}, false
 	}
 
-	title := "Diff: " + description
-	if len(title) > 80 {
-		title = title[:80] + "…"
-	}
+	title := artifactTitle("Diff: " + description)
 	mdContent := artifactspkg.RenderDiffPreviewMarkdown(description, diff)
 
 	artifact, _, created, saveErr := manager.UpsertSessionMarkdown(ctx, artifactspkg.MarkdownRequest{
@@ -370,6 +365,17 @@ func saveDiffPreviewArtifact(ctx context.Context, description string, diff strin
 	}
 
 	return ArtifactMutation{Artifact: artifact, Content: mdContent, Created: created}, true
+}
+
+// artifactTitle caps a generated artifact title at 80 bytes, cutting on a
+// character boundary: a byte cut through a multi-byte character, in a branch
+// name say, left invalid UTF-8 in the title.
+func artifactTitle(title string) string {
+	const maxTitleBytes = 80
+	if len(title) <= maxTitleBytes {
+		return title
+	}
+	return textutil.TruncateHead(title, maxTitleBytes) + "…"
 }
 
 // webFetchArtifactSlot keys a fetch report by its full URL, so refetching a page
