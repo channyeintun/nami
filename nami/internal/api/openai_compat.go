@@ -119,9 +119,7 @@ func (c *OpenAICompatClient) Stream(ctx context.Context, req ModelRequest) (iter
 	return func(yield func(ModelEvent, error) bool) {
 		defer resp.Body.Close()
 
-		state := openAICompatStreamState{
-			toolCalls: make(map[int]*openAICompatToolCallState),
-		}
+		state := openAICompatStreamState{}
 
 		sseBody := sseBodyWithDebug(resp.Body, c.provider)
 		err := readSSE(ctx, sseBody, func(_ string, data string) error {

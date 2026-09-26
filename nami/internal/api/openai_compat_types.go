@@ -115,10 +115,13 @@ type openAICompatStreamState struct {
 	usage      openAICompatUsage
 	stopReason string
 	sentStop   bool
-	toolCalls  map[int]*openAICompatToolCallState
+	// toolCalls holds the calls still being assembled, in the order the
+	// model started them.
+	toolCalls []*openAICompatToolCallState
 }
 
 type openAICompatToolCallState struct {
+	Index     int
 	ID        string
 	Name      string
 	Type      string

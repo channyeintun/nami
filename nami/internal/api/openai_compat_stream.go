@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 )
 
@@ -73,7 +74,7 @@ func (c *OpenAICompatClient) handleEvent(
 }
 
 func (s *openAICompatStreamState) applyToolCallDelta(delta openAICompatDeltaToolCall) {
-	state := s.toolCallState(delta.Index)
+	state := s.toolCallState(delta.Index, delta.ID)
 	if delta.ID != "" {
 		state.ID = delta.ID
 	}
@@ -89,7 +90,7 @@ func (s *openAICompatStreamState) applyToolCallDelta(delta openAICompatDeltaTool
 }
 
 func (s *openAICompatStreamState) applyLegacyFunctionDelta(delta openAICompatFunctionCall) {
-	state := s.toolCallState(0)
+	state := s.toolCallState(0, "")
 	if state.Type == "" {
 		state.Type = "function"
 	}
@@ -101,20 +102,32 @@ func (s *openAICompatStreamState) applyLegacyFunctionDelta(delta openAICompatFun
 	}
 }
 
-func (s *openAICompatStreamState) toolCallState(index int) *openAICompatToolCallState {
-	state, ok := s.toolCalls[index]
-	if ok {
-		return state
+// toolCallState returns the call a delta continues, or starts a new one.
+// Deltas name their call by index, but some servers leave the index out, so it
+// decodes as 0 for every call, and send each call whole under its own id. A
+// delta whose id differs from the call at its index therefore starts a new
+// call instead of being appended to that one.
+func (s *openAICompatStreamState) toolCallState(index int, id string) *openAICompatToolCallState {
+	for _, call := range slices.Backward(s.toolCalls) {
+		if call.Index != index {
+			continue
+		}
+		if id == "" || call.ID == "" || call.ID == id {
+			return call
+		}
+		break
 	}
-	state = &openAICompatToolCallState{}
-	s.toolCalls[index] = state
-	return state
+	call := &openAICompatToolCallState{Index: index}
+	s.toolCalls = append(s.toolCalls, call)
+	return call
 }
 
+// emitToolCalls emits the assembled calls in the order the model made them,
+// which is the order the executor runs write tools in.
 func (s *openAICompatStreamState) emitToolCalls(yield func(ModelEvent, error) bool) error {
-	for index, toolCall := range s.toolCalls {
+	for _, toolCall := range s.toolCalls {
 		if toolCall.ID == "" {
-			toolCall.ID = fmt.Sprintf("call_%d", index)
+			toolCall.ID = fmt.Sprintf("call_%d", toolCall.Index)
 		}
 		arguments := toolCall.Arguments.String()
 		if strings.TrimSpace(arguments) == "" {
@@ -133,8 +146,8 @@ func (s *openAICompatStreamState) emitToolCalls(yield func(ModelEvent, error) bo
 		}, nil) {
 			return errStopStream
 		}
-		delete(s.toolCalls, index)
 	}
+	s.toolCalls = nil
 	return nil
 }
 

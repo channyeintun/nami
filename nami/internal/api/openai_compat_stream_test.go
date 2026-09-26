@@ -2,11 +2,12 @@ package api
 
 import (
 	"errors"
+	"slices"
 	"testing"
 )
 
 func newTestStreamState() *openAICompatStreamState {
-	return &openAICompatStreamState{toolCalls: map[int]*openAICompatToolCallState{}}
+	return &openAICompatStreamState{}
 }
 
 // collectEvents drains a state emitter into a slice, mimicking a consumer that
@@ -60,6 +61,70 @@ func TestApplyToolCallDeltaKeepsParallelCallsSeparate(t *testing.T) {
 	}
 	if state.toolCalls[0].Name != "read" || state.toolCalls[1].Name != "grep" {
 		t.Fatalf("names crossed over: %+v %+v", state.toolCalls[0], state.toolCalls[1])
+	}
+}
+
+func TestEmitToolCallsKeepsStreamOrder(t *testing.T) {
+	state := newTestStreamState()
+	// The executor runs write tools one after another in the order they are
+	// emitted, so parallel calls have to come out in the order the model made
+	// them.
+	want := []string{"edit_a", "edit_b", "edit_c", "edit_d", "edit_e", "edit_f", "edit_g", "run_tests"}
+	for index, id := range want {
+		state.applyToolCallDelta(openAICompatDeltaToolCall{
+			Index: index, ID: id,
+			Function: openAICompatFunctionCall{Name: id, Arguments: `{}`},
+		})
+	}
+
+	events, err := collectEvents(state.emitToolCalls)
+	if err != nil {
+		t.Fatalf("emitToolCalls: %v", err)
+	}
+	var got []string
+	for _, event := range events {
+		got = append(got, event.ToolCall.ID)
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("emitted %v, want %v", got, want)
+	}
+}
+
+func TestApplyToolCallDeltaSplitsCallsThatShareAnIndex(t *testing.T) {
+	state := newTestStreamState()
+	// Some servers leave the index out, so it decodes as 0 for every call, and
+	// send each call whole under its own id.
+	state.applyToolCallDelta(openAICompatDeltaToolCall{ID: "a", Function: openAICompatFunctionCall{Name: "read", Arguments: `{"path":"a.go"}`}})
+	state.applyToolCallDelta(openAICompatDeltaToolCall{ID: "b", Function: openAICompatFunctionCall{Name: "grep", Arguments: `{"pattern":"x"}`}})
+
+	events, err := collectEvents(state.emitToolCalls)
+	if err != nil {
+		t.Fatalf("emitToolCalls: %v", err)
+	}
+	if len(events) != 2 {
+		t.Fatalf("events = %+v, want two separate calls", events)
+	}
+	first, second := events[0].ToolCall, events[1].ToolCall
+	if first.ID != "a" || first.Name != "read" || first.Input != `{"path":"a.go"}` {
+		t.Fatalf("first call = %+v", first)
+	}
+	if second.ID != "b" || second.Name != "grep" || second.Input != `{"pattern":"x"}` {
+		t.Fatalf("second call = %+v", second)
+	}
+}
+
+func TestApplyToolCallDeltaContinuesACallThatRepeatsItsID(t *testing.T) {
+	state := newTestStreamState()
+	// Other servers repeat the id on every fragment of the same call.
+	state.applyToolCallDelta(openAICompatDeltaToolCall{ID: "a", Function: openAICompatFunctionCall{Name: "read", Arguments: `{"pa`}})
+	state.applyToolCallDelta(openAICompatDeltaToolCall{ID: "a", Function: openAICompatFunctionCall{Arguments: `th":"a.go"}`}})
+
+	events, err := collectEvents(state.emitToolCalls)
+	if err != nil {
+		t.Fatalf("emitToolCalls: %v", err)
+	}
+	if len(events) != 1 || events[0].ToolCall.Input != `{"path":"a.go"}` {
+		t.Fatalf("events = %+v, want one call with the joined arguments", events)
 	}
 }
 
