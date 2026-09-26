@@ -2,7 +2,6 @@ package engine
 
 import (
 	"context"
-	"strings"
 
 	"github.com/channyeintun/nami/internal/api"
 	"github.com/channyeintun/nami/internal/hooks"
@@ -48,17 +47,6 @@ func runPostToolUseHooks(ctx context.Context, hookRunner *hooks.Runner, sessionI
 		ToolInput: call.Input,
 		Output:    output,
 	})
-}
-
-func compactToolResults(results []api.ToolResult) []api.ToolResult {
-	filtered := make([]api.ToolResult, 0, len(results))
-	for _, result := range results {
-		if strings.TrimSpace(result.ToolCallID) == "" {
-			continue
-		}
-		filtered = append(filtered, result)
-	}
-	return filtered
 }
 
 func emitToolError(bridge *ipc.Bridge, call api.ToolCall, message string, output toolpkg.ToolOutput, err error) error {

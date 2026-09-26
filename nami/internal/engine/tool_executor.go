@@ -43,9 +43,33 @@ func executeToolCalls(
 		return nil, err
 	}
 	if execState.pauseForPlanReview {
-		return compactToolResults(execState.results), &agent.PauseForPlanReviewError{}
+		if err := skipUnpreparedToolCalls(bridge, calls, execState.results); err != nil {
+			return nil, err
+		}
+		return execState.results, &agent.PauseForPlanReviewError{}
 	}
 	return execState.results, nil
+}
+
+// planReviewSkippedMessage is the result of a tool call that a plan-review
+// pause stopped before it was prepared.
+const planReviewSkippedMessage = "tool call skipped: the implementation plan is awaiting user review. Wait for the review outcome, then repeat the call if it is still needed."
+
+// skipUnpreparedToolCalls records a result for every call a plan-review pause
+// cut off. The assistant message keeps all of its tool calls, and providers
+// reject a conversation in which any of them goes unanswered, so dropping
+// these would make the first request after the review fail.
+func skipUnpreparedToolCalls(bridge *ipc.Bridge, calls []api.ToolCall, results []api.ToolResult) error {
+	for index, call := range calls {
+		if results[index].ToolCallID != "" {
+			continue
+		}
+		results[index] = api.ToolResult{ToolCallID: call.ID, Output: planReviewSkippedMessage, IsError: true}
+		if err := emitToolError(bridge, call, planReviewSkippedMessage, toolpkg.ToolOutput{}, nil); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 type toolExecutionState struct {
