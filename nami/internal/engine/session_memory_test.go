@@ -4,6 +4,10 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"unicode/utf8"
+
+	"github.com/channyeintun/nami/internal/agent"
+	"github.com/channyeintun/nami/internal/api"
 )
 
 func TestSplitMarkdownSectionsKeepsOnlyLevelTwoHeadings(t *testing.T) {
@@ -134,5 +138,33 @@ func TestFirstNonEmptySnippetSkipsBlanks(t *testing.T) {
 	}
 	if got := firstNonEmptySnippet("", "  "); got != "" {
 		t.Fatalf("firstNonEmptySnippet = %q, want empty", got)
+	}
+}
+
+// Each of these cuts text at a byte count. With a multi-byte character across
+// the cut, slicing by bytes left half a character behind, which reached the
+// session memory artifact, the prompt and tool output as invalid UTF-8.
+func TestTruncationKeepsWholeCharacters(t *testing.T) {
+	// "a" shifts the two-byte "é"s so every even byte offset lands mid-character.
+	accented := func(runes int) string { return "a" + strings.Repeat("é", runes) }
+
+	tests := []struct {
+		name string
+		got  string
+	}{
+		{name: "memory snippet", got: normalizeSnippet(accented(200))},
+		{name: "session title", got: deriveSessionTitle([]api.Message{{Role: api.RoleUser, Content: accented(100)}}, agent.SessionMemorySnapshot{})},
+		{name: "rendered memory", got: limitRenderedSessionMemory(accented(30_000))},
+		{name: "tool output preview", got: truncateOutputPreview(accented(10), 6, "", 21)},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if !utf8.ValidString(tc.got) {
+				t.Fatalf("result is not valid UTF-8: %q", tc.got)
+			}
+			if !strings.HasPrefix(tc.got, "aé") {
+				t.Fatalf("result lost its leading text: %q", tc.got)
+			}
+		})
 	}
 }

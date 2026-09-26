@@ -17,6 +17,7 @@ import (
 	"github.com/channyeintun/nami/internal/ipc"
 	"github.com/channyeintun/nami/internal/localmodel"
 	"github.com/channyeintun/nami/internal/session"
+	"github.com/channyeintun/nami/internal/textutil"
 	"github.com/channyeintun/nami/internal/timing"
 	toolpkg "github.com/channyeintun/nami/internal/tools"
 )
@@ -147,7 +148,7 @@ func truncateOutputPreview(output string, previewLen int, artifactPath string, t
 	if previewLen <= 0 || previewLen > len(output) {
 		previewLen = len(output)
 	}
-	preview := output[:previewLen]
+	preview := textutil.TruncateHead(output, previewLen)
 	if artifactPath == "" {
 		return fmt.Sprintf("%s\n\n[Output truncated (%d chars).]", preview, totalChars)
 	}

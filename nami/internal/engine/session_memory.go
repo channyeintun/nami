@@ -12,6 +12,7 @@ import (
 	"github.com/channyeintun/nami/internal/compact"
 	"github.com/channyeintun/nami/internal/config"
 	"github.com/channyeintun/nami/internal/ipc"
+	"github.com/channyeintun/nami/internal/textutil"
 )
 
 const (
@@ -644,7 +645,7 @@ func deriveSessionTitle(messages []api.Message, previous agent.SessionMemorySnap
 		return sessionMemoryArtifactTitle
 	}
 	if len(objective) > 72 {
-		return strings.TrimSpace(objective[:72])
+		return strings.TrimSpace(textutil.TruncateHead(objective, 72))
 	}
 	return objective
 }
@@ -789,7 +790,7 @@ func limitRenderedSessionMemory(content string) string {
 	if len(content) <= maxChars {
 		return content
 	}
-	return strings.TrimSpace(content[:maxChars]) + "\n"
+	return strings.TrimSpace(textutil.TruncateHead(content, maxChars)) + "\n"
 }
 
 func extractPathsFromToolInput(raw string) []string {
@@ -848,7 +849,7 @@ func normalizeSnippet(value string) string {
 		return ""
 	}
 	if len(value) > sessionMemoryMaxSnippetLen {
-		return strings.TrimSpace(value[:sessionMemoryMaxSnippetLen]) + "..."
+		return strings.TrimSpace(textutil.TruncateHead(value, sessionMemoryMaxSnippetLen)) + "..."
 	}
 	return value
 }
