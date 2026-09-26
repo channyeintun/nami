@@ -163,8 +163,8 @@ func (t *FileEditTool) Execute(ctx context.Context, input ToolInput) (ToolOutput
 		return EditFailureOutput(EditFailureTargetMissing, filePath, fmt.Sprintf("file does not exist: %s", filePath), "Use create_file to create it first, then retry replace_string_in_file with the exact existing text."), nil
 	}
 
-	originalContent := string(contentBytes)
-	content, originalLineEnding, hadTrailingNewline := normalizeFileForLineEditing(originalContent)
+	text := newLineEndingText(string(contentBytes))
+	content := text.normalized
 	normalizedOldString := strings.ReplaceAll(oldString, "\r\n", "\n")
 	normalizedNewString := strings.ReplaceAll(newString, "\r\n", "\n")
 
@@ -176,18 +176,11 @@ func (t *FileEditTool) Execute(ctx context.Context, input ToolInput) (ToolOutput
 		return EditFailureOutput(EditFailureMultipleMatch, filePath, fmt.Sprintf("found %d matches of oldString", matchCount), "Provide a more specific oldString with surrounding context, set replaceAll=true only if every match should change, or switch to apply_patch when the edit is structural rather than one exact replacement."), nil
 	}
 
-	updatedContent := strings.Replace(content, normalizedOldString, normalizedNewString, 1)
 	replacements := 1
 	if replaceAll {
-		updatedContent = strings.ReplaceAll(content, normalizedOldString, normalizedNewString)
 		replacements = matchCount
 	}
-	if hadTrailingNewline && !strings.HasSuffix(updatedContent, "\n") {
-		updatedContent += "\n"
-	}
-	if originalLineEnding == "\r\n" {
-		updatedContent = strings.ReplaceAll(updatedContent, "\n", "\r\n")
-	}
+	updatedContent := text.apply(literalEdits(content, normalizedOldString, normalizedNewString, replacements))
 
 	select {
 	case <-ctx.Done():

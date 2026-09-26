@@ -1,12 +1,14 @@
 package tools
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/channyeintun/nami/internal/patch"
@@ -278,19 +280,27 @@ func patchUpdatedFileContent(filePath string, operation patch.FileOperation) (st
 		return "", "", 0, 0, NewEditFailure(EditFailureUnsupportedOperation, filePath, fmt.Sprintf("apply_patch only supports text files: %s", filePath), "Use file_write for full-text replacements or approved shell commands for non-text assets.")
 	}
 
-	normalizedOriginal, originalLineEnding, hadTrailingNewline := normalizeFileForLineEditing(string(originalBytes))
-	updatedContent, err := patch.Apply(normalizedOriginal, filePath, operation.Hunks)
-	if err != nil {
+	// patch.Apply validates the hunks against the normalized text: each
+	// matches exactly once, none overlap, and together they change something.
+	// The same located hunks are then spliced into the original bytes, rather
+	// than taking Apply's normalized result, so untouched lines keep their
+	// line endings.
+	text := newLineEndingText(string(originalBytes))
+	if _, err := patch.Apply(text.normalized, filePath, operation.Hunks); err != nil {
 		return "", "", 0, 0, editFailureFromPatchError(err)
 	}
+	edits := make([]textEdit, 0, len(operation.Hunks))
+	for _, hunk := range operation.Hunks {
+		replacement, err := patch.LocateHunk(text.normalized, filePath, hunk)
+		if err != nil {
+			return "", "", 0, 0, editFailureFromPatchError(err)
+		}
+		edits = append(edits, textEdit{start: replacement.Start, end: replacement.End, text: replacement.NewBlock})
+	}
+	slices.SortFunc(edits, func(a, b textEdit) int { return cmp.Compare(a.start, b.start) })
 
-	if hadTrailingNewline && !strings.HasSuffix(updatedContent, "\n") {
-		updatedContent += "\n"
-	}
-	preview, insertions, deletions := buildFileDiffPreview(normalizedOriginal, updatedContent)
-	if originalLineEnding == "\r\n" {
-		updatedContent = strings.ReplaceAll(updatedContent, "\n", "\r\n")
-	}
+	updatedContent := text.apply(edits)
+	preview, insertions, deletions := buildFileDiffPreview(text.normalized, strings.ReplaceAll(updatedContent, "\r\n", "\n"))
 	return updatedContent, preview, insertions, deletions, nil
 }
 
