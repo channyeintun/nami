@@ -271,8 +271,10 @@ function extractImageDataUrls(text: string): ParsedPasteParts {
 }
 
 export async function parsePasteParts(text: string): Promise<ParsedPasteParts> {
-  const trimmed = text.trim();
-  if (trimmed.length === 0) {
+  // Terminals deliver pasted line breaks as CRLF or a bare CR as well as LF,
+  // and the prompt editor only understands LF.
+  const normalized = text.replace(/\r\n?/g, "\n");
+  if (normalized.trim().length === 0) {
     const clipboardImage = await readClipboardImage();
     return {
       text: "",
@@ -281,13 +283,16 @@ export async function parsePasteParts(text: string): Promise<ParsedPasteParts> {
     };
   }
 
-  const dataUrlParts = extractImageDataUrls(text);
+  const dataUrlParts = extractImageDataUrls(normalized);
   if (dataUrlParts.images.length > 0) {
     return dataUrlParts;
   }
 
-  const parts = text
-    .split(/ (?=\/|\\\\|[a-zA-Z]:(\\|\/)|file:\/\/)/)
+  // Dropping files onto the terminal pastes their paths separated by spaces
+  // (a space inside a path arrives escaped as "\ ") or by line breaks, so
+  // split before every absolute path as well as at each line.
+  const parts = normalized
+    .split(/ (?=\/|\\\\|[a-zA-Z]:[\\/]|file:\/\/)/)
     .flatMap((part) => part.split("\n"))
     .map((part) => part.trim())
     .filter(Boolean);
@@ -310,6 +315,12 @@ export async function parsePasteParts(text: string): Promise<ParsedPasteParts> {
     }
 
     textParts.push(part);
+  }
+
+  if (images.length === 0) {
+    // Nothing was attached, so this is an ordinary text paste. Keep it exactly
+    // as copied: the trimmed parts would drop indentation and blank lines.
+    return { text: normalized, images, warnings };
   }
 
   return {
