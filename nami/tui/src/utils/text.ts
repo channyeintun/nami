@@ -4,6 +4,24 @@ export const graphemeSegmenter = new Intl.Segmenter(undefined, {
   granularity: "grapheme",
 });
 
+// The grapheme cluster holding the UTF-16 unit at `index`. The segmenter
+// walks forward from the start of that line - a line feed always ends a
+// cluster - instead of being asked through Segments#containing: Bun, one of
+// the runtimes the launcher falls back to, answers that with the previous
+// cluster when the one asked about starts with a surrogate pair.
+function clusterAt(value: string, index: number): { start: number; end: number } {
+  const lineStart = index === 0 ? 0 : value.lastIndexOf("\n", index - 1) + 1;
+  for (const { index: start, segment } of graphemeSegmenter.segment(
+    value.slice(lineStart),
+  )) {
+    const end = lineStart + start + segment.length;
+    if (index < end) {
+      return { start: lineStart + start, end };
+    }
+  }
+  return { start: index, end: index + 1 };
+}
+
 // Offsets are UTF-16 indices, so stepping by one can land between the halves
 // of a surrogate pair or inside a cluster such as a flag, an emoji with a skin
 // tone, or a letter with a combining accent. Cursor steps and single-character
@@ -12,16 +30,14 @@ export function previousGraphemeOffset(value: string, offset: number): number {
   if (offset <= 0) {
     return 0;
   }
-  const segment = graphemeSegmenter.segment(value).containing(offset - 1);
-  return segment ? segment.index : offset - 1;
+  return clusterAt(value, offset - 1).start;
 }
 
 export function nextGraphemeOffset(value: string, offset: number): number {
   if (offset >= value.length) {
     return value.length;
   }
-  const segment = graphemeSegmenter.segment(value).containing(offset);
-  return segment ? segment.index + segment.segment.length : offset + 1;
+  return clusterAt(value, offset).end;
 }
 
 // What Backspace leaves of a single-line text field.
