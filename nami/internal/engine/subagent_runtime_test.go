@@ -10,7 +10,10 @@ import (
 	"time"
 
 	"github.com/channyeintun/nami/internal/agent"
+	"github.com/channyeintun/nami/internal/api"
+	artifactspkg "github.com/channyeintun/nami/internal/artifacts"
 	"github.com/channyeintun/nami/internal/hooks"
+	"github.com/channyeintun/nami/internal/permissions"
 	"github.com/channyeintun/nami/internal/swarm"
 	toolpkg "github.com/channyeintun/nami/internal/tools"
 )
@@ -118,6 +121,37 @@ func TestEvaluateChildStopHooksNeverBlocksACancel(t *testing.T) {
 				t.Fatalf("stop %q: Continue = %v, want %v", tt.stopReason, decision.Continue, tt.wantContinue)
 			}
 		})
+	}
+}
+
+// An oversized result is cut to a preview whether or not the full output
+// could be saved; a failed save must not put the whole output inline.
+func TestExecuteToolCallsForSubagentTruncatesWhenTheSpillFails(t *testing.T) {
+	storeRoot := filepath.Join(t.TempDir(), "not-a-directory")
+	if err := os.WriteFile(storeRoot, []byte("x"), 0o644); err != nil {
+		t.Fatalf("write store root: %v", err)
+	}
+	brokenArtifacts := artifactspkg.NewManager(artifactspkg.NewLocalStore(storeRoot))
+	huge := strings.Repeat("x", 1_000_000)
+	registry := newFakeRegistry(&fakeTool{name: "read_file", permission: toolpkg.PermissionReadOnly, output: huge})
+
+	results, err := executeToolCallsForSubagent(
+		t.Context(), exploreSubagentType, nil, registry, permissions.NewContext(), brokenArtifacts,
+		"child-session", t.TempDir(), nil, 0,
+		[]api.ToolCall{{ID: "call-read", Name: "read_file", Input: "{}"}},
+	)
+	if err != nil {
+		t.Fatalf("executeToolCallsForSubagent: %v", err)
+	}
+	if len(results) != 1 || results[0].IsError {
+		t.Fatalf("results = %+v, want one successful result", results)
+	}
+	output := results[0].Output
+	if len(output) >= len(huge) {
+		t.Fatalf("output kept %d of %d chars inline, want a preview", len(output), len(huge))
+	}
+	if !strings.Contains(output, "could not be saved") {
+		t.Fatalf("output does not say why the full result is missing: %q", output[len(output)-200:])
 	}
 }
 

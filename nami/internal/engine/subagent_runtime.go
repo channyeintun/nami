@@ -982,9 +982,14 @@ func executeToolCallsForSubagent(
 
 			output := result.Output.Output
 			if !result.Output.IsError {
+				// When saving the full output fails, budgetToolOutput still
+				// returns the truncated preview. Falling back to the raw output
+				// instead would put an arbitrarily large result into the
+				// child's context.
 				budgetedOutput, _, _, err := budgetToolOutput(ctx, artifactManager, sessionID, budget, aggregateBudget, call, output)
-				if err == nil {
-					output = budgetedOutput
+				output = budgetedOutput
+				if err != nil {
+					output += fmt.Sprintf("\n[The full output could not be saved: %v]", err)
 				}
 			}
 			toolResult.Output = output
