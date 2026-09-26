@@ -580,8 +580,9 @@ tail -F ~/.config/nami/sessions/<session-id>/debug.log | jq .
 nami/    Go engine, CLI, TUI launcher, install script
 web/     Project website and docs page assets
 docs/    Architecture and integration guides
-reference/  Reference material and external notes
 ```
+
+Some guides also mention `reference/`, a gitignored directory for local checkouts of external projects; it is not part of the repository.
 
 ## Internal Architecture
 
