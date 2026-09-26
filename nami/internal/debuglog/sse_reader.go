@@ -17,7 +17,9 @@ func NewSSEReaderProxy(inner io.Reader, provider string) *SSEReaderProxy {
 
 func (r *SSEReaderProxy) Read(p []byte) (int, error) {
 	n, err := r.inner.Read(p)
-	if n > 0 {
+	// Every chunk of every response passes through here, so skip the copy
+	// and redaction unless the chunk will be logged.
+	if n > 0 && IsEnabled() {
 		raw := string(p[:n])
 		logRaw := Truncate(RedactSecrets(raw), 2048)
 		Log("sse", "read", map[string]any{

@@ -17,7 +17,9 @@ func NewIPCWriter(w io.Writer) *IPCWriter {
 
 func (w *IPCWriter) Write(p []byte) (int, error) {
 	n, err := w.inner.Write(p)
-	if n > 0 {
+	// Every frame passes through here, some of them megabytes of tool output
+	// or history, so do none of the work below unless it will be logged.
+	if n > 0 && IsEnabled() {
 		raw := string(p[:n])
 		// Try to extract the event type for easier grep.
 		eventType := extractIPCType(raw)
@@ -43,7 +45,7 @@ func NewIPCReader(r io.Reader) *IPCReader {
 
 func (r *IPCReader) Read(p []byte) (int, error) {
 	n, err := r.inner.Read(p)
-	if n > 0 {
+	if n > 0 && IsEnabled() {
 		raw := string(p[:n])
 		msgType := extractIPCType(raw)
 		logRaw := Truncate(RedactSecrets(raw), 500)
