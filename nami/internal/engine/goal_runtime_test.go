@@ -7,6 +7,7 @@ import (
 	"github.com/channyeintun/nami/internal/agent"
 	"github.com/channyeintun/nami/internal/api"
 	goalpkg "github.com/channyeintun/nami/internal/goal"
+	"github.com/channyeintun/nami/internal/ipc"
 )
 
 func TestGoalStoreForIsPerSessionDirectory(t *testing.T) {
@@ -259,5 +260,33 @@ func TestIsCancelledStopReason(t *testing.T) {
 		if isCancelledStopReason(reason) {
 			t.Fatalf("isCancelledStopReason(%q) = true", reason)
 		}
+	}
+}
+
+// At the block cap the goal yields and stays set, and its notice tells the
+// user to send another message to resume. The budget only refilled when the
+// agent used a tool, so a reply without one hit the cap again at once: the
+// goal was never checked again, and never cleared even once it held.
+func TestAMessageAfterTheBlockCapResumesTheGoal(t *testing.T) {
+	t.Setenv("NAMI_GOAL_BLOCK_CAP", "")
+	client := &scriptedClient{
+		caps:     api.ModelCapabilities{SupportsToolUse: true, MaxContextWindow: 200_000, MaxOutputTokens: 8_000},
+		turns:    []scriptedTurn{{text: "Yes, the suite is green now."}},
+		sideText: `{"met": true, "reason": "the transcript shows the suite passing"}`,
+	}
+	h := newTurnHarness(t, client, echoTool{})
+	store := goalStoreFor(h.state.sessionDir)
+	if _, err := store.Set("the test suite passes"); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	for range goalpkg.DefaultBlockCap {
+		store.NoteBlocked("not yet")
+	}
+
+	if err := handleUserInputMessage(t.Context(), ipc.UserInputPayload{Text: "is it green now?"}, h.deps, h.state); err != nil {
+		t.Fatalf("handleUserInputMessage: %v", err)
+	}
+	if state, active := store.Snapshot(); active {
+		t.Fatalf("the goal was not checked after the user's message: %+v", state)
 	}
 }

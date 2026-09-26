@@ -92,6 +92,11 @@ func handleUserInputMessageWithSkills(ctx context.Context, payload ipc.UserInput
 	if !continueTurn {
 		return nil
 	}
+	// The block cap stops a goal loop that spins on its own; the pause it
+	// ends in tells the user to send another message to resume. Only a tool
+	// call refilled the budget, so a reply without one paused again at once
+	// without checking the goal. A new message now starts a fresh budget.
+	goalStoreFor(state.sessionDir).NoteProgress()
 	return turn.run(ctx)
 }
 

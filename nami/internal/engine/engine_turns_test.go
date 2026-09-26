@@ -31,12 +31,14 @@ type scriptedTurn struct {
 }
 
 // scriptedClient plays back main-loop turns in order. Requests without tools
-// are side calls (compaction, goal checks, titles) and get a fixed summary,
+// are side calls (compaction, goal checks, titles) and all get the same reply,
 // so they never consume the script.
 type scriptedClient struct {
 	mu    sync.Mutex
 	turns []scriptedTurn
 	caps  api.ModelCapabilities
+	// sideText is every side call's reply; empty means a generic summary.
+	sideText string
 	// sideUsage is the usage every side call reports.
 	sideUsage api.Usage
 	requests  []api.ModelRequest
@@ -47,7 +49,10 @@ func (c *scriptedClient) Capabilities() api.ModelCapabilities { return c.caps }
 
 func (c *scriptedClient) Stream(_ context.Context, req api.ModelRequest) (iter.Seq2[api.ModelEvent, error], error) {
 	c.mu.Lock()
-	turn := scriptedTurn{text: "summary of earlier work"}
+	turn := scriptedTurn{text: c.sideText}
+	if turn.text == "" {
+		turn.text = "summary of earlier work"
+	}
 	usage := c.sideUsage
 	if len(req.Tools) > 0 {
 		c.requests = append(c.requests, req)
