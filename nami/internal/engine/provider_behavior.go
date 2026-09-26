@@ -198,7 +198,9 @@ func resolveSelectionRetainingProvider(input string, fallbackProvider string) (s
 	if selection.ProviderID != "" {
 		return normalizeProvider(selection.ProviderID), selection.ModelID
 	}
-	if fallback := normalizeProvider(fallbackProvider); fallback != "" {
+	// Tested before any normalizing, which would turn an empty fallback into
+	// anthropic and leave the inference below unreachable.
+	if fallback := strings.TrimSpace(fallbackProvider); fallback != "" {
 		return fallback, selection.ModelID
 	}
 	return standardProviderBehavior{}.ResolveSelection(input, fallbackProvider)
@@ -252,35 +254,34 @@ func coerceSessionSubagentModel(cfg config.Config, activeModelID string, selecti
 }
 
 func normalizeUsableSubagentSelection(cfg config.Config, activeModelID string, selection string, defaultProvider string) (string, bool) {
-	selection = strings.TrimSpace(selection)
-	if selection == "" {
-		return "", false
-	}
-
-	parsed := config.ParseModelSelection(selection, "subagent")
-	provider := normalizeProvider(parsed.ProviderID)
-	model := strings.TrimSpace(parsed.ModelID)
+	activeProvider, _ := config.ParseModel(strings.TrimSpace(activeModelID))
+	provider, model := resolveSubagentSelection(selection, normalizeProvider(activeProvider), defaultProvider)
 	if model == "" {
 		return "", false
 	}
-
-	activeProvider, _ := config.ParseModel(strings.TrimSpace(activeModelID))
-	activeProvider = normalizeProvider(activeProvider)
-
-	resolvedProvider := provider
-	resolvedModel := model
-	if resolvedProvider == "" {
-		if preferredProvider := normalizeProvider(defaultProvider); preferredProvider != "" {
-			resolvedProvider = preferredProvider
-		} else {
-			resolvedProvider, resolvedModel = resolveModelSelection(model, activeProvider)
-		}
-	}
-
-	if resolvedProvider != "" && !isSubagentProviderUsable(cfg, activeModelID, resolvedProvider) {
+	if provider != "" && !isSubagentProviderUsable(cfg, activeModelID, provider) {
 		return "", false
 	}
-	return modelRef(resolvedProvider, resolvedModel), true
+	return modelRef(provider, model), true
+}
+
+// resolveSubagentSelection names the provider a subagent model runs on: the
+// selection's own provider prefix, then defaultProvider, and otherwise the
+// provider its name implies or the active one. The providers are tested before
+// normalizeProvider, which turns an empty one into anthropic and would send
+// every bare model there.
+func resolveSubagentSelection(selection string, activeProvider string, defaultProvider string) (string, string) {
+	parsed := config.ParseModelSelection(selection, "subagent")
+	if parsed.ModelID == "" {
+		return "", ""
+	}
+	if parsed.ProviderID != "" {
+		return parsed.ProviderID, parsed.ModelID
+	}
+	if provider := strings.TrimSpace(defaultProvider); provider != "" {
+		return provider, parsed.ModelID
+	}
+	return resolveModelSelection(parsed.ModelID, activeProvider)
 }
 
 func isSubagentProviderUsable(cfg config.Config, activeModelID string, providerID string) bool {

@@ -207,13 +207,11 @@ func resolveSubagentClient(parent api.LLMClient, activeModelID string, subagentM
 	}
 
 	cfg := config.Load()
-	selection := strings.TrimSpace(cfg.SubagentModel)
-	if subagentModelState != nil {
-		if current := strings.TrimSpace(subagentModelState.Get()); current != "" {
-			selection = current
-		}
-	}
-	selection = coerceSessionSubagentModel(cfg, activeModelID, selection)
+	// Without a session choice, coerceSessionSubagentModel falls back to the
+	// configured subagent model together with its provider. Reading
+	// cfg.SubagentModel here instead dropped the provider the config keeps
+	// in its own field.
+	selection := coerceSessionSubagentModel(cfg, activeModelID, subagentModelState.Get())
 	if subagentModelState != nil {
 		subagentModelState.Set(selection)
 	}
