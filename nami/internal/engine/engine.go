@@ -238,9 +238,15 @@ func RunStdioEngine(ctx context.Context, cfg config.Config) error {
 			loopState.client = refreshedClient
 			modelState.Set(refreshedClient, activeModelID)
 		}
-		if err := emitModelChanged(bridge, activeModelID, client); err != nil {
-			return err
-		}
+	}
+	// The TUI learns the model the engine chose only from this event, so it
+	// is sent even when that model could not start: the status bar would
+	// otherwise read "Unknown model" on exactly the start where the user most
+	// needs to see what is configured.
+	if err := emitModelChanged(bridge, activeModelID, client); err != nil {
+		return err
+	}
+	if client != nil {
 		if err := emitContextWindowUsage(bridge, client, messages); err != nil {
 			return err
 		}
