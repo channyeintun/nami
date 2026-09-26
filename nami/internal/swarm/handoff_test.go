@@ -363,6 +363,51 @@ func TestUpdateHandoffStatus(t *testing.T) {
 	}
 }
 
+// Saving re-sorts the inbox newest first, which moves the handoff just updated.
+// The update must still return that handoff, not whichever one now sits at its
+// old position — the tool reports the returned id and refreshes its artifact.
+func TestUpdateHandoffStatusReturnsTheUpdatedHandoff(t *testing.T) {
+	store, sessionID := testStore(t)
+	older := sampleHandoff()
+	older.ID = "handoff-older"
+	older.UpdatedAt = time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
+	newer := sampleHandoff()
+	newer.ID = "handoff-newer"
+	newer.UpdatedAt = time.Date(2021, 1, 1, 0, 0, 0, 0, time.UTC)
+	if err := saveInboxUnlocked(store, sessionID, Inbox{Handoffs: []Handoff{older, newer}}); err != nil {
+		t.Fatalf("saveInboxUnlocked: %v", err)
+	}
+
+	updated, err := UpdateHandoffStatus(store, sessionID, "handoff-older", HandoffStatusAcked, "picked up")
+	if err != nil {
+		t.Fatalf("UpdateHandoffStatus: %v", err)
+	}
+	if updated.ID != "handoff-older" || updated.Status != HandoffStatusAcked || updated.StatusNote != "picked up" {
+		t.Fatalf("updated = %+v, want handoff-older acked", updated)
+	}
+}
+
+func TestSaveInboxDoesNotReorderTheCallersHandoffs(t *testing.T) {
+	store, sessionID := testStore(t)
+	handoffs := []Handoff{
+		{ID: "a", UpdatedAt: time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)},
+		{ID: "b", UpdatedAt: time.Date(2021, 1, 1, 0, 0, 0, 0, time.UTC)},
+	}
+	if err := saveInboxUnlocked(store, sessionID, Inbox{Handoffs: handoffs}); err != nil {
+		t.Fatalf("saveInboxUnlocked: %v", err)
+	}
+	if handoffs[0].ID != "a" || handoffs[1].ID != "b" {
+		t.Fatalf("caller's slice was reordered to %s, %s", handoffs[0].ID, handoffs[1].ID)
+	}
+	inbox, err := LoadInbox(store, sessionID)
+	if err != nil {
+		t.Fatalf("LoadInbox: %v", err)
+	}
+	if inbox.Handoffs[0].ID != "b" {
+		t.Fatalf("persisted order starts with %q, want the newest first", inbox.Handoffs[0].ID)
+	}
+}
+
 func TestDequeueHandoffsPolicies(t *testing.T) {
 	store, sessionID := testStore(t)
 	base := time.Now().UTC().Add(-time.Hour)

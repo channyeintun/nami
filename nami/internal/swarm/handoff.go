@@ -427,13 +427,16 @@ func saveInboxUnlocked(store *session.Store, sessionID string, inbox Inbox) erro
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("create swarm inbox dir: %w", err)
 	}
-	sort.Slice(inbox.Handoffs, func(i, j int) bool {
-		if inbox.Handoffs[i].UpdatedAt.Equal(inbox.Handoffs[j].UpdatedAt) {
-			return inbox.Handoffs[i].ID < inbox.Handoffs[j].ID
+	// Sort a copy: the slice shares its array with the caller, who may still
+	// be holding an index into it.
+	handoffs := slices.Clone(inbox.Handoffs)
+	sort.Slice(handoffs, func(i, j int) bool {
+		if handoffs[i].UpdatedAt.Equal(handoffs[j].UpdatedAt) {
+			return handoffs[i].ID < handoffs[j].ID
 		}
-		return inbox.Handoffs[i].UpdatedAt.After(inbox.Handoffs[j].UpdatedAt)
+		return handoffs[i].UpdatedAt.After(handoffs[j].UpdatedAt)
 	})
-	data, err := json.MarshalIndent(inbox, "", "  ")
+	data, err := json.MarshalIndent(Inbox{Handoffs: handoffs}, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encode swarm inbox: %w", err)
 	}
