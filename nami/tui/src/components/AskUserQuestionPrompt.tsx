@@ -1,5 +1,6 @@
 import React, { type FC, useEffect, useMemo, useState } from "react";
 import { Box, ModalDialog, Text, useInput } from "silvery";
+import { withoutLastCharacter } from "../utils/text.js";
 import type {
   UIAskUserQuestionAnswer,
   UIAskUserQuestionRequest,
@@ -163,9 +164,7 @@ const AskUserQuestionPrompt: FC<AskUserQuestionPromptProps> = ({
       return;
     }
     if (currentQuestion.allowFreeform && key.backspace) {
-      setFreeformDraft((value) =>
-        value.slice(0, Math.max(0, value.length - 1)),
-      );
+      setFreeformDraft(withoutLastCharacter);
       return;
     }
 

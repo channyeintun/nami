@@ -1,5 +1,34 @@
 import { displayWidth } from "silvery";
 
+export const graphemeSegmenter = new Intl.Segmenter(undefined, {
+  granularity: "grapheme",
+});
+
+// Offsets are UTF-16 indices, so stepping by one can land between the halves
+// of a surrogate pair or inside a cluster such as a flag, an emoji with a skin
+// tone, or a letter with a combining accent. Cursor steps and single-character
+// deletes go by whole grapheme clusters instead.
+export function previousGraphemeOffset(value: string, offset: number): number {
+  if (offset <= 0) {
+    return 0;
+  }
+  const segment = graphemeSegmenter.segment(value).containing(offset - 1);
+  return segment ? segment.index : offset - 1;
+}
+
+export function nextGraphemeOffset(value: string, offset: number): number {
+  if (offset >= value.length) {
+    return value.length;
+  }
+  const segment = graphemeSegmenter.segment(value).containing(offset);
+  return segment ? segment.index + segment.segment.length : offset + 1;
+}
+
+// What Backspace leaves of a single-line text field.
+export function withoutLastCharacter(value: string): string {
+  return value.slice(0, previousGraphemeOffset(value, value.length));
+}
+
 const TAB_STOP_COLUMNS = 4;
 
 // Columns a tab takes when it starts at `column`.

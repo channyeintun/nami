@@ -1,5 +1,6 @@
 import React, { type FC, useState } from "react";
 import { Box, Text, useInput } from "silvery";
+import { withoutLastCharacter } from "../utils/text.js";
 import type { UIArtifactReview } from "../hooks/useEvents.js";
 
 interface ArtifactReviewPromptProps {
@@ -42,7 +43,7 @@ const ArtifactReviewPrompt: FC<ArtifactReviewPromptProps> = ({
         return;
       }
       if (key.backspace || key.delete) {
-        setFeedback((f) => f.slice(0, -1));
+        setFeedback(withoutLastCharacter);
         return;
       }
       if (!key.ctrl && !key.meta && text) {

@@ -1,5 +1,6 @@
 import React, { type FC } from "react";
 import { Box, Text, useInput } from "silvery";
+import { withoutLastCharacter } from "../utils/text.js";
 
 interface TranscriptSearchPromptProps {
   query: string;
@@ -39,7 +40,7 @@ const TranscriptSearchPrompt: FC<TranscriptSearchPromptProps> = ({
     }
 
     if (key.backspace) {
-      onChange(query.slice(0, -1));
+      onChange(withoutLastCharacter(query));
       return;
     }
 
