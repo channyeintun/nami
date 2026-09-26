@@ -11,6 +11,11 @@ type openAICompatRequest struct {
 	Temperature         *float64                     `json:"temperature,omitempty"`
 	Stop                []string                     `json:"stop,omitempty"`
 	Stream              bool                         `json:"stream"`
+	StreamOptions       *openAICompatStreamOptions   `json:"stream_options,omitempty"`
+}
+
+type openAICompatStreamOptions struct {
+	IncludeUsage bool `json:"include_usage"`
 }
 
 type openAICompatMessage struct {
@@ -70,9 +75,12 @@ type openAICompatDeltaToolCall struct {
 }
 
 type openAICompatUsage struct {
-	PromptTokens     int `json:"prompt_tokens,omitempty"`
-	CompletionTokens int `json:"completion_tokens,omitempty"`
-	TotalTokens      int `json:"total_tokens,omitempty"`
+	PromptTokens        int `json:"prompt_tokens,omitempty"`
+	CompletionTokens    int `json:"completion_tokens,omitempty"`
+	TotalTokens         int `json:"total_tokens,omitempty"`
+	PromptTokensDetails struct {
+		CachedTokens int `json:"cached_tokens,omitempty"`
+	} `json:"prompt_tokens_details"`
 }
 
 func (u *openAICompatUsage) merge(other *openAICompatUsage) {
@@ -88,12 +96,19 @@ func (u *openAICompatUsage) merge(other *openAICompatUsage) {
 	if other.TotalTokens > 0 {
 		u.TotalTokens = other.TotalTokens
 	}
+	if other.PromptTokensDetails.CachedTokens > 0 {
+		u.PromptTokensDetails.CachedTokens = other.PromptTokensDetails.CachedTokens
+	}
 }
 
+// toUsage reports the cached prefix, which prompt_tokens includes, apart from
+// the rest of the prompt, since it is billed at the cache-read rate.
 func (u openAICompatUsage) toUsage() *Usage {
+	cached := u.PromptTokensDetails.CachedTokens
 	return &Usage{
-		InputTokens:  u.PromptTokens,
-		OutputTokens: u.CompletionTokens,
+		InputTokens:     max(u.PromptTokens-cached, 0),
+		OutputTokens:    u.CompletionTokens,
+		CacheReadTokens: cached,
 	}
 }
 

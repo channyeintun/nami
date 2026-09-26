@@ -43,6 +43,18 @@ data: [DONE]
 
 `
 
+// OpenAI sends usage on its own chunk after the finish chunk, and counts the
+// cached prefix inside prompt_tokens.
+const openAIUsageStream = `data: {"choices":[{"delta":{"content":"Hi"}}]}
+
+data: {"choices":[{"delta":{},"finish_reason":"stop"}]}
+
+data: {"choices":[],"usage":{"prompt_tokens":1200,"completion_tokens":30,"total_tokens":1230,"prompt_tokens_details":{"cached_tokens":1000}}}
+
+data: [DONE]
+
+`
+
 func TestStreamsReportUsageOncePerCall(t *testing.T) {
 	cases := []struct {
 		name      string
@@ -73,6 +85,16 @@ func TestStreamsReportUsageOncePerCall(t *testing.T) {
 				return NewOpenAICompatClient("deepseek", "deepseek-v4-flash", "key", baseURL)
 			},
 			want: Usage{InputTokens: 10, OutputTokens: 2},
+		},
+		{
+			name: "openai",
+			body: openAIUsageStream,
+			newClient: func(baseURL string) (LLMClient, error) {
+				return NewOpenAICompatClient("openai", "gpt-5.4", "key", baseURL)
+			},
+			// The cached prefix is billed at the cache-read rate, so it is
+			// reported apart from the rest of the prompt.
+			want: Usage{InputTokens: 200, OutputTokens: 30, CacheReadTokens: 1000},
 		},
 	}
 

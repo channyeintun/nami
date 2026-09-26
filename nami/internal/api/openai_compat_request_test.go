@@ -53,3 +53,24 @@ func TestBuildRequestNamesTheOutputCapTheProviderAccepts(t *testing.T) {
 		}
 	}
 }
+
+func TestBuildRequestAsksOpenAIForStreamedUsage(t *testing.T) {
+	build := func(provider string) map[string]any {
+		client := &OpenAICompatClient{provider: provider, model: "gpt-5.4"}
+		payload, _, err := client.buildRequest(ModelRequest{Messages: []Message{{Role: RoleUser, Content: "hi"}}})
+		if err != nil {
+			t.Fatalf("%s: buildRequest: %v", provider, err)
+		}
+		return requestFields(t, payload)
+	}
+
+	// OpenAI streams no usage at all unless the request asks for it.
+	options, ok := build("openai")["stream_options"].(map[string]any)
+	if !ok || options["include_usage"] != true {
+		t.Fatalf("openai stream_options = %v, want include_usage", options)
+	}
+	// Other servers are not sent a field they may not know.
+	if options, present := build("mistral")["stream_options"]; present {
+		t.Fatalf("mistral stream_options = %v, want none", options)
+	}
+}
