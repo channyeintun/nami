@@ -34,6 +34,13 @@ case "$OS" in
   *) echo "Unsupported OS: $OS. On Windows, use nami/install.ps1 instead."; exit 1 ;;
 esac
 
+for tool in curl tar; do
+  if ! command -v "$tool" >/dev/null 2>&1; then
+    echo "Install failed: this installer needs $tool, which is not on PATH."
+    exit 1
+  fi
+done
+
 PLATFORM="${OS}-${ARCH}"
 ARCHIVE="${BINARY_NAME}-${PLATFORM}.tar.gz"
 
@@ -61,7 +68,7 @@ trap 'rm -rf "$TMPDIR"' EXIT
 download_asset() {
   url="$1"
   dest="$2"
-  curl -fsSL "$url" -o "$dest" 2>/dev/null
+  curl -fsSL "$url" -o "$dest"
 }
 
 requires_bun_runtime() {
@@ -125,12 +132,11 @@ if download_asset "$ARCHIVE_URL" "$TMPDIR/$ARCHIVE"; then
   ENGINE_SOURCE="$TMPDIR/${BINARY_NAME}-${PLATFORM}/${ENGINE_NAME}"
 else
   echo ""
-  echo "Install failed: no release archive found for ${PLATFORM}."
+  echo "Install failed: could not download the release archive for ${PLATFORM}:"
+  echo "  ${ARCHIVE_URL}"
   echo ""
-  echo "Expected release asset:"
-  echo "  ${ARCHIVE}"
-  echo ""
-  echo "This usually means the latest GitHub release has not been published for your platform yet."
+  echo "If curl reported a 404 above, the latest GitHub release has no archive for your"
+  echo "platform yet. Otherwise check your network connection and rerun the installer."
   echo ""
   echo "If you already have a local build, install manually instead:"
   echo "  mkdir -p \"\$HOME/.local/bin\""
