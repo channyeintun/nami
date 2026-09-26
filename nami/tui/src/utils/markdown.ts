@@ -1,6 +1,7 @@
 import { stripVTControlCharacters } from "node:util";
 import { highlight, supportsLanguage } from "cli-highlight";
 import { marked, type Token, type Tokens } from "marked";
+import { displayWidth as terminalDisplayWidth } from "silvery";
 
 const EOL = "\n";
 const TOKEN_CACHE_MAX = 500;
@@ -144,8 +145,11 @@ export function stripAnsi(text: string): string {
   return stripVTControlCharacters(text);
 }
 
+// Terminal columns as silvery lays them out: CJK and most emoji take two,
+// combining marks none, and ANSI styling none. Counting code points instead
+// left every table row holding such text wider than its border.
 export function displayWidth(text: string): number {
-  return Array.from(stripAnsi(text)).length;
+  return terminalDisplayWidth(text);
 }
 
 export function padAligned(
