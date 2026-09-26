@@ -106,7 +106,7 @@ func evaluateContextPressureStage(
 	runtime *iterationRuntime,
 	_ func(ipc.StreamEvent, error) bool,
 ) error {
-	runtime.currentUserPrompt = latestUserPrompt(state.Messages)
+	runtime.currentUserPrompt = state.UserPrompt
 	runtime.pressure = EvaluateContextPressure(state.Messages, state.ContextWindow, state.MaxTokens, state.Continuation, ContextPressureSignals{
 		SessionMemory:    runtime.sessionMemory,
 		RetrievalTouched: state.RetrievalTouched,

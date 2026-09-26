@@ -189,11 +189,11 @@ func buildModelRequest(state *QueryState) api.ModelRequest {
 	if state.Capabilities.SupportsToolUse {
 		request.Tools = state.Tools
 	}
-	if effort := effectiveReasoningEffort(state.ModelID, state.ReasoningEffort, latestUserPrompt(state.Messages)); effort != "" {
+	if effort := effectiveReasoningEffort(state.ModelID, state.ReasoningEffort, state.UserPrompt); effort != "" {
 		request.ReasoningEffort = effort
 		return request
 	}
-	if budget := thinkingBudgetForPrompt(latestUserPrompt(state.Messages), state.Capabilities, state.MaxTokens); budget > 0 {
+	if budget := thinkingBudgetForPrompt(state.UserPrompt, state.Capabilities, state.MaxTokens); budget > 0 {
 		request.ThinkingBudget = budget
 	}
 	return request

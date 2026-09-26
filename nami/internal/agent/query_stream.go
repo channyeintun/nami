@@ -71,7 +71,12 @@ type StopDecision struct {
 
 // QueryState tracks iteration state within a query.
 type QueryState struct {
-	Messages            []api.Message
+	Messages []api.Message
+	// UserPrompt is the user message this query answers. The loop appends
+	// user-role messages of its own (retry directives, stop-hook and goal
+	// follow-ups) and compaction can summarize the request away, so context
+	// chosen from the request is chosen from this, not the latest message.
+	UserPrompt          string
 	BasePrompt          string
 	SystemPrompt        string
 	ModelID             string
@@ -116,6 +121,7 @@ func NewQueryState(req QueryRequest) *QueryState {
 	ctx := LoadTurnContext()
 	state := &QueryState{
 		Messages:         req.Messages,
+		UserPrompt:       latestUserPrompt(req.Messages),
 		BasePrompt:       req.SystemPrompt,
 		SystemPrompt:     req.SystemPrompt,
 		ModelID:          req.ModelID,

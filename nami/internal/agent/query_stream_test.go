@@ -42,3 +42,41 @@ func TestQueryStreamStopsYieldingOnceConsumerStops(t *testing.T) {
 		t.Fatalf("expected exactly one event before breaking, got %d", received)
 	}
 }
+
+func TestQueryStreamKeepsTheUserRequestAcrossLoopFollowUps(t *testing.T) {
+	// A stop hook that keeps the turn open (as a /goal does) appends its own
+	// user-role follow-up. Context chosen from the user's request, such as
+	// the ultrathink budget, must still come from that request afterwards.
+	req := QueryRequest{
+		Messages:     []api.Message{{Role: api.RoleUser, Content: "ultrathink about the retry loop"}},
+		Capabilities: api.ModelCapabilities{SupportsExtendedThinking: true},
+		MaxTokens:    32_000,
+	}
+	var budgets []int
+	answer := streamingTextModel("done")
+	stops := 0
+	deps := QueryDeps{
+		CallModel: func(ctx context.Context, modelReq api.ModelRequest) (iter.Seq2[api.ModelEvent, error], error) {
+			budgets = append(budgets, modelReq.ThinkingBudget)
+			return answer(ctx, modelReq)
+		},
+		BeforeStop: func(context.Context, StopRequest) (StopDecision, error) {
+			stops++
+			return StopDecision{Continue: stops == 1, FollowUpMessage: "The session goal is not satisfied yet."}, nil
+		},
+	}
+
+	for _, err := range QueryStream(context.Background(), req, deps) {
+		if err != nil {
+			t.Fatalf("unexpected stream error: %v", err)
+		}
+	}
+	if len(budgets) != 2 {
+		t.Fatalf("expected two model calls, got %d", len(budgets))
+	}
+	for i, budget := range budgets {
+		if budget <= 0 {
+			t.Fatalf("model call %d lost the ultrathink budget: %v", i+1, budgets)
+		}
+	}
+}
