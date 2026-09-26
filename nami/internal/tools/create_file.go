@@ -2,7 +2,9 @@ package tools
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -111,7 +113,10 @@ func (t *CreateFileTool) Execute(ctx context.Context, input ToolInput) (ToolOutp
 		return ToolOutput{}, fmt.Errorf("create parent directory %q: %w", parentDir, err)
 	}
 
-	if err := os.WriteFile(filePath, []byte(content), 0o644); err != nil {
+	if err := writeNewFile(filePath, []byte(content)); err != nil {
+		if errors.Is(err, fs.ErrExist) {
+			return ToolOutput{}, fmt.Errorf("file already exists: %s (use file_write to overwrite it, or replace_string_in_file for in-place changes)", filePath)
+		}
 		return ToolOutput{}, fmt.Errorf("write file %q: %w", filePath, err)
 	}
 	invalidateFileReadState(filePath)

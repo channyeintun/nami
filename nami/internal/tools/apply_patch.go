@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -99,7 +100,7 @@ func validatePatchTarget(action patch.Action, resolvedPath string) error {
 			if info.IsDir() {
 				return NewEditFailure(EditFailureInvalidRequest, resolvedPath, fmt.Sprintf("cannot add file at directory path: %s", resolvedPath), "Choose a file path that does not already exist.")
 			}
-			return NewEditFailure(EditFailureInvalidRequest, resolvedPath, fmt.Sprintf("file already exists: %s", resolvedPath), "Use file_write to overwrite the file, file_edit for exact replacements, or switch this section to *** Update File.")
+			return patchAddTargetExists(resolvedPath)
 		}
 		if !errors.Is(statErr, os.ErrNotExist) {
 			return fmt.Errorf("stat file %q: %w", resolvedPath, statErr)
@@ -126,6 +127,10 @@ func validatePatchTarget(action patch.Action, resolvedPath string) error {
 		}
 	}
 	return nil
+}
+
+func patchAddTargetExists(resolvedPath string) error {
+	return NewEditFailure(EditFailureInvalidRequest, resolvedPath, fmt.Sprintf("file already exists: %s", resolvedPath), "Use file_write to overwrite the file, replace_string_in_file for exact replacements, or switch this section to *** Update File.")
 }
 
 func (t *ApplyPatchTool) Execute(ctx context.Context, input ToolInput) (ToolOutput, error) {
@@ -212,7 +217,10 @@ func applyPatchAddFile(resolvedPath string, operation patch.FileOperation) (appl
 	if err := os.MkdirAll(filepath.Dir(resolvedPath), 0o755); err != nil {
 		return applyPatchFileChange{}, fmt.Errorf("create parent directory %q: %w", filepath.Dir(resolvedPath), err)
 	}
-	if err := os.WriteFile(resolvedPath, []byte(content), 0o644); err != nil {
+	if err := writeNewFile(resolvedPath, []byte(content)); err != nil {
+		if errors.Is(err, fs.ErrExist) {
+			return applyPatchFileChange{}, patchAddTargetExists(resolvedPath)
+		}
 		return applyPatchFileChange{}, fmt.Errorf("write file %q: %w", resolvedPath, err)
 	}
 	invalidateFileReadState(resolvedPath)
