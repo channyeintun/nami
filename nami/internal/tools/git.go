@@ -148,17 +148,20 @@ func (t *GitTool) Execute(ctx context.Context, input ToolInput) (ToolOutput, err
 	commandCtx, cancel := context.WithTimeout(ctx, timeoutFromParams(input.Params, defaultGitTimeout))
 	defer cancel()
 
-	repoRoot, err := gitRepoRoot(commandCtx, workingDir)
+	repo, err := locateGitRepo(commandCtx, workingDir)
+	if err != nil {
+		if commandCtx.Err() != nil {
+			return ToolOutput{}, commandCtx.Err()
+		}
+		return ToolOutput{}, err
+	}
+
+	args, err := buildGitArgs(strings.TrimSpace(operation), input.Params, repo)
 	if err != nil {
 		return ToolOutput{}, err
 	}
 
-	args, err := buildGitArgs(strings.TrimSpace(operation), input.Params, repoRoot)
-	if err != nil {
-		return ToolOutput{}, err
-	}
-
-	output, runErr := runGitCommand(commandCtx, repoRoot, args...)
+	output, runErr := runGitCommand(commandCtx, repo.root, args...)
 	if runErr != nil {
 		if commandCtx.Err() != nil {
 			return ToolOutput{}, commandCtx.Err()
@@ -190,15 +193,29 @@ func (t *GitTool) Execute(ctx context.Context, input ToolInput) (ToolOutput, err
 	return ToolOutput{Output: output}, nil
 }
 
-func gitRepoRoot(ctx context.Context, workingDir string) (string, error) {
-	output, err := runGitCommand(ctx, workingDir, "rev-parse", "--show-toplevel")
-	if err != nil {
-		return "", fmt.Errorf("resolve git repository root: %w", err)
-	}
-	return strings.TrimSpace(output), nil
+// gitRepo places the working directory inside its repository, as git itself
+// resolves the two, symlinks included. Commands run from root.
+type gitRepo struct {
+	root   string // the working tree's top level
+	prefix string // the working directory relative to root, "" at the top
 }
 
-func buildGitArgs(operation string, params map[string]any, repoRoot string) ([]string, error) {
+func locateGitRepo(ctx context.Context, workingDir string) (gitRepo, error) {
+	cmd := exec.CommandContext(ctx, "git", "rev-parse", "--show-toplevel", "--show-prefix")
+	cmd.Dir = workingDir
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	stdout, err := cmd.Output()
+	if err != nil {
+		return gitRepo{}, fmt.Errorf("resolve git repository root: %w: %s", err, strings.TrimSpace(stderr.String()))
+	}
+	// One line each for the top level and the prefix; the prefix line is
+	// empty at the top level.
+	root, prefix, _ := strings.Cut(strings.TrimRight(string(stdout), "\n"), "\n")
+	return gitRepo{root: root, prefix: prefix}, nil
+}
+
+func buildGitArgs(operation string, params map[string]any, repo gitRepo) ([]string, error) {
 	switch operation {
 	case "status":
 		args := []string{"status"}
@@ -227,7 +244,7 @@ func buildGitArgs(operation string, params map[string]any, repoRoot string) ([]s
 		if revision != "" {
 			args = append(args, revision)
 		}
-		return appendPathspecs(args, params, repoRoot)
+		return appendPathspecs(args, params, repo)
 	case "log":
 		args := []string{"log"}
 		if boolParam(params, "oneline") {
@@ -249,7 +266,7 @@ func buildGitArgs(operation string, params map[string]any, repoRoot string) ([]s
 		if revision != "" {
 			args = append(args, revision)
 		}
-		return appendPathspecs(args, params, repoRoot)
+		return appendPathspecs(args, params, repo)
 	case "show":
 		args := []string{"show"}
 		if boolParam(params, "name_only") {
@@ -266,7 +283,7 @@ func buildGitArgs(operation string, params map[string]any, repoRoot string) ([]s
 			revision = "HEAD"
 		}
 		args = append(args, revision)
-		return appendPathspecs(args, params, repoRoot)
+		return appendPathspecs(args, params, repo)
 	case "branch":
 		args := []string{"branch"}
 		if boolParam(params, "all") {
@@ -277,7 +294,7 @@ func buildGitArgs(operation string, params map[string]any, repoRoot string) ([]s
 		}
 		return args, nil
 	case "blame":
-		fileArg, err := gitFileArg(params, repoRoot)
+		fileArg, err := gitFileArg(params, repo)
 		if err != nil {
 			return nil, err
 		}
@@ -309,7 +326,7 @@ func buildGitArgs(operation string, params map[string]any, repoRoot string) ([]s
 	}
 }
 
-func appendPathspecs(args []string, params map[string]any, repoRoot string) ([]string, error) {
+func appendPathspecs(args []string, params map[string]any, repo gitRepo) ([]string, error) {
 	fileValue, hasFile := stringParam(params, "file_path")
 	pathspecs := stringSliceParam(params, "pathspecs")
 	if hasFile && strings.TrimSpace(fileValue) != "" {
@@ -321,7 +338,7 @@ func appendPathspecs(args []string, params map[string]any, repoRoot string) ([]s
 
 	resolved := make([]string, 0, len(pathspecs))
 	for _, pathspec := range pathspecs {
-		resolvedPath, err := gitPathspec(pathspec, repoRoot)
+		resolvedPath, err := gitPathspec(pathspec, repo)
 		if err != nil {
 			return nil, err
 		}
@@ -332,12 +349,12 @@ func appendPathspecs(args []string, params map[string]any, repoRoot string) ([]s
 	return args, nil
 }
 
-func gitFileArg(params map[string]any, repoRoot string) (string, error) {
+func gitFileArg(params map[string]any, repo gitRepo) (string, error) {
 	filePath, ok := stringParam(params, "file_path")
 	if !ok || strings.TrimSpace(filePath) == "" {
 		return "", fmt.Errorf("git blame requires file_path")
 	}
-	return gitPathspec(filePath, repoRoot)
+	return gitPathspec(filePath, repo)
 }
 
 // gitRevisionParam returns the trimmed revision parameter. Git parses an
@@ -353,18 +370,24 @@ func gitRevisionParam(params map[string]any) (string, error) {
 	return revision, nil
 }
 
-func gitPathspec(pathspec string, repoRoot string) (string, error) {
+// gitPathspec turns a path into one relative to the repository root, where
+// the command runs. A relative path is relative to the working directory, as
+// it is for git itself and for every other tool, and the working directory
+// need not be the root.
+func gitPathspec(pathspec string, repo gitRepo) (string, error) {
 	pathspec = strings.TrimSpace(pathspec)
 	if pathspec == "" {
 		return "", fmt.Errorf("git pathspec cannot be empty")
 	}
-	relPath := pathspec
+	var relPath string
 	if filepath.IsAbs(pathspec) {
 		var err error
-		relPath, err = filepath.Rel(repoRoot, pathspec)
+		relPath, err = filepath.Rel(repo.root, pathspec)
 		if err != nil {
 			return "", fmt.Errorf("convert %q to repo-relative path: %w", pathspec, err)
 		}
+	} else {
+		relPath = filepath.Join(filepath.FromSlash(repo.prefix), pathspec)
 	}
 	if !filepath.IsLocal(relPath) {
 		return "", fmt.Errorf("path %q is outside repository root", pathspec)
