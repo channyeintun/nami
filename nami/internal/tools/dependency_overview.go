@@ -378,7 +378,7 @@ func parsePyProjectDependencies(content string) map[string][]string {
 
 		if pendingKey != "" {
 			pendingValues = append(pendingValues, parseQuotedStrings(line)...)
-			if strings.Contains(line, "]") {
+			if strings.Contains(unquotedText(line), "]") {
 				sections[pendingKey] = append(sections[pendingKey], normalizePythonDependencyNames(pendingValues)...)
 				pendingKey = ""
 				pendingValues = nil
@@ -394,7 +394,7 @@ func parsePyProjectDependencies(content string) map[string][]string {
 		if sectionKey == "" {
 			continue
 		}
-		if strings.HasPrefix(strings.TrimSpace(value), "[") && !strings.Contains(value, "]") {
+		if strings.HasPrefix(strings.TrimSpace(value), "[") && !strings.Contains(unquotedText(value), "]") {
 			pendingKey = sectionKey
 			pendingValues = parseQuotedStrings(value)
 			continue
@@ -444,6 +444,12 @@ func parseCargoDependencies(content string) map[string][]string {
 		}
 		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
 			currentSection = strings.Trim(line, "[]")
+			// [dependencies.serde] describes one dependency: its name is in
+			// the header, and the keys below it are its settings.
+			if parent, name, ok := strings.CutLast(currentSection, "."); ok && strings.HasSuffix(parent, "dependencies") {
+				sections[parent] = append(sections[parent], strings.Trim(name, `"'`))
+				currentSection = ""
+			}
 			continue
 		}
 		if !strings.Contains(currentSection, "dependencies") {
@@ -453,9 +459,10 @@ func parseCargoDependencies(content string) map[string][]string {
 		if !ok {
 			continue
 		}
-		key = strings.TrimSpace(key)
-		if key != "" {
-			sections[currentSection] = append(sections[currentSection], key)
+		// A dotted key such as serde.workspace = true sets part of serde.
+		name, _, _ := strings.Cut(strings.TrimSpace(key), ".")
+		if name = strings.Trim(name, `"'`); name != "" {
+			sections[currentSection] = append(sections[currentSection], name)
 		}
 	}
 	return sections
@@ -482,6 +489,12 @@ func splitTomlAssignment(line string) (string, string, bool) {
 		return "", "", false
 	}
 	return strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1]), true
+}
+
+// unquotedText drops the quoted strings from a TOML line, so a bracket inside
+// a requirement such as "uvicorn[standard]" is not taken for array syntax.
+func unquotedText(line string) string {
+	return quotedStringPattern.ReplaceAllString(line, "")
 }
 
 func parseQuotedStrings(value string) []string {

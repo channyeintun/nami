@@ -101,6 +101,31 @@ dev = [
 	}
 }
 
+// Extras put brackets inside the quoted requirement ("uvicorn[standard]").
+// Only a bracket outside quotes opens or closes the array.
+func TestParsePyProjectDependenciesHandlesExtrasInArrays(t *testing.T) {
+	sections := parsePyProjectDependencies(`[project]
+dependencies = ["uvicorn[standard]>=0.30",
+  "fastapi",
+]
+
+[project.optional-dependencies]
+test = [
+  "requests[socks]",
+  "pytest",
+]
+`)
+
+	deps := sections["project.dependencies"]
+	if !slices.Equal(deps, []string{"uvicorn", "fastapi"}) {
+		t.Errorf("project.dependencies = %v, want [uvicorn fastapi]", deps)
+	}
+	test := sections["project.optional-dependencies.test"]
+	if !slices.Equal(test, []string{"requests", "pytest"}) {
+		t.Errorf("optional test dependencies = %v, want [requests pytest]", test)
+	}
+}
+
 func TestParsePyProjectDependenciesIgnoresUnrelatedSections(t *testing.T) {
 	sections := parsePyProjectDependencies(`[tool.ruff]
 dependencies = ["not-a-real-dependency"]
@@ -155,6 +180,47 @@ criterion = "0.5"
 	// [package] is not a dependency section, so its keys are skipped.
 	if slices.Contains(sections["package"], "name") {
 		t.Errorf("package metadata parsed as dependencies: %v", sections["package"])
+	}
+}
+
+// A dependency can be its own table, [dependencies.serde], whose keys are
+// settings rather than dependencies, or a dotted key such as
+// serde.workspace = true.
+func TestParseCargoDependenciesHandlesTablesAndDottedKeys(t *testing.T) {
+	sections := parseCargoDependencies(`[workspace.dependencies]
+anyhow = "1"
+
+[dependencies]
+serde.workspace = true
+serde.features = ["derive"]
+log = "0.4"
+
+[dependencies.tokio]
+version = "1"
+features = ["full"]
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[dev-dependencies.criterion]
+version = "0.5"
+`)
+
+	want := map[string][]string{
+		"workspace.dependencies":          {"anyhow"},
+		"dependencies":                    {"serde", "log", "tokio"},
+		"target.'cfg(unix)'.dependencies": {"libc"},
+		"dev-dependencies":                {"criterion"},
+	}
+	for section, names := range want {
+		if got := dedupeSortedStrings(sections[section]); !slices.Equal(got, dedupeSortedStrings(names)) {
+			t.Errorf("%s = %v, want %v", section, sections[section], names)
+		}
+	}
+	for section, names := range sections {
+		if _, expected := want[section]; !expected {
+			t.Errorf("unexpected section %q = %v", section, names)
+		}
 	}
 }
 
