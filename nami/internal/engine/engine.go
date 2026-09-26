@@ -842,7 +842,9 @@ func trackModelStream(
 				}
 			}
 			if event.Type == api.ModelEventUsage && event.Usage != nil {
-				usage = mergeUsage(usage, *event.Usage)
+				// Providers report usage as a running total for the call, so
+				// each report replaces the last rather than adding to it.
+				usage = *event.Usage
 			}
 			if !yield(event, nil) {
 				return

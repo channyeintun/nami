@@ -281,8 +281,9 @@ func newSessionMemoryRefiner(bridge *ipc.Bridge, tracker *costpkg.Tracker, clien
 			case api.ModelEventToken:
 				result.WriteString(event.Text)
 			case api.ModelEventUsage:
+				// A running total for the call, like every usage report.
 				if event.Usage != nil {
-					usage = mergeUsage(usage, *event.Usage)
+					usage = *event.Usage
 				}
 			}
 		}
@@ -390,8 +391,9 @@ func (s *compactionSummarizer) collectSummaryStream(stream iter.Seq2[api.ModelEv
 			}
 			return "", fmt.Errorf("compaction unexpectedly requested a tool")
 		case api.ModelEventUsage:
+			// A running total for the call, like every usage report.
 			if event.Usage != nil {
-				usage = mergeUsage(usage, *event.Usage)
+				usage = *event.Usage
 			}
 		}
 	}
