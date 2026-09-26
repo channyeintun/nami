@@ -158,6 +158,68 @@ func TestIsReadOnlyBashCommandAcceptsListingGitBranchAndTag(t *testing.T) {
 	}
 }
 
+// diff, log and show are inspection subcommands, but --output=<file> makes them
+// write the diff to an arbitrary path (in both the "=" and space-separated
+// forms) and --ext-diff runs the configured external diff driver. Auto-approving
+// those would let a command overwrite a file or run a program without a prompt.
+func TestIsReadOnlyBashCommandRejectsWritingGitFlags(t *testing.T) {
+	for _, command := range []string{
+		"git diff --output=/tmp/out",
+		"git diff --output /tmp/out",
+		"git diff HEAD~1 --output=x",
+		"git log -p --output=/tmp/out",
+		"git show --output=/tmp/out",
+		"git log --ext-diff",
+		"git show --ext-diff",
+	} {
+		if IsReadOnlyBashCommand(command) {
+			t.Errorf("%q must not be treated as read-only", command)
+		}
+	}
+}
+
+// --output-indicator-* are unrelated diff formatting flags and must stay
+// read-only: the dangerous-flag match keys on the part before the first "=".
+func TestIsReadOnlyBashCommandAcceptsGitOutputIndicatorFlags(t *testing.T) {
+	for _, command := range []string{
+		"git diff --output-indicator-new=@",
+		"git log --oneline -5",
+		"git diff HEAD~1",
+	} {
+		if !IsReadOnlyBashCommand(command) {
+			t.Errorf("%q should be read-only", command)
+		}
+	}
+}
+
+// rg is whitelisted as an inspection program, but --pre and --hostname-bin run
+// an arbitrary command per input file. Neither contains a character the segment
+// splitter rejects, so they reach the program lookup and would auto-approve.
+func TestIsReadOnlyBashCommandRejectsRipgrepExecutingFlags(t *testing.T) {
+	for _, command := range []string{
+		"rg --pre /tmp/evil.sh foo",
+		"rg --pre=/tmp/evil.sh foo",
+		"rg foo --pre /tmp/evil.sh",
+		"rg --hostname-bin /tmp/evil.sh foo",
+		"rg --hostname-bin=/tmp/evil.sh foo",
+	} {
+		if IsReadOnlyBashCommand(command) {
+			t.Errorf("%q must not be treated as read-only", command)
+		}
+	}
+}
+
+func TestIsReadOnlyBashCommandAcceptsPlainRipgrep(t *testing.T) {
+	for _, command := range []string{
+		"rg -n TODO internal/",
+		"rg --pre-glob '*.pdf' foo",
+	} {
+		if !IsReadOnlyBashCommand(command) {
+			t.Errorf("%q should be read-only", command)
+		}
+	}
+}
+
 func TestIsShellEnvAssignment(t *testing.T) {
 	valid := []string{"FOO=bar", "GOFLAGS=-mod=mod", "a1_B=x", "EMPTY="}
 	for _, word := range valid {

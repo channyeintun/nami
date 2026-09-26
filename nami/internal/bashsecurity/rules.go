@@ -139,6 +139,28 @@ var findWritingPredicates = map[string]struct{}{
 	"-fls":     {},
 }
 
+// dangerousGitFlags name options that make an otherwise read-only git
+// subcommand write a file or run a program. --output=<file>, accepted by diff,
+// log and show in both the "--output=path" and "--output path" forms, writes
+// the generated diff to an arbitrary path — even an empty diff creates and
+// truncates it. --ext-diff runs the configured external diff driver as a
+// program. Neither contains a character the segment splitter rejects, so they
+// reach the classifier and would auto-approve.
+var dangerousGitFlags = map[string]struct{}{
+	"--output":   {},
+	"--ext-diff": {},
+}
+
+// ripgrepExecutingFlags run an arbitrary program. rg is an inspection tool, but
+// --pre runs COMMAND to produce the text it searches and --hostname-bin runs
+// COMMAND to resolve the hostname for hyperlinks, so a segment carrying either
+// executes code and cannot be auto-approved. Both accept a "--flag=value" and a
+// "--flag value" form.
+var ripgrepExecutingFlags = map[string]struct{}{
+	"--pre":          {},
+	"--hostname-bin": {},
+}
+
 // ValidateBashSecurity returns a non-empty error description if the command is
 // blocked for security reasons, or empty string if it is safe to execute.
 func ValidateBashSecurity(command string) string {
@@ -318,6 +340,9 @@ func isReadOnlySegment(segment string) bool {
 		if _, ok := readOnlyGitSubcommands[subcommand]; !ok {
 			return false
 		}
+		if flagSetContains(arguments[1:], dangerousGitFlags) {
+			return false
+		}
 		if _, listing := listingGitSubcommands[subcommand]; listing {
 			return isGitListingOnly(arguments[1:])
 		}
@@ -334,7 +359,24 @@ func isReadOnlySegment(segment string) bool {
 			}
 		}
 	}
+	if program == "rg" && flagSetContains(arguments, ripgrepExecutingFlags) {
+		return false
+	}
 	return true
+}
+
+// flagSetContains reports whether any argument is one of the flags in set. A
+// flag is matched by the part before its first "=", so "--output" catches both
+// the "--output path" and "--output=path" forms without also matching an
+// unrelated flag such as "--output-indicator-new".
+func flagSetContains(arguments []string, set map[string]struct{}) bool {
+	for _, argument := range arguments {
+		flag, _, _ := strings.Cut(argument, "=")
+		if _, found := set[flag]; found {
+			return true
+		}
+	}
+	return false
 }
 
 // isGitListingOnly reports whether the arguments to git branch or git tag only
