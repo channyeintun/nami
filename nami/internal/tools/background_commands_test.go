@@ -1,6 +1,8 @@
 package tools
 
 import (
+	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -83,6 +85,88 @@ func TestStopKillsEverythingTheBackgroundCommandStarted(t *testing.T) {
 	time.Sleep(1500 * time.Millisecond)
 	if _, err := os.Stat(filepath.Join(bg.cwd, "survived")); err == nil {
 		t.Fatal("a process started by the stopped command kept running")
+	}
+}
+
+// unreadInput is far more than the terminal buffers hold, so writing it to a
+// process that never reads its stdin blocks.
+var unreadInput = strings.Repeat("0123456789abcdef\n", 64*1024)
+
+// A write to a process that stopped reading used to block while holding the
+// command's lock, which froze list_commands, the exit handler, and stop, the
+// very things that could have released it.
+func TestSendInputStuckOnACommandThatStopsReadingBlocksNobodyElse(t *testing.T) {
+	skipWithoutPOSIXShell(t)
+	bg := startTestBackgroundCommand(t, "sleep 30")
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	sent := make(chan error, 1)
+	go func() {
+		_, err := bg.sendInput(ctx, unreadInput, 0)
+		sent <- err
+	}()
+	time.Sleep(300 * time.Millisecond)
+
+	listed := make(chan struct{})
+	go func() {
+		_ = bg.summary()
+		close(listed)
+	}()
+	select {
+	case <-listed:
+	case <-time.After(2 * time.Second):
+		t.Fatal("listing the command blocked behind a stuck input write")
+	}
+
+	cancel()
+	select {
+	case err := <-sent:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("sendInput error = %v, want context.Canceled", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("sendInput ignored cancellation while its write was stuck")
+	}
+}
+
+func TestStopReleasesAnInputWriteStuckOnACommandThatStopsReading(t *testing.T) {
+	skipWithoutPOSIXShell(t)
+	bg := startTestBackgroundCommand(t, "sleep 30")
+
+	sent := make(chan error, 1)
+	go func() {
+		_, err := bg.sendInput(context.Background(), unreadInput, 0)
+		sent <- err
+	}()
+	time.Sleep(300 * time.Millisecond)
+
+	stopped := make(chan BackgroundCommandResult, 1)
+	go func() { stopped <- bg.stop(2 * time.Second) }()
+	select {
+	case result := <-stopped:
+		if result.Running {
+			t.Fatalf("stop returned a running command: %+v", result)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("stop blocked behind a stuck input write")
+	}
+	select {
+	case err := <-sent:
+		if err == nil {
+			t.Fatal("sendInput reported success for input the stopped process never read")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("stopping the command did not release the stuck write")
+	}
+}
+
+// shutdown drops stdin before the exit handler records the exit, so input sent
+// in that window has to be refused rather than written to a nil stream.
+func TestSendInputRefusesACommandBeingShutDown(t *testing.T) {
+	bg := &backgroundCommand{id: "cmd_stopping", running: true, output: &boundedOutput{}, done: make(chan struct{})}
+	if _, err := bg.sendInput(t.Context(), "y\n", 0); err == nil {
+		t.Fatal("sendInput accepted input for a command whose stdin is gone")
 	}
 }
 

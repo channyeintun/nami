@@ -101,7 +101,7 @@ func (t *SendCommandInputTool) Execute(ctx context.Context, input ToolInput) (To
 		return ToolOutput{}, err
 	}
 
-	resultPayload, err := bg.sendInput(stdinInput, time.Duration(waitMs)*time.Millisecond)
+	resultPayload, err := bg.sendInput(ctx, stdinInput, time.Duration(waitMs)*time.Millisecond)
 	if err != nil {
 		return ToolOutput{}, err
 	}

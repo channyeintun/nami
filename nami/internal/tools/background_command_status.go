@@ -52,23 +52,24 @@ func forgetBackgroundCommand(commandID string) (BackgroundCommandResult, error) 
 	return result, nil
 }
 
-func (bg *backgroundCommand) sendInput(input string, wait time.Duration) (BackgroundCommandResult, error) {
+func (bg *backgroundCommand) sendInput(ctx context.Context, input string, wait time.Duration) (BackgroundCommandResult, error) {
 	bg.consumeMu.Lock()
 	defer bg.consumeMu.Unlock()
 
 	bg.mu.Lock()
-	if !bg.running {
-		bg.mu.Unlock()
+	running := bg.running
+	stdin := bg.stdin
+	bg.mu.Unlock()
+	// shutdown drops stdin before the exit handler marks the command finished.
+	if !running || stdin == nil {
 		return BackgroundCommandResult{}, fmt.Errorf("command %q is not running", bg.id)
 	}
-	_, err := io.WriteString(bg.stdin, input)
-	if err == nil {
-		bg.updatedAt = time.Now()
-	}
-	bg.mu.Unlock()
-	if err != nil {
+	// The write runs without bg.mu: a process that stops reading its input
+	// blocks it, and listing, the exit handler, and shutdown all need bg.mu.
+	if err := bg.writeInput(ctx, stdin, input); err != nil {
 		return BackgroundCommandResult{}, fmt.Errorf("write command input: %w", err)
 	}
+	bg.markUpdated(time.Now())
 
 	if wait > 0 {
 		timer := time.NewTimer(wait)
@@ -80,6 +81,33 @@ func (bg *backgroundCommand) sendInput(input string, wait time.Duration) (Backgr
 	}
 
 	return bg.snapshotDelta(), nil
+}
+
+// writeInput writes input to the command's stdin. A process that stops reading
+// lets the terminal buffer fill and the write block in the kernel, where no
+// deadline or close can reach it: creack/pty leaves the terminal in blocking
+// mode, and the write can stay stuck even after the process exits. So the
+// write runs on its own goroutine, and the caller stops waiting for it once
+// ctx ends or the command exits, abandoning the write.
+func (bg *backgroundCommand) writeInput(ctx context.Context, stdin io.Writer, input string) error {
+	written := make(chan error, 1)
+	go func() {
+		_, err := io.WriteString(stdin, input)
+		written <- err
+	}()
+	select {
+	case err := <-written:
+		return err
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-bg.done:
+		select {
+		case err := <-written:
+			return err
+		default:
+			return fmt.Errorf("command %q exited before reading its input", bg.id)
+		}
+	}
 }
 
 func (bg *backgroundCommand) status(wait time.Duration) BackgroundCommandResult {
@@ -98,10 +126,14 @@ func (bg *backgroundCommand) status(wait time.Duration) BackgroundCommandResult 
 }
 
 func (bg *backgroundCommand) stop(wait time.Duration) BackgroundCommandResult {
+	// Shut down before queueing behind other consumers: send_command_input
+	// stuck on a process that stopped reading holds consumeMu until the
+	// command exits, and shutdown is what makes it exit.
+	bg.shutdown()
+
 	bg.consumeMu.Lock()
 	defer bg.consumeMu.Unlock()
 
-	bg.shutdown()
 	if wait > 0 {
 		timer := time.NewTimer(wait)
 		defer timer.Stop()
