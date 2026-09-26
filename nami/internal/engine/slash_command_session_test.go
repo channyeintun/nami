@@ -377,3 +377,64 @@ func TestCompactSlashCommandSavesATimelineForTheCompactedConversation(t *testing
 	}
 	assertHydratedTimelineMatches(t, saved)
 }
+
+// The cost tracker's total is what every save records as the session's cost.
+// /resume left it holding the previous session's spend, so the first save of
+// the resumed session replaced that session's own total with the other one.
+func TestResumeSlashCommandKeepsTheResumedSessionsCost(t *testing.T) {
+	isolateUserConfig(t)
+	store := session.NewStore(t.TempDir())
+	resumedSpend := costpkg.NewTracker()
+	resumedSpend.RecordAPICall("claude-sonnet-5", 100, 10, 0, 0, time.Second, 1.25)
+	if err := persistSessionState(store, sessionStateParams{
+		SessionID: "target-session",
+		CreatedAt: time.Now(),
+		Mode:      agent.ModeFast,
+		// A model that cannot start keeps the test away from the network.
+		Model:    "github-copilot/gpt-5",
+		Tracker:  resumedSpend,
+		Messages: []api.Message{{Role: api.RoleUser, Content: "restored question"}},
+	}); err != nil {
+		t.Fatalf("persist target session: %v", err)
+	}
+	cmd, emitted := newTestSlashCommandContext(t, store, []api.Message{{Role: api.RoleUser, Content: "current question"}}, newConversationTimeline())
+	cmd.tracker.RecordAPICall("claude-sonnet-5", 1000, 100, 0, 0, time.Second, 3.00)
+	cmd.args = "target-session"
+
+	if err := handleResumeSlashCommand(cmd); err != nil {
+		t.Fatalf("handleResumeSlashCommand: %v", err)
+	}
+
+	meta, err := store.LoadMetadata("target-session")
+	if err != nil {
+		t.Fatalf("LoadMetadata: %v", err)
+	}
+	if meta.TotalCostUSD != 1.25 {
+		t.Fatalf("resumed session's saved cost = %v, want its own 1.25", meta.TotalCostUSD)
+	}
+	if got := cmd.tracker.Snapshot().TotalCostUSD; got != 1.25 {
+		t.Fatalf("tracker total after resume = %v, want 1.25", got)
+	}
+	// The session left behind keeps what it spent up to the switch.
+	left, err := store.LoadMetadata("old-session")
+	if err != nil {
+		t.Fatalf("LoadMetadata for the session left: %v", err)
+	}
+	if left.TotalCostUSD != 3.00 {
+		t.Fatalf("session left's saved cost = %v, want its 3.00", left.TotalCostUSD)
+	}
+	shown := -1.0
+	for _, event := range emittedEvents(t, emitted) {
+		if event.Type != ipc.EventCostUpdate {
+			continue
+		}
+		var update ipc.CostUpdatePayload
+		if err := json.Unmarshal(event.Payload, &update); err != nil {
+			t.Fatalf("decode cost update: %v", err)
+		}
+		shown = update.TotalUSD
+	}
+	if shown != 1.25 {
+		t.Fatalf("the TUI was last shown a cost of %v, want 1.25", shown)
+	}
+}

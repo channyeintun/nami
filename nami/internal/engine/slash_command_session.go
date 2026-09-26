@@ -15,6 +15,7 @@ import (
 	commandspkg "github.com/channyeintun/nami/internal/commands"
 	"github.com/channyeintun/nami/internal/compact"
 	"github.com/channyeintun/nami/internal/config"
+	costpkg "github.com/channyeintun/nami/internal/cost"
 	"github.com/channyeintun/nami/internal/debuglog"
 	"github.com/channyeintun/nami/internal/ipc"
 )
@@ -90,6 +91,10 @@ func handleResumeSlashCommand(cmd *slashCommandContext) error {
 		targetID = targetIDs
 	}
 
+	// Saved before the restore reads the target, which may be this session.
+	if err := persistSessionBeingLeft(cmd); err != nil {
+		return err
+	}
 	restored, err := cmd.store.Restore(targetID)
 	if err != nil {
 		return cmd.bridge.EmitError(fmt.Sprintf("restore session %q: %v", targetID, err), true)
@@ -97,6 +102,11 @@ func handleResumeSlashCommand(cmd *slashCommandContext) error {
 
 	cmd.state.Messages = append(cmd.state.Messages[:0], restored.Messages...)
 	cmd.state.SessionID = restored.Metadata.SessionID
+	// Every save records the tracker's total as the session's cost, so the
+	// tracker has to start from the resumed session's own spend. Left with
+	// the previous session's, the first save would overwrite it.
+	cmd.tracker.Reset()
+	cmd.tracker.MergeSnapshot(costpkg.TrackerSnapshot{TotalCostUSD: restored.Metadata.TotalCostUSD})
 	timelinePayload, err := cmd.store.LoadConversationTimeline(cmd.state.SessionID)
 	if err != nil {
 		return err
@@ -161,6 +171,9 @@ func handleResumeSlashCommand(cmd *slashCommandContext) error {
 		return err
 	}
 	if err := emitSessionUpdated(cmd.bridge, cmd.state.SessionID, restored.Metadata.Title); err != nil {
+		return err
+	}
+	if err := emitCostUpdate(cmd.bridge, cmd.tracker); err != nil {
 		return err
 	}
 	if err := emitModelChanged(cmd.bridge, cmd.state.ActiveModelID, *cmd.client); err != nil {
@@ -413,21 +426,29 @@ func truncateRewindPreview(value string, maxRunes int) string {
 	return string(runes[:maxRunes-1]) + "…"
 }
 
+// persistSessionBeingLeft saves the current session before a command switches
+// the engine to another one. The switch resets the cost tracker, so spend since
+// the last save would otherwise never reach this session's record.
+func persistSessionBeingLeft(cmd *slashCommandContext) error {
+	if len(cmd.state.Messages) == 0 {
+		return nil
+	}
+	return persistSessionState(cmd.store, sessionStateParams{
+		SessionID:     cmd.state.SessionID,
+		CreatedAt:     cmd.state.StartedAt,
+		Mode:          cmd.state.Mode,
+		Model:         cmd.state.ActiveModelID,
+		SubagentModel: cmd.state.SubagentModelID,
+		CWD:           cmd.state.CWD,
+		Branch:        currentGitBranch(),
+		Tracker:       cmd.tracker,
+		Messages:      cmd.state.Messages,
+	})
+}
+
 func handleClearSlashCommand(cmd *slashCommandContext) error {
-	if len(cmd.state.Messages) > 0 {
-		if err := persistSessionState(cmd.store, sessionStateParams{
-			SessionID:     cmd.state.SessionID,
-			CreatedAt:     cmd.state.StartedAt,
-			Mode:          cmd.state.Mode,
-			Model:         cmd.state.ActiveModelID,
-			SubagentModel: cmd.state.SubagentModelID,
-			CWD:           cmd.state.CWD,
-			Branch:        currentGitBranch(),
-			Tracker:       cmd.tracker,
-			Messages:      cmd.state.Messages,
-		}); err != nil {
-			return err
-		}
+	if err := persistSessionBeingLeft(cmd); err != nil {
+		return err
 	}
 
 	cmd.state.Messages = cmd.state.Messages[:0]
