@@ -262,9 +262,6 @@ func (c *AnthropicClient) handleEvent(
 		}
 		if evt.Message.Usage != nil {
 			state.usage.merge(*evt.Message.Usage)
-			if !yield(ModelEvent{Type: ModelEventUsage, Usage: state.usage.clone()}, nil) {
-				return errStopStream
-			}
 		}
 		return nil
 	case "content_block_start":
@@ -308,12 +305,16 @@ func (c *AnthropicClient) handleEvent(
 		}
 		if evt.Usage != nil {
 			state.usage.merge(*evt.Usage)
+		}
+		return nil
+	case "message_stop":
+		// message_start and message_delta each carry the running totals, so
+		// usage is reported once, here, when it is final.
+		if state.usage != (anthropicUsage{}) {
 			if !yield(ModelEvent{Type: ModelEventUsage, Usage: state.usage.clone()}, nil) {
 				return errStopStream
 			}
 		}
-		return nil
-	case "message_stop":
 		stopReason := state.stopReason
 		if stopReason == "" {
 			stopReason = "end_turn"

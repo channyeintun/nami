@@ -145,7 +145,7 @@ const (
 	ModelEventThinking                         // thinking delta
 	ModelEventToolCall                         // complete tool call
 	ModelEventStop                             // generation complete
-	ModelEventUsage                            // token counts
+	ModelEventUsage                            // the call's final token counts, reported at most once per stream
 	ModelEventRateLimits                       // rate limit windows from provider headers
 )
 

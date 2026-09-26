@@ -30,12 +30,9 @@ func (c *OpenAICompatClient) handleEvent(
 			Message: message,
 		}
 	}
-	if chunk.Usage != nil {
-		state.usage.merge(chunk.Usage)
-		if !yield(ModelEvent{Type: ModelEventUsage, Usage: state.usage.toUsage()}, nil) {
-			return errStopStream
-		}
-	}
+	// Usage can arrive on the finish chunk, on its own chunk after it, or as a
+	// running total on every chunk, so it is reported once, by emitStop.
+	state.usage.merge(chunk.Usage)
 
 	for _, choice := range chunk.Choices {
 		if reasoning := firstNonEmpty(choice.Delta.Reasoning, choice.Delta.ReasoningContent); reasoning != "" {
@@ -157,6 +154,11 @@ func (s *openAICompatStreamState) emitStop(yield func(ModelEvent, error) bool) e
 		s.stopReason = "end_turn"
 	}
 	s.sentStop = true
+	if s.usage != (openAICompatUsage{}) {
+		if !yield(ModelEvent{Type: ModelEventUsage, Usage: s.usage.toUsage()}, nil) {
+			return errStopStream
+		}
+	}
 	if !yield(ModelEvent{Type: ModelEventStop, StopReason: s.stopReason}, nil) {
 		return errStopStream
 	}

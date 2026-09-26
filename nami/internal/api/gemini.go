@@ -229,12 +229,9 @@ func (c *GeminiClient) handleEvent(data string, state *geminiStreamState, yield 
 	if response.Error != nil {
 		return &APIError{Type: classifyGeminiErrorType(0, response.Error.Status, response.Error.Message), Message: response.Error.Message}
 	}
-	if response.UsageMetadata != nil {
-		state.usage.merge(response.UsageMetadata)
-		if !yield(ModelEvent{Type: ModelEventUsage, Usage: state.usage.toUsage()}, nil) {
-			return errStopStream
-		}
-	}
+	// Every chunk repeats the running usage, so it is only merged here and
+	// reported once, with the stop event.
+	state.usage.merge(response.UsageMetadata)
 
 	for _, candidate := range response.Candidates {
 		for _, part := range candidate.Content.Parts {
@@ -277,6 +274,11 @@ func (c *GeminiClient) handleEvent(data string, state *geminiStreamState, yield 
 
 	if state.stopReason != "" && !state.sentStop {
 		state.sentStop = true
+		if state.usage != (geminiUsageMetadata{}) {
+			if !yield(ModelEvent{Type: ModelEventUsage, Usage: state.usage.toUsage()}, nil) {
+				return errStopStream
+			}
+		}
 		if !yield(ModelEvent{Type: ModelEventStop, StopReason: state.stopReason}, nil) {
 			return errStopStream
 		}
