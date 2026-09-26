@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"fmt"
 	"iter"
 	"strings"
 	"time"
@@ -113,7 +114,13 @@ type QueryState struct {
 	// GoalProgress holds the monotonic per-turn state behind the goal progress
 	// indicator (see progress_directive.go).
 	GoalProgress GoalProgressState
+	// blockedStop is the BeforeStop decision that last kept the query going,
+	// until the next model turn starts.
+	blockedStop StopDecision
 }
+
+// stopReasonMaxTurns is the stop reason of a query that used all MaxTurns.
+const stopReasonMaxTurns = "max_turns"
 
 // NewQueryState creates initial state from a request.
 func NewQueryState(req QueryRequest) *QueryState {
@@ -148,13 +155,17 @@ func NewQueryState(req QueryRequest) *QueryState {
 
 // ShouldContinue returns true if the query loop should keep iterating.
 func (s *QueryState) ShouldContinue() bool {
-	if s.StopRequested {
-		return false
-	}
+	return !s.StopRequested && s.limitReached() == ""
+}
+
+// limitReached names the limit that ends the query before the model has
+// finished: the turn cap, or a run of continuations no longer worth
+// continuing. It returns "" while the query is within its limits.
+func (s *QueryState) limitReached() string {
 	if s.TurnCount >= s.MaxTurns {
-		return false
+		return stopReasonMaxTurns
 	}
-	return !s.Continuation.Decision().ShouldStop
+	return s.Continuation.Decision().Reason
 }
 
 // QueryStream is the core streaming query interface.
@@ -206,18 +217,72 @@ func QueryStream(ctx context.Context, req QueryRequest, deps QueryDeps) iter.Seq
 			deps.ObserveContinuation(state.Continuation, decision.Reason)
 		}
 
-		// If the loop exited without the agent explicitly stopping (e.g. hit the
-		// max-turn limit or continuation budget), emit turn_complete so the TUI
-		// transitions out of the "Working" state instead of spinning forever.
 		if !state.StopRequested {
-			event, err := newEvent(ipc.EventTurnComplete, ipc.TurnCompletePayload{StopReason: "stop"})
-			if err != nil {
+			if err := stopAtLimit(ctx, state, deps, yield); err != nil {
 				yield(ipc.StreamEvent{}, err)
-				return
 			}
-			yield(event, nil)
 		}
 	}
+}
+
+// stopAtLimit ends a query that ran into a limit before the model finished:
+// the turn cap, a reply that used up its output budget, or replies that
+// stopped making progress. It takes the way out a normal stop takes, so the
+// stop hooks and the goal see the stop, except that a hook or goal asking
+// for more work cannot take the query past its limit. The user is told why
+// the query ended, since from the transcript it looks like a normal finish.
+func stopAtLimit(ctx context.Context, state *QueryState, deps QueryDeps, yield func(ipc.StreamEvent, error) bool) error {
+	// A cancelled query is not stopping at a limit, and a goal judged on a
+	// cancelled context would fail open and clear itself as met.
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	limit := state.limitReached()
+	blocked := state.blockedStop
+	// When the last stop was just blocked, BeforeStop has already judged
+	// this transcript; asking again would repeat the hooks and the goal.
+	if !blocked.Continue && deps.BeforeStop != nil {
+		decision, err := deps.BeforeStop(ctx, StopRequest{
+			Messages:         append([]api.Message(nil), state.Messages...),
+			AssistantMessage: latestAssistantMessage(state.Messages),
+			StopReason:       limit,
+			TurnCount:        state.TurnCount,
+		})
+		if err != nil {
+			return err
+		}
+		blocked = decision
+	}
+
+	state.StopRequested = true
+	if err := yieldEvent(yield, ipc.EventTurnComplete, ipc.TurnCompletePayload{StopReason: limit}); err != nil {
+		return err
+	}
+	// After turn_complete, which resets the TUI's status line.
+	return yieldEvent(yield, ipc.EventNotice, ipc.NoticePayload{Message: limitStopNotice(state, limit, blocked)})
+}
+
+// limitStopNotice explains to the user why a query stopped at a limit.
+func limitStopNotice(state *QueryState, limit string, blocked StopDecision) string {
+	var notice string
+	switch limit {
+	case stopReasonMaxTurns:
+		notice = fmt.Sprintf("Stopped after %d model turns, the most one request may take.", state.MaxTurns)
+	case ContinuationStopBudgetExhausted:
+		notice = fmt.Sprintf("Stopped: the model wrote %d output tokens without calling a tool, the budget for one reply.", state.Continuation.BudgetUsedTokens)
+	case ContinuationStopDiminishingReturns:
+		notice = "Stopped: the last replies were short and called no tools, so continuing was not making progress."
+	default:
+		notice = fmt.Sprintf("Stopped: %s.", limit)
+	}
+	if blocked.Continue {
+		if reason := strings.TrimSpace(blocked.Reason); reason != "" {
+			notice += fmt.Sprintf(" A stop hook or goal wanted more work (%s).", reason)
+		} else {
+			notice += " A stop hook or goal wanted more work."
+		}
+	}
+	return notice + " Send another message to continue."
 }
 
 // stopAwareYield wraps a range-over-func yield so it is never called again

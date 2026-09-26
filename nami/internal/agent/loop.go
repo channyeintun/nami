@@ -34,6 +34,7 @@ func runIteration(
 ) error {
 	state.TurnCount++
 	state.TurnContext = LoadTurnContext()
+	state.blockedStop = StopDecision{}
 	runtime := &iterationRuntime{}
 	if err := runIterationStages(ctx, state, deps, runtime, yield); err != nil {
 		return err
@@ -76,8 +77,11 @@ func appendAssistantTurnMessage(state *QueryState, turn modelTurn) api.Message {
 }
 
 func recordTurnOutput(state *QueryState, turn modelTurn) {
-	if turn.outputTokens > 0 {
-		state.Continuation.Record(turn.outputTokens, len(turn.toolCalls) > 0)
+	isToolTurn := len(turn.toolCalls) > 0
+	// A tool turn ends the run of continuations even when the provider
+	// reported no output for it.
+	if isToolTurn || turn.outputTokens > 0 {
+		state.Continuation.Record(turn.outputTokens, isToolTurn)
 	}
 	if turn.stopReason == "max_tokens" {
 		postTurnPressure := EvaluateContextPressure(state.Messages, state.ContextWindow, state.MaxTokens, state.Continuation, ContextPressureSignals{
@@ -197,6 +201,7 @@ func finalizeAssistantTurn(
 			return err
 		}
 		if decision.Continue {
+			state.blockedStop = decision
 			state.Messages = append(state.Messages, api.Message{
 				Role:    api.RoleUser,
 				Content: stopBlockedFollowUp(decision),
@@ -239,6 +244,7 @@ func handlePendingStopRequest(
 			return true, err
 		}
 		if decision.Continue {
+			state.blockedStop = decision
 			state.Messages = append(state.Messages, api.Message{
 				Role:    api.RoleUser,
 				Content: stopBlockedFollowUp(decision),

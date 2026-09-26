@@ -113,6 +113,13 @@ validatable up front and serializable into a journal.
 Returning `StopDecision{Continue: true}` appends a follow-up user message and keeps
 the loop running. `/goal` is built entirely on that seam — no new control flow.
 
+A turn can also end at a limit: `QueryState.MaxTurns`, or a run of replies without
+tool calls that has used up the output budget of one reply or keeps coming back
+short. BeforeStop is consulted there too, with the limit as the stop reason, so the
+goal is still judged and stop hooks still run, but its decision cannot carry the
+turn past the limit. The turn ends with that stop reason and a notice saying why,
+and a goal that is not met stays set for the user's next message.
+
 Two evaluators share it, in a fixed order:
 
 1. File stop hooks (`internal/hooks`) — user-authored, free.
