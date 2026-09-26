@@ -8,8 +8,11 @@ import (
 )
 
 func (c *AnthropicClient) resolveAPIKey() (string, error) {
-	if c.apiKeyFunc != nil {
-		return c.apiKeyFunc()
+	c.mu.RLock()
+	apiKeyFunc := c.apiKeyFunc
+	c.mu.RUnlock()
+	if apiKeyFunc != nil {
+		return apiKeyFunc()
 	}
 	return c.apiKey, nil
 }
@@ -18,7 +21,10 @@ func (c *AnthropicClient) resolveBaseURL(apiKey string) string {
 	if c.provider != "github-copilot" {
 		return c.baseURL
 	}
-	resolved := strings.TrimRight(GetGitHubCopilotBaseURL(apiKey, c.enterpriseDomain), "/")
+	c.mu.RLock()
+	enterpriseDomain := c.enterpriseDomain
+	c.mu.RUnlock()
+	resolved := strings.TrimRight(GetGitHubCopilotBaseURL(apiKey, enterpriseDomain), "/")
 	if resolved == "" {
 		return c.baseURL
 	}

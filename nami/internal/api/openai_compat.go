@@ -16,23 +16,31 @@ import (
 
 // OpenAICompatClient implements OpenAI-compatible chat completions streaming.
 type OpenAICompatClient struct {
-	provider         string
-	model            string
-	baseURL          string
+	provider     string
+	model        string
+	baseURL      string
+	apiKey       string
+	httpClient   *http.Client
+	capabilities ModelCapabilities
+
+	// mu guards the settings below, which the engine can replace while a
+	// request, such as the startup warmup, is reading them.
+	mu               sync.RWMutex
 	enterpriseDomain string
-	apiKey           string
 	apiKeyFunc       func() (string, error)
-	httpClient       *http.Client
-	capabilities     ModelCapabilities
 }
 
 // SetAPIKeyFunc sets a callback that returns a fresh API key on each call.
 // When set, the client calls this instead of using the static apiKey.
 func (c *OpenAICompatClient) SetAPIKeyFunc(fn func() (string, error)) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.apiKeyFunc = fn
 }
 
 func (c *OpenAICompatClient) SetGitHubCopilotEnterpriseDomain(domain string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.enterpriseDomain = strings.TrimSpace(domain)
 }
 
