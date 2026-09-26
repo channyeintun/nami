@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  engine:
+    name: Go engine
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: nami
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: nami/go.mod
+          cache-dependency-path: nami/go.sum
+      - name: gofmt
+        run: |
+          unformatted=$(gofmt -l ./internal ./cmd)
+          if [ -n "$unformatted" ]; then
+            echo "These files need gofmt:"
+            echo "$unformatted"
+            exit 1
+          fi
+      - run: go vet ./...
+      # Platform-specific files (process groups, file ownership, ptys) only
+      # compile for their own targets.
+      - name: Build for Windows and macOS
+        run: |
+          GOOS=windows go vet ./...
+          GOOS=darwin go vet ./...
+      - run: go test -race ./...
+      - name: staticcheck
+        run: go run honnef.co/go/tools/cmd/staticcheck@v0.8.1 ./...
+      - name: govulncheck
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
+
+  tui:
+    name: Terminal UI
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: nami/tui
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: nami/tui/package-lock.json
+      - run: npm ci
+      - run: npx tsgo --noEmit
+      - run: npx vp pack
+      # The single-file launcher the release ships, built as the Makefile
+      # builds it; it must load without a node_modules directory.
+      - name: Launcher bundle
+        run: |
+          node_modules/.bin/rolldown -c rolldown.config.mjs
+          node scripts/normalize-launcher-bundle.mjs release/nami.js.raw release/nami.js
+          mkdir -p "$RUNNER_TEMP/launcher"
+          cp release/nami.js "$RUNNER_TEMP/launcher/"
+          node "$RUNNER_TEMP/launcher/nami.js" --help
+      - run: npm audit --audit-level=high
