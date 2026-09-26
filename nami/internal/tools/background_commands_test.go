@@ -40,20 +40,39 @@ func waitForBackgroundExit(t *testing.T, bg *backgroundCommand, limit time.Durat
 // is usually the part that matters: the summary or the error at the end.
 func TestBackgroundCommandKeepsTheTailOfItsOutput(t *testing.T) {
 	skipWithoutPOSIXShell(t)
-	const command = "i=0; while [ $i -lt 200 ]; do echo line$i; i=$((i+1)); done; echo FINAL-MARKER"
+	// About 8KB: more than one read takes, less than the terminal buffers, so
+	// the command can finish while most of its output is still unread.
+	const command = "head -c 8000 /dev/zero | tr '\\0' x; echo; echo FINAL-MARKER; touch finished"
+	bg := startTestBackgroundCommand(t, command)
 
-	// The loss was a race, so one run proves little.
-	for run := range 25 {
-		bg := startTestBackgroundCommand(t, command)
-		waitForBackgroundExit(t, bg, 10*time.Second)
+	// Holding the output buffer's lock stalls the reader at its first chunk,
+	// which makes the losing interleaving certain rather than a race: the
+	// command exits with its output still in the terminal, and the exit
+	// handler has to wait for the reader rather than tear the stream down.
+	func() {
+		bg.output.mu.Lock()
+		defer bg.output.mu.Unlock()
+		finished := filepath.Join(bg.cwd, "finished")
+		deadline := time.Now().Add(10 * time.Second)
+		for {
+			if _, err := os.Stat(finished); err == nil {
+				break
+			}
+			if time.Now().After(deadline) {
+				t.Fatal("the command never finished")
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+		time.Sleep(200 * time.Millisecond) // let the shell exit and the exit handler run
+	}()
+	waitForBackgroundExit(t, bg, 10*time.Second)
 
-		output := bg.snapshotDelta().Output
-		if !strings.Contains(output, "FINAL-MARKER") {
-			t.Fatalf("run %d: output lost its tail; ends with %q", run, lastBytes(output, 80))
-		}
-		if strings.Contains(output, "stream closed") {
-			t.Fatalf("run %d: output reports a stream error: %q", run, lastBytes(output, 200))
-		}
+	output := bg.snapshotDelta().Output
+	if !strings.Contains(output, "FINAL-MARKER") {
+		t.Fatalf("output lost its tail: got %d bytes ending %q", len(output), lastBytes(output, 80))
+	}
+	if strings.Contains(output, "stream closed") {
+		t.Fatalf("output reports a stream error: %q", lastBytes(output, 200))
 	}
 }
 
