@@ -55,6 +55,14 @@ const (
 	edgeWeightTestCovers = 2
 	edgeWeightDiff       = 3
 	edgeWeightTouched    = 1
+	// edgeWeightSymbolAnchor matches the score of an exact file anchor: a
+	// symbol named in the turn points at the file defining it just as
+	// directly as naming the file would.
+	edgeWeightSymbolAnchor = 3
+
+	// symbolAnchorPrefix keys the node for a symbol named in the turn, as
+	// opposed to the "path:symbol" nodes parsed out of files.
+	symbolAnchorPrefix = "sym:"
 
 	graphSecondHopPenalty       = 50 // percent
 	graphSecondHopMinCandidates = 3
@@ -235,9 +243,6 @@ func (g *RetrievalGraph) Seed(anchors []RetrievalAnchor, sessionTouched []string
 				g.EnsureFile(resolved)
 			}
 		}
-		if anchor.Symbol != "" {
-			g.addNode("sym:"+anchor.Symbol, NodeSymbol, time.Time{})
-		}
 		if anchor.ErrorString != "" {
 			g.addNode("err:"+anchor.ErrorString, NodeError, time.Time{})
 		}
@@ -248,6 +253,36 @@ func (g *RetrievalGraph) Seed(anchors []RetrievalAnchor, sessionTouched []string
 			g.addEdge(resolved, resolved, EdgeSessionTouched, edgeWeightTouched)
 		}
 	}
+	// Link symbol anchors last: re-parsing a file above drops its symbol
+	// nodes along with every edge into them.
+	for _, anchor := range anchors {
+		if anchor.Symbol != "" {
+			g.linkSymbolAnchor(anchor.Symbol)
+		}
+	}
+}
+
+// linkSymbolAnchor connects the node for a symbol named in the turn to every
+// parsed symbol of that name, so Score's expansion from the anchor reaches the
+// files that define it.
+func (g *RetrievalGraph) linkSymbolAnchor(symbol string) {
+	anchorKey := symbolAnchorPrefix + symbol
+	g.addNode(anchorKey, NodeSymbol, time.Time{})
+	for key := range g.Nodes {
+		if g.isParsedSymbol(key, symbol) {
+			g.addEdge(anchorKey, key, EdgeReferences, edgeWeightSymbolAnchor)
+		}
+	}
+}
+
+// isParsedSymbol reports whether key is a symbol or test node parsed out of a
+// file under the given name, excluding the anchor nodes Seed adds.
+func (g *RetrievalGraph) isParsedSymbol(key, symbol string) bool {
+	node, ok := g.Nodes[key]
+	if !ok || (node.Kind != NodeSymbol && node.Kind != NodeTest) {
+		return false
+	}
+	return strings.HasSuffix(key, ":"+symbol) && !strings.HasPrefix(key, symbolAnchorPrefix)
 }
 
 // Score walks the graph from anchor nodes and returns scored file candidates.
@@ -292,7 +327,7 @@ func (g *RetrievalGraph) Score(anchors []RetrievalAnchor, gitStatusText string, 
 	// Also include symbol anchors as seeds.
 	for _, anchor := range anchors {
 		if anchor.Symbol != "" {
-			seedKeys = append(seedKeys, "sym:"+anchor.Symbol)
+			seedKeys = append(seedKeys, symbolAnchorPrefix+anchor.Symbol)
 		}
 	}
 
@@ -1009,10 +1044,10 @@ func (g *RetrievalGraph) ExtractSymbolAnchors(text string) []string {
 		if _, ok := seen[match]; ok {
 			continue
 		}
-		// Check if any node key ends with ":match".
-		suffix := ":" + match
-		for key, node := range g.Nodes {
-			if (node.Kind == NodeSymbol || node.Kind == NodeTest) && strings.HasSuffix(key, suffix) {
+		// Only symbols parsed from a file count: an anchor node left by an
+		// earlier turn would otherwise keep matching after its file changed.
+		for key := range g.Nodes {
+			if g.isParsedSymbol(key, match) {
 				seen[match] = struct{}{}
 				symbols = append(symbols, match)
 				break

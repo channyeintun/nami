@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func writeRetrievalFile(t *testing.T, dir, name, content string) string {
@@ -54,5 +55,48 @@ func TestRetrievalGraphScoreDoesNotGrowWithSymbolCount(t *testing.T) {
 	scores := candidateScores(candidates)
 	if scores[small] == 0 || scores[small] != scores[large] {
 		t.Fatalf("expected equally touched files to score the same, got small=%d large=%d", scores[small], scores[large])
+	}
+}
+
+func TestRetrievalGraphSymbolAnchorScoresDefiningFile(t *testing.T) {
+	dir := t.TempDir()
+	widget := writeRetrievalFile(t, dir, "widget.go", goFileWithFuncs("RenderWidget"))
+	other := writeRetrievalFile(t, dir, "other.go", goFileWithFuncs("Unrelated"))
+
+	graph := NewRetrievalGraph(dir)
+	touched := []string{widget, other}
+	// An earlier turn touched both files, so the graph knows their symbols.
+	graph.Seed(nil, touched)
+
+	anchors := ExtractAnchors("Why does RenderWidget panic?", "", "", graph)
+	if len(anchors) != 1 || anchors[0].Symbol != "RenderWidget" {
+		t.Fatalf("expected a single RenderWidget symbol anchor, got %+v", anchors)
+	}
+	candidates, _ := ScoreCandidates(anchors, dir, "", touched, graph)
+	scores := candidateScores(candidates)
+	if scores[widget] <= scores[other] {
+		t.Fatalf("expected the file defining the anchored symbol to outrank the other touched file, got widget=%d other=%d", scores[widget], scores[other])
+	}
+}
+
+func TestRetrievalGraphForgetsSymbolAnchorsOnceTheSymbolIsGone(t *testing.T) {
+	dir := t.TempDir()
+	widget := writeRetrievalFile(t, dir, "widget.go", goFileWithFuncs("RenderWidget"))
+
+	graph := NewRetrievalGraph(dir)
+	touched := []string{widget}
+	graph.Seed(nil, touched)
+	anchors := ExtractAnchors("Why does RenderWidget panic?", "", "", graph)
+	ScoreCandidates(anchors, dir, "", touched, graph)
+
+	writeRetrievalFile(t, dir, "widget.go", goFileWithFuncs("DrawGadget"))
+	later := time.Now().Add(time.Minute)
+	if err := os.Chtimes(widget, later, later); err != nil {
+		t.Fatalf("bump widget.go mod time: %v", err)
+	}
+	graph.Seed(nil, touched)
+
+	if symbols := graph.ExtractSymbolAnchors("Why does RenderWidget panic?"); len(symbols) != 0 {
+		t.Fatalf("expected no symbol anchors once no file defines RenderWidget, got %v", symbols)
 	}
 }
