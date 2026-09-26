@@ -100,3 +100,37 @@ func TestSplitCSVOnEmptyInput(t *testing.T) {
 		}
 	}
 }
+
+// Editors on Windows save a byte order mark and CRLF line endings; neither
+// may hide the frontmatter or leak into the body.
+func TestParseFrontmatterHandlesByteOrderMarkAndCRLF(t *testing.T) {
+	content := "\ufeff---\r\nname: review\r\ndescription: Review a change\r\n---\r\nBody line\r\n"
+	fm, body := ParseFrontmatter(content)
+	if fm["name"] != "review" || fm["description"] != "Review a change" {
+		t.Fatalf("frontmatter = %#v", fm)
+	}
+	if body != "Body line\r\n" {
+		t.Fatalf("body = %q, want the text after the closing line", body)
+	}
+}
+
+func TestParseFrontmatterUnquotesScalars(t *testing.T) {
+	fm, _ := ParseFrontmatter("---\ndescription: \"Formats code: Go and Rust\"\nargument-hint: 'a path'\nname: \"half\n---\nbody")
+	if got := fm["description"]; got != "Formats code: Go and Rust" {
+		t.Errorf("description = %q", got)
+	}
+	if got := fm["argument-hint"]; got != "a path" {
+		t.Errorf("argument-hint = %q", got)
+	}
+	if got := fm["name"]; got != "\"half" {
+		t.Errorf("an unmatched quote was removed: %q", got)
+	}
+}
+
+func TestSplitCSVAcceptsYAMLFlowLists(t *testing.T) {
+	got := splitCSV(`[Read, "Write", 'Bash']`)
+	want := []string{"Read", "Write", "Bash"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("splitCSV = %q, want %q", got, want)
+	}
+}

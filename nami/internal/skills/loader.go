@@ -140,11 +140,17 @@ func parseSkillContent(path string, content string) Skill {
 	return skill
 }
 
+// splitCSV splits a comma-separated frontmatter list. It also takes the YAML
+// flow form, [Read, "Write"], since that is how many skill files write lists.
 func splitCSV(s string) []string {
+	s = strings.TrimSpace(s)
+	if strings.HasPrefix(s, "[") && strings.HasSuffix(s, "]") {
+		s = s[1 : len(s)-1]
+	}
 	parts := strings.Split(s, ",")
 	var result []string
 	for _, p := range parts {
-		p = strings.TrimSpace(p)
+		p = unquote(strings.TrimSpace(p))
 		if p != "" {
 			result = append(result, p)
 		}
