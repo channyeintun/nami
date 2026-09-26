@@ -72,8 +72,10 @@ function renderInputLines(
         const end = Math.min(line.length, start + wrapWidth);
         const segmentStart = lineStartOffset + start;
         const segmentEnd = lineStartOffset + end;
-        const nextStart = segmentEnd;
         const isLastWrappedSegment = end === line.length;
+        // A cursor on a wrap boundary belongs to the start of the next
+        // segment; only the line's last segment shows it after its final
+        // character, in the column wrapWidth keeps free for it.
         const isCursorInside =
           (cursorOffset >= segmentStart && cursorOffset < segmentEnd) ||
           (cursorOffset === segmentEnd && isLastWrappedSegment);
@@ -89,23 +91,6 @@ function renderInputLines(
           "█" +
           line.slice(start + cursorColumn, end);
         renderedLines.push(rendered);
-
-        if (
-          cursorOffset === segmentEnd &&
-          !isLastWrappedSegment &&
-          nextStart === cursorOffset
-        ) {
-          // The cursor is exactly on a visual wrap boundary, so render it
-          // at the start of the next wrapped line instead of after the last char.
-          renderedLines[renderedLines.length - 1] = line.slice(start, end);
-        }
-      }
-
-      if (
-        cursorOffset === lineStartOffset + line.length &&
-        line.length % wrapWidth === 0
-      ) {
-        renderedLines.push("█");
       }
     }
 
