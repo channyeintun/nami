@@ -285,14 +285,36 @@ func ParseModel(modelStr string) (provider, model string) {
 	return "", modelStr
 }
 
-// Save writes the config to disk.
+// Save writes the config to disk. The file holds provider OAuth tokens and MCP
+// server credentials, so it is readable by its owner alone, and it is replaced
+// through a rename so a crash mid-write cannot leave it truncated.
 func Save(cfg Config) error {
-	if err := os.MkdirAll(ConfigDir(), 0o755); err != nil {
+	if err := os.MkdirAll(ConfigDir(), 0o700); err != nil {
 		return err
 	}
 	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(ConfigPath(), data, 0o644)
+	return writePrivateFile(ConfigPath(), data)
+}
+
+// writePrivateFile replaces path with data. The temporary file is created with
+// mode 0600, and the rename carries that mode over whatever file was there
+// before — os.WriteFile would keep an existing file's looser mode.
+func writePrivateFile(path string, data []byte) error {
+	tmp, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+"-*.tmp")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	defer os.Remove(tmpName)
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmpName, path)
 }

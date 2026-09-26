@@ -49,7 +49,8 @@ func SaveRecentModelSelection(model string) error {
 	if model == "" {
 		return nil
 	}
-	if err := os.MkdirAll(ConfigDir(), 0o755); err != nil {
+	// The same directory holds config.json and its credentials; see Save.
+	if err := os.MkdirAll(ConfigDir(), 0o700); err != nil {
 		return err
 	}
 	selection := ParseModelSelection(model, "recent")
