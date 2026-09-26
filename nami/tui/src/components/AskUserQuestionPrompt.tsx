@@ -8,6 +8,8 @@ import type {
 
 type Question = UIAskUserQuestionRequest["questions"][number];
 
+const CONTROL_CHARACTER = /[\u0000-\u001f\u007f]/;
+
 interface AskUserQuestionPromptProps {
   request: UIAskUserQuestionRequest;
   onSubmit: (
@@ -149,11 +151,14 @@ const AskUserQuestionPrompt: FC<AskUserQuestionPromptProps> = ({
       return;
     }
 
+    // Each key event carries one grapheme, which can be several UTF-16
+    // units: an emoji, a flag, a letter with a combining accent.
     const text = key.text ?? input;
     if (
       currentQuestion.allowFreeform &&
       typeof text === "string" &&
-      text.length === 1 &&
+      text.length > 0 &&
+      !CONTROL_CHARACTER.test(text) &&
       !key.ctrl &&
       !key.meta &&
       !key.return &&
