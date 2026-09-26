@@ -460,11 +460,3 @@ function firstStringField(
 
   return "";
 }
-
-function formatDetailPreviewHint(hiddenLineCount: number): string {
-  if (hiddenLineCount > 0) {
-    return `Preview truncated to keep actions visible. ${hiddenLineCount} more line${hiddenLineCount === 1 ? "" : "s"} hidden.`;
-  }
-
-  return "Preview truncated to keep actions visible.";
-}

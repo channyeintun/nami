@@ -25,39 +25,6 @@ function replaceRange(
   };
 }
 
-function findLinePosition(value: string, cursorOffset: number) {
-  const lines = value.split("\n");
-  const starts: number[] = [];
-  let nextStart = 0;
-
-  for (const line of lines) {
-    starts.push(nextStart);
-    nextStart += line.length + 1;
-  }
-
-  for (let index = 0; index < lines.length; index += 1) {
-    const line = lines[index] ?? "";
-    const start = starts[index] ?? 0;
-    const end = start + line.length;
-
-    if (cursorOffset <= end || index === lines.length - 1) {
-      return {
-        lines,
-        starts,
-        lineIndex: index,
-        column: cursorOffset - start,
-      };
-    }
-  }
-
-  return {
-    lines,
-    starts,
-    lineIndex: 0,
-    column: 0,
-  };
-}
-
 // One visual row of the prompt. Input draws exactly these rows, and the
 // Up/Down keys move between them, so the two always agree.
 export interface WrappedSegment {
@@ -249,8 +216,6 @@ export interface PromptController {
   moveRight: () => void;
   moveWordLeft: () => void;
   moveWordRight: () => void;
-  moveUp: () => void;
-  moveDown: () => void;
   moveUpOrRecallPrevious: (columns: number) => void;
   moveDownOrRecallNext: (columns: number) => void;
   moveLineStart: () => void;
@@ -569,43 +534,6 @@ export function usePromptHistory(): PromptController {
     });
   }, []);
 
-  const moveUp = useCallback(() => {
-    setState((current) => {
-      const position = findLinePosition(current.value, current.cursorOffset);
-      if (position.lineIndex === 0) {
-        return current;
-      }
-
-      const previousIndex = position.lineIndex - 1;
-      const previousStart = position.starts[previousIndex] ?? 0;
-      const previousLine = position.lines[previousIndex] ?? "";
-
-      return {
-        ...current,
-        cursorOffset:
-          previousStart + Math.min(position.column, previousLine.length),
-      };
-    });
-  }, []);
-
-  const moveDown = useCallback(() => {
-    setState((current) => {
-      const position = findLinePosition(current.value, current.cursorOffset);
-      if (position.lineIndex >= position.lines.length - 1) {
-        return current;
-      }
-
-      const nextIndex = position.lineIndex + 1;
-      const nextStart = position.starts[nextIndex] ?? current.value.length;
-      const nextLine = position.lines[nextIndex] ?? "";
-
-      return {
-        ...current,
-        cursorOffset: nextStart + Math.min(position.column, nextLine.length),
-      };
-    });
-  }, []);
-
   // Up and Down move between the prompt's visual rows and step through
   // history from its first or last row. The choice is made inside the state
   // update: React may run an updater after setState has returned, so a flag
@@ -653,8 +581,6 @@ export function usePromptHistory(): PromptController {
     moveRight,
     moveWordLeft,
     moveWordRight,
-    moveUp,
-    moveDown,
     moveUpOrRecallPrevious,
     moveDownOrRecallNext,
     moveLineStart,
