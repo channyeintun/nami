@@ -453,7 +453,7 @@ install -m 755 nami-engine "$HOME/.local/bin/nami-engine"</code><button type="bu
                 <li>&bull; Prints device code in transcript</li>
                 <li>&bull; Opens verification URL automatically</li>
                 <li>&bull; Authorizes v5.5 models</li>
-                <li>&bull; Stores tokens in <code>~/.config/nami/config.json</code> under <code>github_copilot</code></li>
+                <li>&bull; Stores tokens in Nami's <code>config.json</code> (see <a href="#config" class="text-brand hover:text-white transition">Configuration</a>) under <code>github_copilot</code></li>
                 <li>&bull; Clean with <code>/logout github-copilot</code> or remove that config section</li>
               </ul>
             </div>
@@ -478,7 +478,7 @@ install -m 755 nami-engine "$HOME/.local/bin/nami-engine"</code><button type="bu
                 <li>&bull; Default model is codex/gpt-5.5</li>
                 <li>&bull; Sends Codex requests to the ChatGPT Codex Responses endpoint</li>
                 <li>&bull; Uses OpenAI catalog metadata for model capabilities while keeping Codex auth and runtime separate</li>
-                <li>&bull; Stores OAuth tokens in <code>~/.config/nami/config.json</code> under <code>codex</code></li>
+                <li>&bull; Stores OAuth tokens in Nami's <code>config.json</code> (see <a href="#config" class="text-brand hover:text-white transition">Configuration</a>) under <code>codex</code></li>
                 <li>&bull; Clean with <code>/logout codex</code> or remove that config section</li>
               </ul>
             </div>
@@ -960,8 +960,8 @@ install -m 755 nami-engine "$HOME/.local/bin/nami-engine"</code><button type="bu
                   User Scope
                 </p>
                 <p class="text-gray-300">
-                  Writes user MCP config to
-                  <code>~/.config/nami/config.json</code>
+                  Writes user MCP config to Nami's
+                  <code>config.json</code>
                 </p>
               </div>
             </div>
@@ -1632,7 +1632,12 @@ install -m 755 nami-engine "$HOME/.local/bin/nami-engine"</code><button type="bu
               Configuration Reference
             </h2>
             <p class="text-xs text-gray-500 mb-6">
-              File: <code>~/.config/nami/config.json</code>
+              File: <code>~/.config/nami/config.json</code> on Linux
+              (or <code>$XDG_CONFIG_HOME/nami/config.json</code>),
+              <code>~/Library/Application Support/nami/config.json</code> on
+              macOS, <code>%APPDATA%\nami\config.json</code> on Windows.
+              Sessions, debug logs, and user-global skills live in the same
+              <code>nami</code> directory.
             </p>
             <div class="table-wrapper mb-8">
               <table class="w-full text-left text-sm">
@@ -1721,7 +1726,7 @@ install -m 755 nami-engine "$HOME/.local/bin/nami-engine"</code><button type="bu
                     Global
                   </p>
                   <p class="text-gray-300">
-                    <code>~/.config/nami/config.json</code>
+                    <code>config.json</code> in Nami's config directory
                   </p>
                 </div>
                 <div class="p-6 border border-[#1a1a1a] rounded-md bg-subtle/40">
@@ -1827,7 +1832,7 @@ install -m 755 nami-engine "$HOME/.local/bin/nami-engine"</code><button type="bu
                   User Global Skills
                 </p>
                 <p class="text-gray-300">
-                  <code>~/.config/nami/agents/*.md</code>
+                  <code>agents/*.md</code> in Nami's config directory
                 </p>
               </div>
               <div class="p-6 border border-[#1a1a1a] rounded-md bg-subtle/40">
@@ -1990,6 +1995,12 @@ tail -F ~/.config/nami/sessions/&lt;session-id&gt;/debug.log | jq .</code></pre>
               </div>
             </div>
             <ul class="mt-8 space-y-3 text-sm text-gray-400 leading-relaxed">
+              <li>
+                &bull; The log lives in <code>sessions/&lt;session-id&gt;/</code>
+                beside Nami's <code>config.json</code>; the paths above are the
+                Linux ones, and <code>/debug path</code> prints the exact
+                location on any platform.
+              </li>
               <li>
                 &bull; On macOS, <code>/debug</code> opens a new Terminal window
                 with the live monitor attached to the current session log.

@@ -185,7 +185,7 @@ Nami will:
 - print the GitHub verification URL and device code
 - try to open the verification page automatically
 - wait for authorization to complete
-- save credentials in the platform config file (`~/.config/nami/config.json` on macOS/Linux)
+- save credentials in Nami's config file (see [Configuration](#configuration) for where it lives)
 - switch the main model to `github-copilot/gpt-5.4`
 - set the subagent model to `github-copilot/claude-haiku-4.5`
 
@@ -263,7 +263,7 @@ nami mcp remove sentry
 Supported scopes:
 
 - `project` writes repo-local MCP config to `.nami/mcp.json`
-- `user` writes user MCP config to the platform config directory (`~/.config/nami/config.json` on macOS/Linux)
+- `user` writes user MCP config to Nami's config file (see [Configuration](#configuration))
 
 Notes:
 
@@ -444,11 +444,15 @@ changes even though its own prompt is untouched.
 
 ## Configuration
 
-Config file:
+Config file, in your platform's user config directory:
 
-```text
-~/.config/nami/config.json
-```
+| Platform | Path                                                                  |
+| -------- | --------------------------------------------------------------------- |
+| Linux    | `~/.config/nami/config.json` (or `$XDG_CONFIG_HOME/nami/config.json`) |
+| macOS    | `~/Library/Application Support/nami/config.json`                      |
+| Windows  | `%APPDATA%\nami\config.json`                                          |
+
+Sessions, debug logs, and user-global skills live in the same `nami` directory.
 
 Example:
 
@@ -474,7 +478,7 @@ If you use GitHub Copilot, config may also persist Copilot credentials and a `su
 
 ### MCP servers
 
-Nami can load external MCP servers at startup from either `~/.config/nami/config.json` or `.nami/mcp.json` in the current workspace. The workspace file is merged on top of the user config for the current session, so team-local MCP settings can live in the repo without replacing your personal global setup.
+Nami can load external MCP servers at startup from either the user config file or `.nami/mcp.json` in the current workspace. The workspace file is merged on top of the user config for the current session, so team-local MCP settings can live in the repo without replacing your personal global setup.
 
 Example user config:
 
@@ -550,7 +554,7 @@ Or enable it inside the TUI:
 /debug
 ```
 
-Debug logs are written to:
+Debug logs are written to `sessions/<session-id>/debug.log` beside the config file; `/debug path` prints the exact path. On Linux that is:
 
 ```text
 ~/.config/nami/sessions/<session-id>/debug.log
