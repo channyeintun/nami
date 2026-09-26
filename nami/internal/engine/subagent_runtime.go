@@ -283,16 +283,9 @@ func executeSubagent(
 	childHandoff := buildDelegatedPromptBrief(req.Description, req.Prompt, req.Role, subagentType, promptArchivePath)
 	childMessages := []api.Message{{Role: api.RoleUser, Content: injectChildHookContext(childHandoff, startHookMessages)}}
 	allowedDefs := childRegistry.Definitions()
-	childPrompt := subagentSystemPrompt(subagentType, allowedDefs)
-	if overlay, overlayErr := swarm.LoadRolePromptOverlay(cwd, req.Role); overlayErr == nil {
-		childPrompt = swarm.JoinPromptSections(childPrompt, overlay.Content)
-	} else if !errors.Is(overlayErr, os.ErrNotExist) {
-		return toolpkg.AgentRunResult{}, overlayErr
-	}
-	if handoffInstructions, handoffErr := swarm.LoadRoleHandoffInstructions(cwd, req.Role); handoffErr == nil {
-		childPrompt = swarm.JoinPromptSections(childPrompt, handoffInstructions)
-	} else if !errors.Is(handoffErr, os.ErrNotExist) {
-		return toolpkg.AgentRunResult{}, handoffErr
+	childPrompt, err := withRolePromptSections(subagentSystemPrompt(subagentType, allowedDefs), cwd, req.Role)
+	if err != nil {
+		return toolpkg.AgentRunResult{}, err
 	}
 	queryTools := allowedDefs
 	executionRegistry := childRegistry
@@ -516,6 +509,27 @@ func runChildStartHooks(
 		}
 	}
 	return messages
+}
+
+// withRolePromptSections layers a swarm role's prompt overlay and handoff
+// instructions onto a child's system prompt. A child launched without a role
+// keeps the prompt as is: the project's swarm spec only describes roles, so
+// nothing in it applies, and asking it about an empty role name is an error.
+func withRolePromptSections(prompt string, cwd string, role string) (string, error) {
+	if strings.TrimSpace(role) == "" {
+		return prompt, nil
+	}
+	if overlay, err := swarm.LoadRolePromptOverlay(cwd, role); err == nil {
+		prompt = swarm.JoinPromptSections(prompt, overlay.Content)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return "", err
+	}
+	if instructions, err := swarm.LoadRoleHandoffInstructions(cwd, role); err == nil {
+		prompt = swarm.JoinPromptSections(prompt, instructions)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return "", err
+	}
+	return prompt, nil
 }
 
 func injectChildHookContext(prompt string, hookMessages []string) string {
