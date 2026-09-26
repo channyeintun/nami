@@ -124,6 +124,11 @@ func ExecuteBatchWithOptions(ctx context.Context, batch Batch, options ExecuteOp
 }
 
 func executePendingCall(ctx context.Context, call PendingCall, options ExecuteOptions) IndexedResult {
+	// A call still waiting its turn when the context ends must not start: not
+	// every tool checks its context.
+	if err := ctx.Err(); err != nil {
+		return cancelledResult(call.Index, err)
+	}
 	if options.PermissionGate != nil {
 		decision, err := options.PermissionGate(ctx, call)
 		if err != nil {
@@ -151,6 +156,15 @@ func executePendingCall(ctx context.Context, call PendingCall, options ExecuteOp
 
 	output, err := executeTool(ctx, call.Tool, call.Input)
 	return IndexedResult{Index: call.Index, Output: output, Err: err}
+}
+
+// cancelledResult reports a call that never started because its context ended.
+func cancelledResult(index int, err error) IndexedResult {
+	return IndexedResult{
+		Index:  index,
+		Output: ToolOutput{Output: "tool execution cancelled", IsError: true},
+		Err:    err,
+	}
 }
 
 // executeTool runs one tool call and turns a panic inside it into an error

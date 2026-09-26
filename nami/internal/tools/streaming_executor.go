@@ -138,14 +138,7 @@ func (e *StreamingExecutor) abortPending() []IndexedResult {
 		}
 		call.status = streamingCallCompleted
 		call.completed = true
-		call.result = IndexedResult{
-			Index: call.pending.Index,
-			Output: ToolOutput{
-				Output:  "tool execution cancelled",
-				IsError: true,
-			},
-			Err: e.ctx.Err(),
-		}
+		call.result = cancelledResult(call.pending.Index, e.ctx.Err())
 	}
 	return e.collectReadyLocked()
 }
@@ -165,6 +158,12 @@ func (e *StreamingExecutor) collectReadyLocked() []IndexedResult {
 }
 
 func (e *StreamingExecutor) processQueueLocked() {
+	// Nothing new starts once the executor is cancelled: not every tool checks
+	// its context, and a queued call that ran anyway would act on a cancelled
+	// turn. Wait reports the calls left in the queue as cancelled.
+	if e.ctx.Err() != nil {
+		return
+	}
 	for _, call := range e.calls {
 		if call.status != streamingCallQueued {
 			continue
