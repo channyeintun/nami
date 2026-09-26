@@ -264,14 +264,18 @@ func (s *openAIResponsesStreamState) handleOutputItemDone(data string, yield fun
 }
 
 func (s *openAIResponsesStreamState) emitMessageSuffix(item openAIResponsesOutputItem, yield func(ModelEvent, error) bool) error {
-	finalText := strings.TrimSpace(joinOpenAIResponsesMessageContent(item.Content))
+	finalText := joinOpenAIResponsesMessageContent(item.Content)
 	streamed := s.currentText.String()
 	s.currentText.Reset()
-	if finalText == "" {
+	if strings.TrimSpace(finalText) == "" {
 		return nil
 	}
 
-	suffix := finalText
+	// The deltas normally streamed the text already, so only what they missed
+	// is emitted. The streamed text is compared with the final text exactly as
+	// sent: trimming only the final text made any message with leading or
+	// trailing whitespace look unstreamed, and it was emitted a second time.
+	suffix := strings.TrimSpace(finalText)
 	if streamed != "" && strings.HasPrefix(finalText, streamed) {
 		suffix = finalText[len(streamed):]
 	}
