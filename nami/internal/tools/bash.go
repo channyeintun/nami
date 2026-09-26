@@ -34,6 +34,12 @@ type localShell struct {
 // would exhaust memory for output that gets truncated downstream anyway.
 const maxForegroundOutputBytes = 4 * 1024 * 1024
 
+// commandWaitDelay bounds how long a finished or killed command may keep its
+// output pipes open. A process it left running in the background, such as a
+// server started with "&", inherits the pipes and would otherwise hold the
+// call open for as long as that process lives.
+const commandWaitDelay = 2 * time.Second
+
 // BashTool executes shell commands through the preferred local shell with basic security validation.
 type BashTool struct{}
 
@@ -161,6 +167,7 @@ func (t *BashTool) Execute(ctx context.Context, input ToolInput) (ToolOutput, er
 		return ToolOutput{}, err
 	}
 	cmd.Dir = workingDir
+	killProcessTreeOnCancel(cmd)
 
 	stdout := &cappedBuffer{limit: maxForegroundOutputBytes}
 	stderr := &cappedBuffer{limit: maxForegroundOutputBytes}
@@ -180,10 +187,25 @@ func (t *BashTool) Execute(ctx context.Context, input ToolInput) (ToolOutput, er
 		if _, ok := errors.AsType[*exec.ExitError](err); ok {
 			return ToolOutput{Output: combined, IsError: true}, nil
 		}
+		if errors.Is(err, exec.ErrWaitDelay) {
+			// The command itself succeeded; something it started in the
+			// background still holds the output open and keeps running.
+			note := "[The command exited, but processes it started in the background are still running and their later output is not captured. Use background: true for long-running processes.]"
+			return ToolOutput{Output: strings.TrimSpace(combined + "\n" + note)}, nil
+		}
 		return ToolOutput{}, fmt.Errorf("run bash command: %w", err)
 	}
 
 	return ToolOutput{Output: combined}, nil
+}
+
+// killProcessTreeOnCancel makes cancelling cmd's context kill every process the
+// command started, not just the shell, and stops Wait from blocking on output
+// pipes that a surviving background process still holds.
+func killProcessTreeOnCancel(cmd *exec.Cmd) {
+	startInOwnProcessGroup(cmd)
+	cmd.Cancel = func() error { return killProcessTree(cmd) }
+	cmd.WaitDelay = commandWaitDelay
 }
 
 func resolveWorkingDirectory(params map[string]any) (string, error) {
