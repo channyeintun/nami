@@ -5,6 +5,8 @@ import type {
   UIAskUserQuestionRequest,
 } from "../hooks/useEvents.js";
 
+type Question = UIAskUserQuestionRequest["questions"][number];
+
 interface AskUserQuestionPromptProps {
   request: UIAskUserQuestionRequest;
   onSubmit: (
@@ -67,23 +69,8 @@ const AskUserQuestionPrompt: FC<AskUserQuestionPromptProps> = ({
   const currentQuestion = request.questions[questionIndex];
   const currentAnswer = answers[questionIndex] ?? initialAnswers[questionIndex];
 
-  if (!currentQuestion || !currentAnswer) {
-    return null;
-  }
-
-  const dialogWidth =
-    terminalColumns > 52
-      ? Math.min(96, terminalColumns - 4)
-      : Math.max(24, terminalColumns - 2);
-  const dialogHeight =
-    terminalRows > 16
-      ? Math.min(24, terminalRows - 4)
-      : Math.max(10, terminalRows - 2);
-
-  const persistCurrentAnswer = () => {
-    const freeformText = currentQuestion.allowFreeform
-      ? freeformDraft.trim()
-      : "";
+  const persistCurrentAnswer = (question: Question) => {
+    const freeformText = question.allowFreeform ? freeformDraft.trim() : "";
     setAnswers((existing) =>
       existing.map((answer, index) => {
         if (index !== questionIndex) {
@@ -101,12 +88,12 @@ const AskUserQuestionPrompt: FC<AskUserQuestionPromptProps> = ({
     );
   };
 
-  const buildFinalAnswers = () =>
+  const buildFinalAnswers = (question: Question) =>
     answers.map((answer, index) => {
       if (index !== questionIndex) {
         return answer;
       }
-      const freeformText = currentQuestion.allowFreeform
+      const freeformText = question.allowFreeform
         ? freeformDraft.trim()
         : answer.freeformText;
       const rawAnswer = [...answer.selectedValues, freeformText]
@@ -119,8 +106,8 @@ const AskUserQuestionPrompt: FC<AskUserQuestionPromptProps> = ({
       };
     });
 
-  const toggleSelection = () => {
-    const option = currentQuestion.options[optionIndex];
+  const toggleSelection = (question: Question) => {
+    const option = question.options[optionIndex];
     if (!option) {
       return;
     }
@@ -129,7 +116,7 @@ const AskUserQuestionPrompt: FC<AskUserQuestionPromptProps> = ({
         if (index !== questionIndex) {
           return answer;
         }
-        if (currentQuestion.multiSelect) {
+        if (question.multiSelect) {
           const selectedValues = answer.selectedValues.includes(option.value)
             ? answer.selectedValues.filter((value) => value !== option.value)
             : [...answer.selectedValues, option.value];
@@ -146,6 +133,8 @@ const AskUserQuestionPrompt: FC<AskUserQuestionPromptProps> = ({
     );
   };
 
+  // Registered before the early return below, so the hook order does not
+  // depend on whether there is a question to show.
   useInput((input, key) => {
     if (key.escape) {
       onSubmit("cancelled", []);
@@ -153,6 +142,9 @@ const AskUserQuestionPrompt: FC<AskUserQuestionPromptProps> = ({
     }
     if (key.ctrl && input === "d") {
       onSubmit("declined", []);
+      return;
+    }
+    if (!currentQuestion) {
       return;
     }
 
@@ -192,7 +184,7 @@ const AskUserQuestionPrompt: FC<AskUserQuestionPromptProps> = ({
       return;
     }
     if (input === " " && currentQuestion.options.length > 0) {
-      toggleSelection();
+      toggleSelection(currentQuestion);
       return;
     }
     if (!currentQuestion.multiSelect && currentQuestion.options.length > 0) {
@@ -220,9 +212,9 @@ const AskUserQuestionPrompt: FC<AskUserQuestionPromptProps> = ({
       }
     }
     if (key.return) {
-      persistCurrentAnswer();
+      persistCurrentAnswer(currentQuestion);
       if (questionIndex >= request.questions.length - 1) {
-        onSubmit("answered", buildFinalAnswers());
+        onSubmit("answered", buildFinalAnswers(currentQuestion));
         return;
       }
       const nextIndex = questionIndex + 1;
@@ -235,6 +227,19 @@ const AskUserQuestionPrompt: FC<AskUserQuestionPromptProps> = ({
       );
     }
   });
+
+  if (!currentQuestion || !currentAnswer) {
+    return null;
+  }
+
+  const dialogWidth =
+    terminalColumns > 52
+      ? Math.min(96, terminalColumns - 4)
+      : Math.max(24, terminalColumns - 2);
+  const dialogHeight =
+    terminalRows > 16
+      ? Math.min(24, terminalRows - 4)
+      : Math.max(10, terminalRows - 2);
 
   return (
     <ModalDialog
