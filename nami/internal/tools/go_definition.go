@@ -285,30 +285,16 @@ func goDefinitionSpecMatch(fset *token.FileSet, filePath, packageName string, de
 	return goDefinitionMatch{}, false
 }
 
+// formatGoFuncDecl prints a function's signature: the declaration without its
+// doc comment or body, so receivers and type parameters print as written.
 func formatGoFuncDecl(fset *token.FileSet, decl *ast.FuncDecl) string {
-	var buf bytes.Buffer
-	buf.WriteString("func ")
-	if decl.Recv != nil && len(decl.Recv.List) > 0 {
-		buf.WriteString("(")
-		for index, field := range decl.Recv.List {
-			if index > 0 {
-				buf.WriteString(", ")
-			}
-			if len(field.Names) > 0 {
-				buf.WriteString(field.Names[0].Name)
-				buf.WriteString(" ")
-			}
-			buf.WriteString(formatGoNode(fset, field.Type))
-		}
-		buf.WriteString(") ")
-	}
-	buf.WriteString(decl.Name.Name)
-	buf.WriteString(formatGoNode(fset, decl.Type))
-	return strings.TrimSpace(buf.String())
+	return formatGoNode(fset, &ast.FuncDecl{Recv: decl.Recv, Name: decl.Name, Type: decl.Type})
 }
 
+// formatGoTypeSpec prints a type declaration from the spec itself, so type
+// parameters and the "=" of an alias are kept.
 func formatGoTypeSpec(fset *token.FileSet, spec *ast.TypeSpec) string {
-	return strings.TrimSpace("type " + spec.Name.Name + " " + formatGoNode(fset, spec.Type))
+	return "type " + formatGoNode(fset, spec)
 }
 
 func formatGoValueSpec(fset *token.FileSet, decl *ast.GenDecl, spec *ast.ValueSpec, symbol string) string {

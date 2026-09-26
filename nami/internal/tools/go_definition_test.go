@@ -36,6 +36,57 @@ func TestGoDefinitionReportsPhysicalPositions(t *testing.T) {
 	}
 }
 
+func TestGoDefinitionSignatures(t *testing.T) {
+	workspace := inWorkspace(t)
+	path := writeWorkspaceFile(t, workspace, "sig.go", `package sig
+
+import "context"
+
+type Server struct{}
+
+// Start is documented.
+func (s *Server) Start(ctx context.Context) error {
+	return nil
+}
+
+func (Server) Name() string { return "" }
+
+func Map[T any, U any](items []T, fn func(T) U) []U {
+	return nil
+}
+
+func Parse() int { return 0 }
+
+type List[T any] []T
+
+type Alias = int
+`)
+
+	cases := map[string]string{
+		"Start": "func (s *Server) Start(ctx context.Context) error",
+		"Name":  "func (Server) Name() string",
+		"Map":   "func Map[T any, U any](items []T, fn func(T) U) []U",
+		"Parse": "func Parse() int",
+		"List":  "type List[T any] []T",
+		"Alias": "type Alias = int",
+	}
+	for symbol, want := range cases {
+		t.Run(symbol, func(t *testing.T) {
+			output, err := NewGoDefinitionTool().Execute(context.Background(), ToolInput{Params: map[string]any{"symbol": symbol, "path": path}})
+			if err != nil {
+				t.Fatalf("go_definition: %v", err)
+			}
+			var matches []goDefinitionMatch
+			if err := json.Unmarshal([]byte(output.Output), &matches); err != nil {
+				t.Fatalf("output %q: %v", output.Output, err)
+			}
+			if len(matches) != 1 || matches[0].Signature != want {
+				t.Fatalf("matches = %+v, want signature %q", matches, want)
+			}
+		})
+	}
+}
+
 func TestGoReferencesReportsPhysicalPositions(t *testing.T) {
 	workspace := inWorkspace(t)
 	path := writeWorkspaceFile(t, workspace, "parser.go", lineDirectiveSource)
