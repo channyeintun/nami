@@ -415,6 +415,12 @@ export function renderMarkdownBlocks(text: string): MarkdownBlock[] {
       continue;
     }
 
+    // Headings, code blocks and rules already end in a blank line; the
+    // blank line that follows them in the source would add a second.
+    if (token.type === "space" && currentText.endsWith(`${EOL}${EOL}`)) {
+      continue;
+    }
+
     currentText += formatToken(token);
   }
 
