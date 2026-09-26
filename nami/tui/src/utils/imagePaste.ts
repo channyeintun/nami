@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { readFile, rm } from "node:fs/promises";
+import { readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, extname, join } from "node:path";
 
@@ -19,6 +19,8 @@ export interface ParsedPasteParts {
 interface ReadImageFileResult {
   image: PastedImageData | null;
   warning: string | null;
+  // Refused for its size rather than because it could not be read.
+  tooLarge?: boolean;
 }
 
 // osascript and PowerShell answer in well under this, but a clipboard owner
@@ -120,9 +122,47 @@ function mediaTypeFromFilename(filename: string): string {
   }
 }
 
-async function readImageFile(path: string): Promise<ReadImageFileResult> {
+// A prompt and its images reach the engine as one line of JSON, which it
+// rejects above 10 MB, and base64 makes image data a third larger. 5 MiB of
+// image data encodes to about 6.7 MiB, leaving room for the rest of the
+// message.
+const MAX_PASTED_IMAGE_BYTES = 5 * 1024 * 1024;
+
+const NO_IMAGE: ReadImageFileResult = { image: null, warning: null };
+
+function formatMegabytes(bytes: number): string {
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function oversizedImageWarning(label: string, bytes: number): string {
+  return `Pasted image ${label} is ${formatMegabytes(bytes)}; images larger than ${formatMegabytes(MAX_PASTED_IMAGE_BYTES)} cannot be sent.`;
+}
+
+function oversizedImage(label: string, bytes: number): ReadImageFileResult {
+  return {
+    image: null,
+    warning: oversizedImageWarning(label, bytes),
+    tooLarge: true,
+  };
+}
+
+// label names the image in warnings; it defaults to the file's path.
+async function readImageFile(
+  path: string,
+  label = path,
+): Promise<ReadImageFileResult> {
   try {
+    // Check the size before reading so an oversized file is never loaded.
+    const { size } = await stat(path);
+    if (size > MAX_PASTED_IMAGE_BYTES) {
+      return oversizedImage(label, size);
+    }
+
     const buffer = await readFile(path);
+    if (buffer.length > MAX_PASTED_IMAGE_BYTES) {
+      return oversizedImage(label, buffer.length);
+    }
+
     return {
       image: {
         data: buffer.toString("base64"),
@@ -136,14 +176,14 @@ async function readImageFile(path: string): Promise<ReadImageFileResult> {
     const reason = error instanceof Error ? error.message : "unknown error";
     return {
       image: null,
-      warning: `Failed to load pasted image path ${path}: ${reason}`,
+      warning: `Failed to load pasted image path ${label}: ${reason}`,
     };
   }
 }
 
-async function readClipboardImageOnMac(): Promise<PastedImageData | null> {
+async function readClipboardImageOnMac(): Promise<ReadImageFileResult> {
   if (process.platform !== "darwin") {
-    return null;
+    return NO_IMAGE;
   }
 
   try {
@@ -156,12 +196,15 @@ async function readClipboardImageOnMac(): Promise<PastedImageData | null> {
 
     if (clipboardPath.length > 0) {
       if (!isAbsoluteImagePath(clipboardPath)) {
-        return null;
+        return NO_IMAGE;
       }
 
+      // An unreadable file (a screenshot's temporary file is often gone
+      // already) falls through to the image data on the clipboard; an
+      // oversized one is reported instead.
       const result = await readImageFile(clipboardPath);
-      if (result.image) {
-        return result.image;
+      if (result.image || result.tooLarge) {
+        return result;
       }
     }
   } catch {
@@ -184,22 +227,28 @@ async function readClipboardImageOnMac(): Promise<PastedImageData | null> {
       "osascript",
       script.flatMap((line) => ["-e", line]),
     );
-    const buffer = await readFile(outputPath);
+    const result = await readImageFile(outputPath, "from the clipboard");
+    if (!result.image) {
+      return result.tooLarge ? result : NO_IMAGE;
+    }
     return {
-      data: buffer.toString("base64"),
-      mediaType: "image/png",
-      filename: "clipboard.png",
+      image: {
+        data: result.image.data,
+        mediaType: "image/png",
+        filename: "clipboard.png",
+      },
+      warning: null,
     };
   } catch {
-    return null;
+    return NO_IMAGE;
   } finally {
     removeTemporaryFile(outputPath);
   }
 }
 
-async function readClipboardImageOnWindows(): Promise<PastedImageData | null> {
+async function readClipboardImageOnWindows(): Promise<ReadImageFileResult> {
   if (process.platform !== "win32") {
-    return null;
+    return NO_IMAGE;
   }
 
   const outputPath = join(
@@ -234,48 +283,60 @@ async function readClipboardImageOnWindows(): Promise<PastedImageData | null> {
     ).trim();
 
     if (!isAbsoluteImagePath(clipboardPath)) {
-      return null;
+      return NO_IMAGE;
     }
 
-    const result = await readImageFile(clipboardPath);
+    const fromClipboardImage = clipboardPath === outputPath;
+    const result = await readImageFile(
+      clipboardPath,
+      fromClipboardImage ? "from the clipboard" : clipboardPath,
+    );
     if (!result.image) {
-      return null;
+      // Only a size refusal is worth a warning; anything else means there
+      // was no usable image, as before.
+      return result.tooLarge ? result : NO_IMAGE;
     }
 
-    if (clipboardPath === outputPath) {
+    if (fromClipboardImage) {
       return {
-        ...result.image,
-        filename: "clipboard.png",
+        image: { ...result.image, filename: "clipboard.png" },
+        warning: null,
       };
     }
 
-    return result.image;
+    return result;
   } catch {
-    return null;
+    return NO_IMAGE;
   } finally {
     removeTemporaryFile(outputPath);
   }
 }
 
-async function readClipboardImage(): Promise<PastedImageData | null> {
+async function readClipboardImage(): Promise<ReadImageFileResult> {
   if (process.platform === "darwin") {
     return readClipboardImageOnMac();
   }
   if (process.platform === "win32") {
     return readClipboardImageOnWindows();
   }
-  return null;
+  return NO_IMAGE;
 }
 
 function extractImageDataUrls(text: string): ParsedPasteParts {
   const images: PastedImageData[] = [];
+  const warnings: string[] = [];
   const stripped = text.replace(
     /data:(image\/[a-zA-Z0-9.+-]+);base64,([A-Za-z0-9+/=\r\n]+)/g,
     (_match, mediaType: string, base64Data: string) => {
-      images.push({
-        data: base64Data.replace(/\s+/g, ""),
-        mediaType,
-      });
+      const data = base64Data.replace(/\s+/g, "");
+      const bytes = Math.floor((data.length * 3) / 4);
+      if (bytes > MAX_PASTED_IMAGE_BYTES) {
+        // Dropped rather than left in the prompt: as text it is just as
+        // much too large to send.
+        warnings.push(oversizedImageWarning("data URL", bytes));
+        return "";
+      }
+      images.push({ data, mediaType });
       return "";
     },
   );
@@ -283,7 +344,7 @@ function extractImageDataUrls(text: string): ParsedPasteParts {
   return {
     text: stripped.trim(),
     images,
-    warnings: [],
+    warnings,
   };
 }
 
@@ -292,16 +353,16 @@ export async function parsePasteParts(text: string): Promise<ParsedPasteParts> {
   // and the prompt editor only understands LF.
   const normalized = text.replace(/\r\n?/g, "\n");
   if (normalized.trim().length === 0) {
-    const clipboardImage = await readClipboardImage();
+    const clipboard = await readClipboardImage();
     return {
       text: "",
-      images: clipboardImage ? [clipboardImage] : [],
-      warnings: [],
+      images: clipboard.image ? [clipboard.image] : [],
+      warnings: clipboard.warning ? [clipboard.warning] : [],
     };
   }
 
   const dataUrlParts = extractImageDataUrls(normalized);
-  if (dataUrlParts.images.length > 0) {
+  if (dataUrlParts.images.length > 0 || dataUrlParts.warnings.length > 0) {
     return dataUrlParts;
   }
 
