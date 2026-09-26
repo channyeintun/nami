@@ -18,6 +18,8 @@ import type {
 
 interface StatusBarProps {
   ready: boolean;
+  /** The engine has exited: nothing more will happen in this session. */
+  stopped?: boolean;
   mode: string;
   model: string;
   reasoningEffort?: string | null;
@@ -47,6 +49,7 @@ interface StatusBarProps {
 
 const StatusBar: FC<StatusBarProps> = ({
   ready,
+  stopped = false,
   mode,
   model,
   reasoningEffort,
@@ -73,8 +76,8 @@ const StatusBar: FC<StatusBarProps> = ({
   rateLimits,
   goalCondition,
 }) => {
-  const readinessLabel = ready ? "READY" : "BOOTING";
-  const readinessColor = ready ? "$success" : "$warning";
+  const readinessLabel = stopped ? "STOPPED" : ready ? "READY" : "BOOTING";
+  const readinessColor = stopped ? "$error" : ready ? "$success" : "$warning";
   const workspaceLabel = path.basename(process.cwd());
   const sessionLabel = sessionTitle?.trim()
     ? sessionTitle.trim()

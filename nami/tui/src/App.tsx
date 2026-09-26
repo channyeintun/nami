@@ -834,6 +834,7 @@ const App: FC<AppProps> = ({ enginePath, model, mode, autoMode }) => {
         <Box flexShrink={0}>
           <StatusBar
             ready={isEngineReady}
+            stopped={engine.error !== null}
             mode={uiState.mode}
             model={uiState.model}
             reasoningEffort={uiState.reasoningEffort}
