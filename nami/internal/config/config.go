@@ -305,11 +305,36 @@ func Save(cfg Config) error {
 	if err := os.MkdirAll(ConfigDir(), 0o700); err != nil {
 		return err
 	}
+	if err := ensureConfigReplaceable(ConfigPath()); err != nil {
+		return err
+	}
 	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		return err
 	}
 	return writePrivateFile(ConfigPath(), data)
+}
+
+// ensureConfigReplaceable refuses to replace a config file that exists but no
+// longer decodes. Loading falls back to defaults for such a file, so saving over
+// it would silently discard every stored token and MCP server; the user has to
+// repair or remove it first.
+func ensureConfigReplaceable(path string) error {
+	data, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("read existing config: %w", err)
+	}
+	if len(strings.TrimSpace(string(data))) == 0 {
+		return nil
+	}
+	var existing Config
+	if err := json.Unmarshal(data, &existing); err != nil {
+		return fmt.Errorf("refusing to overwrite %s, which does not parse (%w): fix or remove it so its stored credentials and MCP servers are not lost", path, err)
+	}
+	return nil
 }
 
 // writePrivateFile replaces path with data. The temporary file is created with

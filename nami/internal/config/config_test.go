@@ -143,3 +143,36 @@ func TestSaveRoundTripsThroughLoad(t *testing.T) {
 		t.Fatalf("model = %q/%q after reload", loaded.Provider, loaded.Model)
 	}
 }
+
+// A config.json that no longer parses loads as defaults. Saving over it would
+// then silently replace the user's stored tokens and MCP servers with those
+// defaults, so Save refuses and leaves the file for the user to repair.
+func TestSaveRefusesToOverwriteUnparseableConfig(t *testing.T) {
+	useTempConfigDir(t)
+	if err := os.MkdirAll(ConfigDir(), 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	damaged := []byte(`{"github_copilot": {"github_token": "gho_keep_me"`)
+	if err := os.WriteFile(ConfigPath(), damaged, 0o600); err != nil {
+		t.Fatalf("write damaged config: %v", err)
+	}
+
+	if err := Save(DefaultConfig()); err == nil {
+		t.Fatal("Save overwrote a config file that does not parse")
+	}
+	data, err := os.ReadFile(ConfigPath())
+	if err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+	if string(data) != string(damaged) {
+		t.Fatalf("damaged config was modified: %q", data)
+	}
+
+	// An empty file holds nothing to lose.
+	if err := os.WriteFile(ConfigPath(), []byte("  \n"), 0o600); err != nil {
+		t.Fatalf("write empty config: %v", err)
+	}
+	if err := Save(DefaultConfig()); err != nil {
+		t.Fatalf("Save over an empty config: %v", err)
+	}
+}
