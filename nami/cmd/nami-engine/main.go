@@ -73,10 +73,7 @@ func runEngine(modelFlag, modeFlag string, stdioMode, autoMode bool) error {
 	cfg := config.LoadForWorkingDir(cwd)
 
 	// CLI flag overrides
-	if modelFlag != "" {
-		cfg.Model = modelFlag
-		cfg.ModelSource = "flag"
-	}
+	cfg = applyModelFlag(cfg, modelFlag)
 	if modeFlag != "" {
 		cfg.DefaultMode = modeFlag
 	}
@@ -100,6 +97,37 @@ func runEngine(modelFlag, modeFlag string, stdioMode, autoMode bool) error {
 	}
 
 	return launchTUI(ctx, cfg)
+}
+
+// applyModelFlag applies --model the same way NAMI_MODEL is applied: a
+// provider/model value sets both, and a bare model keeps the configured
+// provider.
+func applyModelFlag(cfg config.Config, modelFlag string) config.Config {
+	modelFlag = strings.TrimSpace(modelFlag)
+	if modelFlag == "" {
+		return cfg
+	}
+	if provider, model := config.ParseModel(modelFlag); provider != "" {
+		cfg.Provider = provider
+		cfg.Model = model
+	} else {
+		cfg.Model = modelFlag
+	}
+	cfg.ModelSource = "flag"
+	return cfg
+}
+
+// tuiModelSelection is the model handed to the TUI, which passes it back to
+// the engine it starts as --model. That engine reloads the config, so the
+// provider travels with the model; a bare model would be paired with the
+// configured provider rather than the one resolved here.
+func tuiModelSelection(cfg config.Config) string {
+	model := strings.TrimSpace(cfg.Model)
+	provider := strings.TrimSpace(cfg.Provider)
+	if model == "" || provider == "" {
+		return model
+	}
+	return provider + "/" + model
 }
 
 func launchTUI(ctx context.Context, cfg config.Config) error {
@@ -127,7 +155,7 @@ func launchTUI(ctx context.Context, cfg config.Config) error {
 	cmd.Stderr = os.Stderr
 	cmd.Env = append(os.Environ(),
 		"NAMI_ENGINE_PATH="+enginePath,
-		"NAMI_MODEL="+cfg.Model,
+		"NAMI_MODEL="+tuiModelSelection(cfg),
 		"NAMI_MODE="+cfg.DefaultMode,
 		"NAMI_AUTO_MODE="+strconv.FormatBool(cfg.AutoMode),
 		"NAMI_COST_WARNING_THRESHOLD_USD="+strconv.FormatFloat(cfg.CostWarningThresholdUSD, 'f', -1, 64),

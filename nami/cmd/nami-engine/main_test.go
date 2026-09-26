@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 
 	commandspkg "github.com/channyeintun/nami/internal/commands"
+	"github.com/channyeintun/nami/internal/config"
 )
 
 func TestResolveTUIEntryPrefersExplicitOverride(t *testing.T) {
@@ -48,6 +49,64 @@ func TestResolveTUIEntryFindsTheBuiltBundle(t *testing.T) {
 	}
 	if _, statErr := os.Stat(got); statErr != nil {
 		t.Fatalf("resolved entry does not exist: %v", statErr)
+	}
+}
+
+// --model documents the provider/model form. Assigning it whole to the model
+// paired the configured provider with a model id like "openai/gpt-5".
+func TestApplyModelFlag(t *testing.T) {
+	configured := config.Config{Provider: "anthropic", Model: "claude-sonnet-5", ModelSource: "config"}
+	cases := []struct {
+		flag         string
+		wantProvider string
+		wantModel    string
+		wantSource   string
+	}{
+		{"openai/gpt-5", "openai", "gpt-5", "flag"},
+		{" openai/gpt-5 ", "openai", "gpt-5", "flag"},
+		{"groq/meta-llama/llama-4-scout", "groq", "meta-llama/llama-4-scout", "flag"},
+		{"claude-opus-5", "anthropic", "claude-opus-5", "flag"},
+		{"", "anthropic", "claude-sonnet-5", "config"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.flag, func(t *testing.T) {
+			got := applyModelFlag(configured, tc.flag)
+			if got.Provider != tc.wantProvider || got.Model != tc.wantModel || got.ModelSource != tc.wantSource {
+				t.Fatalf("applyModelFlag(%q) = %q/%q (%s), want %q/%q (%s)",
+					tc.flag, got.Provider, got.Model, got.ModelSource, tc.wantProvider, tc.wantModel, tc.wantSource)
+			}
+			provider, model := commandspkg.ResolveActiveSelection(got)
+			if provider != tc.wantProvider || model != tc.wantModel {
+				t.Fatalf("selection resolves to %q/%q, want %q/%q", provider, model, tc.wantProvider, tc.wantModel)
+			}
+		})
+	}
+}
+
+// The TUI hands NAMI_MODEL back to the engine it starts as --model, and that
+// engine reloads the config. A bare model there would be paired with the
+// configured provider instead of the one resolved here.
+func TestTUIModelSelectionSurvivesTheRoundTrip(t *testing.T) {
+	configured := config.Config{Provider: "anthropic", Model: "claude-sonnet-5", ModelSource: "config"}
+	chosen := []config.Config{
+		{Provider: "openai", Model: "gpt-5"},
+		{Provider: "groq", Model: "meta-llama/llama-4-scout"},
+		{Provider: "anthropic", Model: "claude-sonnet-5"},
+	}
+	for _, parent := range chosen {
+		t.Run(parent.Provider+"/"+parent.Model, func(t *testing.T) {
+			child := applyModelFlag(configured, tuiModelSelection(parent))
+			if child.Provider != parent.Provider || child.Model != parent.Model {
+				t.Fatalf("engine started by the TUI resolves %q/%q, want %q/%q", child.Provider, child.Model, parent.Provider, parent.Model)
+			}
+		})
+	}
+
+	if got := tuiModelSelection(config.Config{Model: "gpt-5"}); got != "gpt-5" {
+		t.Errorf("tuiModelSelection without a provider = %q, want the bare model", got)
+	}
+	if got := tuiModelSelection(config.Config{Provider: "anthropic"}); got != "" {
+		t.Errorf("tuiModelSelection without a model = %q, want empty so the engine picks the default", got)
 	}
 }
 
