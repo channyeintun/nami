@@ -1,10 +1,10 @@
 package session
 
 import (
-	"bufio"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -234,24 +234,22 @@ func (s *Store) LoadTranscript(sessionID string) ([]api.Message, error) {
 	}
 	defer f.Close()
 
-	scanner := bufio.NewScanner(f)
-	scanner.Buffer(make([]byte, 0, 64*1024), 2*1024*1024)
-
+	// Decode with the counterpart of the encoder SaveTranscript writes with. A
+	// line scanner would need a size cap, and a message carrying a pasted
+	// screenshot is larger than any sensible line buffer — a cap below what
+	// the writer accepts leaves the session impossible to resume.
+	decoder := json.NewDecoder(f)
 	messages := make([]api.Message, 0, 64)
-	for scanner.Scan() {
-		line := scanner.Bytes()
-		if len(line) == 0 {
-			continue
-		}
-
+	for {
 		var msg api.Message
-		if err := json.Unmarshal(line, &msg); err != nil {
-			return nil, fmt.Errorf("decode transcript message: %w", err)
+		err := decoder.Decode(&msg)
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("decode transcript message %d: %w", len(messages)+1, err)
 		}
 		messages = append(messages, msg)
-	}
-	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("scan transcript: %w", err)
 	}
 
 	return messages, nil
