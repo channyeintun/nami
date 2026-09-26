@@ -416,10 +416,14 @@ func fileExists(path string) bool {
 
 // readFileHead reads at most limit bytes from the start of a regular file, cut
 // on a rune boundary, and reports whether the file continues past them.
-// Retrieval reads files named in prompts and tool output, which can be any
-// size, but only ever keeps a small prefix.
+// Prompt context only ever keeps a bounded prefix of a file, and the files it
+// reads, such as those named in tool output, can be any size.
 func readFileHead(path string, limit int) (string, bool, error) {
-	if !fileExists(path) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return "", false, err
+	}
+	if !info.Mode().IsRegular() {
 		return "", false, fmt.Errorf("read %s: not a regular file", path)
 	}
 	file, err := os.Open(path)

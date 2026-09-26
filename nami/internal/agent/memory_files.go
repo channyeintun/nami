@@ -155,33 +155,36 @@ func walkUpDirs(start string) []string {
 	return dirs
 }
 
+// readMemoryFile and readMemoryIndex read at most twice the bytes they keep:
+// enough that trimming whitespace never marks a file that fits as truncated,
+// without reading a large file whole or blocking on a FIFO.
 func readMemoryFile(path string) (string, error) {
-	data, err := os.ReadFile(path)
+	data, more, err := readFileHead(path, 2*maxMemoryFileBytes)
 	if err != nil {
 		return "", err
 	}
-	content := strings.TrimSpace(string(data))
+	content := strings.TrimSpace(data)
 	if content == "" {
 		return "", os.ErrNotExist
 	}
-	if len(content) > maxMemoryFileBytes {
+	if more || len(content) > maxMemoryFileBytes {
 		content = textutil.TruncateHead(content, maxMemoryFileBytes) + "\n[truncated]"
 	}
 	return content, nil
 }
 
 func readMemoryIndex(path string) (string, error) {
-	data, err := os.ReadFile(path)
+	data, more, err := readFileHead(path, 2*maxMemoryIndexBytes)
 	if err != nil {
 		return "", err
 	}
-	content := strings.TrimSpace(string(data))
+	content := strings.TrimSpace(data)
 	if content == "" {
 		return "", os.ErrNotExist
 	}
 
 	lines := strings.Split(content, "\n")
-	truncated := false
+	truncated := more
 	if len(lines) > maxMemoryIndexLines {
 		lines = lines[:maxMemoryIndexLines]
 		truncated = true
