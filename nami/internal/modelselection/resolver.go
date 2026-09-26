@@ -52,10 +52,11 @@ func InferProviderFromModel(model string) string {
 		return "glm"
 	case strings.Contains(lower, "mistral"):
 		return "mistral"
-	case strings.Contains(lower, "llama"), strings.Contains(lower, "maverick"):
-		return "groq"
+	// "ollama" contains "llama", so it has to be checked first.
 	case strings.Contains(lower, "gemma"), strings.Contains(lower, "ollama"):
 		return "ollama"
+	case strings.Contains(lower, "llama"), strings.Contains(lower, "maverick"):
+		return "groq"
 	case strings.Contains(lower, "claude"), strings.Contains(lower, "sonnet"), strings.Contains(lower, "opus"), strings.Contains(lower, "haiku"):
 		return "anthropic"
 	default:

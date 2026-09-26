@@ -111,6 +111,20 @@ func TestInferProviderFromModelReturnsEmptyForUnknown(t *testing.T) {
 	}
 }
 
+// "ollama" contains "llama"; a model naming Ollama must not go to Groq.
+func TestInferProviderFromModelPrefersOllamaOverItsLlamaSubstring(t *testing.T) {
+	cases := map[string]string{
+		"ollama-local-coder": "ollama",
+		"gemma3:4b":          "ollama",
+		"llama-4-scout":      "groq",
+	}
+	for model, want := range cases {
+		if got := InferProviderFromModel(model); got != want {
+			t.Errorf("InferProviderFromModel(%q) = %q, want %q", model, got, want)
+		}
+	}
+}
+
 func TestIsModelCompatibleWithProvider(t *testing.T) {
 	compatible := []struct {
 		model    string
