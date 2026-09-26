@@ -242,24 +242,31 @@ const Input: FC<InputProps> = ({
 
       ensurePendingSubmitDoesNotSwallowPaste(text);
 
-      void parsePasteParts(text).then((parts) => {
-        if (parts.text.length > 0) {
-          prompt.insertText(parts.text);
-        }
-        if (parts.images.length > 0) {
-          onImagePaste(parts.images);
-        }
-        if (
-          options?.warnIfClipboardImageMissing &&
-          parts.images.length === 0 &&
-          parts.text.length === 0 &&
-          parts.warnings.length === 0
-        ) {
-          onPasteWarning(["No image found in clipboard"]);
-          return;
-        }
-        onPasteWarning(parts.warnings);
-      });
+      // A rejection here would reach silvery's unhandledRejection handler,
+      // which tears the whole app down, so report it as a paste warning.
+      parsePasteParts(text)
+        .then((parts) => {
+          if (parts.text.length > 0) {
+            prompt.insertText(parts.text);
+          }
+          if (parts.images.length > 0) {
+            onImagePaste(parts.images);
+          }
+          if (
+            options?.warnIfClipboardImageMissing &&
+            parts.images.length === 0 &&
+            parts.text.length === 0 &&
+            parts.warnings.length === 0
+          ) {
+            onPasteWarning(["No image found in clipboard"]);
+            return;
+          }
+          onPasteWarning(parts.warnings);
+        })
+        .catch((error: unknown) => {
+          const reason = error instanceof Error ? error.message : String(error);
+          onPasteWarning([`Paste failed: ${reason}`]);
+        });
     },
     [disabled, onImagePaste, onPasteWarning, prompt],
   );
