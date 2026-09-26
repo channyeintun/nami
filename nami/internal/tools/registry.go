@@ -2,6 +2,8 @@ package tools
 
 import (
 	"fmt"
+	"slices"
+	"strings"
 	"sync"
 
 	"github.com/channyeintun/nami/internal/api"
@@ -116,7 +118,9 @@ func (r *Registry) List() []string {
 	return names
 }
 
-// Definitions returns API tool definitions for all registered tools.
+// Definitions returns API tool definitions for all registered tools, sorted by
+// name. They open every model request, and providers that cache prompts by
+// exact prefix only hit the cache when the order is the same each time.
 func (r *Registry) Definitions() []api.ToolDefinition {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -128,6 +132,7 @@ func (r *Registry) Definitions() []api.ToolDefinition {
 			InputSchema: t.InputSchema(),
 		})
 	}
+	slices.SortFunc(defs, func(a, b api.ToolDefinition) int { return strings.Compare(a.Name, b.Name) })
 	return defs
 }
 
