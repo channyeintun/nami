@@ -109,7 +109,9 @@ func (t *FileWriteTool) Execute(ctx context.Context, input ToolInput) (ToolOutpu
 		oldContent = string(previousBytes)
 	}
 
-	trackFileBeforeWrite(filePath)
+	if err := trackFileBeforeWrite(filePath); err != nil {
+		return ToolOutput{}, err
+	}
 
 	parentDir := filepath.Dir(filePath)
 	if err := os.MkdirAll(parentDir, 0o755); err != nil {

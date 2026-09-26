@@ -168,6 +168,45 @@ func TestFileHistoryToolsRewindToSnapshot(t *testing.T) {
 	}
 }
 
+// A write that could not be backed up for an open snapshot could never be
+// rewound, so the tools must refuse it rather than modify the file.
+func TestFileToolsRefuseWritesThatCannotBeBackedUp(t *testing.T) {
+	workspace := inWorkspace(t)
+	blocker := writeWorkspaceFile(t, t.TempDir(), "not-a-directory", "")
+	history := NewFileHistory(filepath.Join(blocker, "file-history"))
+	SetGlobalFileHistory(history)
+	t.Cleanup(func() { SetGlobalFileHistory(nil) })
+	takeSnapshot(t, history, "checkpoint")
+
+	const original = "alpha\n"
+	const notebook = `{"cells": [], "metadata": {}, "nbformat": 4, "nbformat_minor": 5}`
+	cases := []struct {
+		name    string
+		file    string
+		content string
+		tool    Tool
+		params  map[string]any
+	}{
+		{"replace_string_in_file", "edit.txt", original, NewFileEditTool(), map[string]any{"filePath": "edit.txt", "oldString": "alpha", "newString": "beta"}},
+		{"file_write", "write.txt", original, NewFileWriteTool(), map[string]any{"file_path": "write.txt", "content": "beta\n"}},
+		{"apply_patch update", "update.txt", original, NewApplyPatchTool(), map[string]any{"input": "*** Begin Patch\n*** Update File: update.txt\n@@\n-alpha\n+beta\n*** End Patch"}},
+		{"apply_patch delete", "delete.txt", original, NewApplyPatchTool(), map[string]any{"input": "*** Begin Patch\n*** Delete File: delete.txt\n*** End Patch"}},
+		{"notebook_edit", "book.ipynb", notebook, NewNotebookEditTool(), map[string]any{"filePath": "book.ipynb", "operation": "insert", "cellType": "code", "source": "x = 1"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			path := writeWorkspaceFile(t, workspace, tc.file, tc.content)
+			output, err := runValidatedTool(t, tc.tool, tc.params)
+			if err == nil && !output.IsError {
+				t.Fatalf("%s succeeded without a backup: %q", tc.name, output.Output)
+			}
+			if got := describeState(fileState(t, path)); got != tc.content {
+				t.Fatalf("file changed to %q, want it untouched", got)
+			}
+		})
+	}
+}
+
 // Rewinding a deletion recreates the file with the permissions it had, so an
 // executable script comes back executable.
 func TestFileHistoryRewindRestoresFileMode(t *testing.T) {

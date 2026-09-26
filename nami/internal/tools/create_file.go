@@ -102,7 +102,9 @@ func (t *CreateFileTool) Execute(ctx context.Context, input ToolInput) (ToolOutp
 		return ToolOutput{}, fmt.Errorf("stat file %q: %w", filePath, err)
 	}
 
-	trackFileBeforeWrite(filePath)
+	if err := trackFileBeforeWrite(filePath); err != nil {
+		return ToolOutput{}, err
+	}
 
 	parentDir := filepath.Dir(filePath)
 	if err := os.MkdirAll(parentDir, 0o755); err != nil {

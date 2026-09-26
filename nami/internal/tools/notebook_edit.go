@@ -123,8 +123,6 @@ func (t *NotebookEditTool) Execute(ctx context.Context, input ToolInput) (ToolOu
 	// lines survive.
 	source, _ := stringParam(input.Params, "source")
 
-	trackFileBeforeWrite(filePath)
-
 	message := ""
 	switch operation {
 	case "insert":
@@ -171,6 +169,9 @@ func (t *NotebookEditTool) Execute(ctx context.Context, input ToolInput) (ToolOu
 		updatedContent += "\n"
 	}
 
+	if err := trackFileBeforeWrite(filePath); err != nil {
+		return ToolOutput{}, err
+	}
 	if err := os.WriteFile(filePath, []byte(updatedContent), 0o644); err != nil {
 		return ToolOutput{}, fmt.Errorf("write notebook %q: %w", filePath, err)
 	}

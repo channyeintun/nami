@@ -323,9 +323,16 @@ func GetGlobalFileHistory() *FileHistory {
 	return globalFileHistory.h
 }
 
-// trackFileBeforeWrite records the current state of a file before modification.
-func trackFileBeforeWrite(path string) {
-	if h := GetGlobalFileHistory(); h != nil {
-		_ = h.TrackEdit(path)
+// trackFileBeforeWrite records the current state of a file before it is
+// modified. A write made after a failed backup could not be rewound, so
+// callers must not write when this returns an error.
+func trackFileBeforeWrite(path string) error {
+	h := GetGlobalFileHistory()
+	if h == nil {
+		return nil
 	}
+	if err := h.TrackEdit(path); err != nil {
+		return fmt.Errorf("record %s in file history before writing: %w", path, err)
+	}
+	return nil
 }

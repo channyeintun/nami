@@ -163,8 +163,6 @@ func (t *FileEditTool) Execute(ctx context.Context, input ToolInput) (ToolOutput
 		return EditFailureOutput(EditFailureTargetMissing, filePath, fmt.Sprintf("file does not exist: %s", filePath), "Use create_file to create it first, then retry replace_string_in_file with the exact existing text."), nil
 	}
 
-	trackFileBeforeWrite(filePath)
-
 	originalContent := string(contentBytes)
 	content, originalLineEnding, hadTrailingNewline := normalizeFileForLineEditing(originalContent)
 	normalizedOldString := strings.ReplaceAll(oldString, "\r\n", "\n")
@@ -197,6 +195,9 @@ func (t *FileEditTool) Execute(ctx context.Context, input ToolInput) (ToolOutput
 	default:
 	}
 
+	if err := trackFileBeforeWrite(filePath); err != nil {
+		return ToolOutput{}, err
+	}
 	if err := os.WriteFile(filePath, []byte(updatedContent), 0o644); err != nil {
 		return ToolOutput{}, fmt.Errorf("write file %q: %w", filePath, err)
 	}

@@ -206,7 +206,9 @@ func applyPatchOperation(resolvedPath string, operation patch.FileOperation) (ap
 
 func applyPatchAddFile(resolvedPath string, operation patch.FileOperation) (applyPatchFileChange, error) {
 	content := strings.Join(operation.Lines, "\n")
-	trackFileBeforeWrite(resolvedPath)
+	if err := trackFileBeforeWrite(resolvedPath); err != nil {
+		return applyPatchFileChange{}, err
+	}
 	if err := os.MkdirAll(filepath.Dir(resolvedPath), 0o755); err != nil {
 		return applyPatchFileChange{}, fmt.Errorf("create parent directory %q: %w", filepath.Dir(resolvedPath), err)
 	}
@@ -226,7 +228,9 @@ func applyPatchDeleteFile(resolvedPath string, operation patch.FileOperation) (a
 		}
 		return applyPatchFileChange{}, fmt.Errorf("read file %q: %w", resolvedPath, err)
 	}
-	trackFileBeforeWrite(resolvedPath)
+	if err := trackFileBeforeWrite(resolvedPath); err != nil {
+		return applyPatchFileChange{}, err
+	}
 	if err := os.Remove(resolvedPath); err != nil {
 		return applyPatchFileChange{}, fmt.Errorf("delete file %q: %w", resolvedPath, err)
 	}
@@ -240,7 +244,9 @@ func applyPatchUpdateFile(resolvedPath string, operation patch.FileOperation) (a
 	if err != nil {
 		return applyPatchFileChange{}, err
 	}
-	trackFileBeforeWrite(resolvedPath)
+	if err := trackFileBeforeWrite(resolvedPath); err != nil {
+		return applyPatchFileChange{}, err
+	}
 	if err := os.WriteFile(resolvedPath, []byte(updatedContent), 0o644); err != nil {
 		return applyPatchFileChange{}, fmt.Errorf("write file %q: %w", resolvedPath, err)
 	}
