@@ -8,6 +8,8 @@ PREFIX      ?= /usr/local/bin
 POSIX_WRAPPER := bin/$(BINARY_NAME)
 WINDOWS_WRAPPER := bin/$(BINARY_NAME).cmd
 LAUNCHER_NORMALIZER := scripts/normalize-launcher-bundle.mjs
+# The rolldown version pinned in package.json, not whatever a download would fetch.
+LAUNCHER_BUNDLER := node_modules/.bin/rolldown
 LAUNCHER_BUNDLER_CONFIG := rolldown.config.mjs
 
 UNIX_PLATFORMS := darwin-arm64 darwin-amd64 linux-amd64 linux-arm64
@@ -42,7 +44,7 @@ release-local: clean build-portable-launcher-bundle
 build-portable-launcher-bundle:
 	@mkdir -p $(BUILD_DIR)
 	vp pack
-	vp dlx rolldown -c $(LAUNCHER_BUNDLER_CONFIG)
+	$(LAUNCHER_BUNDLER) -c $(LAUNCHER_BUNDLER_CONFIG)
 	node $(LAUNCHER_NORMALIZER) \
 		$(BUILD_DIR)/$(LAUNCHER_JS_NAME).raw \
 		$(BUILD_DIR)/$(LAUNCHER_JS_NAME)
