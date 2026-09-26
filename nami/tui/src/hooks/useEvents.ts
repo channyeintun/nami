@@ -1672,9 +1672,26 @@ export function useEvents(initialModel: string, initialMode: string) {
                   "Interrupted by an error",
                 ),
               };
+          // A recoverable error is the engine reporting a problem it carried
+          // on from — an unknown slash command, a model that could not be
+          // initialized, a retry. Only the transcript shows it: the status
+          // line it also lands in is not rendered anywhere.
+          const warningText = p.recoverable ? stringOrEmpty(p.message) : "";
+          const warning = warningText
+            ? createSystemMessage(warningText, "warning", "Warning")
+            : null;
           return {
             ...s,
             ...endTurn,
+            ...(warning
+              ? {
+                  messages: [...s.messages, warning],
+                  transcript: appendTranscriptEntry(s.transcript, {
+                    id: warning.id,
+                    kind: "message",
+                  }),
+                }
+              : {}),
             activeTurnStatus: p.recoverable
               ? stopCompact
                 ? "idle"
