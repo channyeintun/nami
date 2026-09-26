@@ -171,7 +171,12 @@ func (t *SwarmListInboxTool) InputSchema() any {
 
 func (t *SwarmListInboxTool) Permission() PermissionLevel { return PermissionReadOnly }
 
+// Concurrency keeps a dequeue in call order: it applies the role's queue
+// policy, which can supersede handoffs, while a plain listing changes nothing.
 func (t *SwarmListInboxTool) Concurrency(input ToolInput) ConcurrencyDecision {
+	if boolParam(input.Params, "dequeue") {
+		return ConcurrencySerial
+	}
 	return ConcurrencyParallel
 }
 
