@@ -114,6 +114,14 @@ func waitForPermissionDecision(
 		return permissionResponse{}, err
 	}
 
+	// Anything else the client sent while the prompt was open - a background
+	// agent stop, a mode toggle, an inspect request - belongs to whoever reads
+	// the router next, so it is handed back rather than swallowed here.
+	deferred := make([]ipc.ClientMessage, 0, 4)
+	defer func() {
+		router.Requeue(deferred...)
+	}()
+
 	for {
 		msg, err := router.Next(ctx)
 		if err != nil {
@@ -127,6 +135,7 @@ func waitForPermissionDecision(
 				return permissionResponse{}, fmt.Errorf("decode permission response: %w", err)
 			}
 			if payload.RequestID != requestID {
+				// A late answer to a prompt that is already settled.
 				continue
 			}
 			return permissionResponse{
@@ -136,7 +145,7 @@ func waitForPermissionDecision(
 		case ipc.MsgShutdown:
 			return permissionResponse{}, context.Canceled
 		default:
-			continue
+			deferred = append(deferred, msg)
 		}
 	}
 }
