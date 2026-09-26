@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback } from "react";
 import type {
   AskUserQuestionOptionPayload,
   AskUserQuestionRequestedPayload,
@@ -54,7 +54,6 @@ import type {
 } from "../protocol/types.js";
 
 const BEL = "\u0007";
-const STREAM_FLUSH_INTERVAL_MS = 33;
 const MAX_AGENT_TOOL_JSON_CHARS = 128 * 1024;
 const MAX_AGENT_TOOL_DISPLAY_CHARS = 16_000;
 const MAX_BACKGROUND_AGENT_SUMMARY_CHARS = 4_000;
@@ -175,11 +174,6 @@ export interface UIArtifact {
 
 export interface UIAssistantBlock {
   kind: "text" | "thinking";
-  text: string;
-}
-
-interface PendingAssistantChunk {
-  kind: UIAssistantBlock["kind"];
   text: string;
 }
 
@@ -521,91 +515,6 @@ export function useEvents(initialModel: string, initialMode: string) {
   const [uiState, setUIState] = useState<EngineUIState>(() =>
     initialState(initialModel, initialMode),
   );
-  const pendingAssistantChunksRef = useRef<PendingAssistantChunk[]>([]);
-  const streamFlushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
-    null,
-  );
-
-  const flushQueuedAssistantBlocks = useCallback(() => {
-    if (streamFlushTimerRef.current) {
-      clearTimeout(streamFlushTimerRef.current);
-      streamFlushTimerRef.current = null;
-    }
-
-    const queued = pendingAssistantChunksRef.current;
-    if (queued.length === 0) {
-      return;
-    }
-
-    pendingAssistantChunksRef.current = [];
-    setUIState((s) => {
-      let liveAssistantBlocks = s.liveAssistantBlocks;
-      let activeTurnStatus = s.activeTurnStatus;
-
-      for (const chunk of queued) {
-        liveAssistantBlocks = appendAssistantBlock(
-          liveAssistantBlocks,
-          chunk.kind,
-          chunk.text,
-        );
-        activeTurnStatus =
-          chunk.kind === "thinking" ? "thinking" : "responding";
-      }
-
-      return {
-        ...s,
-        liveAssistantBlocks,
-        activeTurnStatus,
-        isStreaming: true,
-        statusLine: null,
-        error: null,
-      };
-    });
-  }, []);
-
-  const resetQueuedAssistantBlocks = useCallback(() => {
-    if (streamFlushTimerRef.current) {
-      clearTimeout(streamFlushTimerRef.current);
-      streamFlushTimerRef.current = null;
-    }
-
-    pendingAssistantChunksRef.current = [];
-  }, []);
-
-  const scheduleAssistantBlockFlush = useCallback(() => {
-    if (streamFlushTimerRef.current) {
-      return;
-    }
-
-    streamFlushTimerRef.current = setTimeout(() => {
-      flushQueuedAssistantBlocks();
-    }, STREAM_FLUSH_INTERVAL_MS);
-  }, [flushQueuedAssistantBlocks]);
-
-  const queueAssistantBlock = useCallback(
-    (kind: UIAssistantBlock["kind"], text: string) => {
-      if (text.length === 0) {
-        return;
-      }
-
-      const queued = pendingAssistantChunksRef.current;
-      const lastChunk = queued[queued.length - 1];
-      if (lastChunk?.kind === kind) {
-        lastChunk.text += text;
-      } else {
-        queued.push({ kind, text });
-      }
-
-      scheduleAssistantBlockFlush();
-    },
-    [scheduleAssistantBlockFlush],
-  );
-
-  useEffect(() => {
-    return () => {
-      resetQueuedAssistantBlocks();
-    };
-  }, [resetQueuedAssistantBlocks]);
 
   const handleEvent = useCallback((event: StreamEvent) => {
     switch (event.type) {
@@ -842,7 +751,6 @@ export function useEvents(initialModel: string, initialMode: string) {
       }
       case "tool_start": {
         const p = event.payload as ToolStartPayload;
-        resetQueuedAssistantBlocks();
         setUIState((s) => ({
           ...s,
           ...finishLiveAssistantMessage(s),
@@ -3961,16 +3869,6 @@ function appendAssistantBlock(
   return [...blocks, { kind, text }];
 }
 
-function assistantBlocksHaveContent(blocks: UIAssistantBlock[]): boolean {
-  return blocks.some((block) => block.text.trim().length > 0);
-}
-
-function assistantBlocksHaveText(blocks: UIAssistantBlock[]): boolean {
-  return blocks.some(
-    (block) => block.kind === "text" && block.text.trim().length > 0,
-  );
-}
-
 function completedAssistantBlocks(
   blocks: UIAssistantBlock[],
 ): UIAssistantBlock[] {
@@ -4003,14 +3901,4 @@ function finishLiveAssistantMessage(
     liveAssistantMessageId: null,
     liveAssistantBlocks: [],
   };
-}
-
-function findArtifactField(
-  artifacts: UIArtifact[],
-  id: string,
-  field: "kind" | "title",
-  fallback: string,
-): string {
-  const artifact = artifacts.find((entry) => entry.id === id);
-  return artifact?.[field] ?? fallback;
 }
