@@ -111,6 +111,10 @@ func gitCommand(args ...string) string {
 	ctx, cancel := context.WithTimeout(context.Background(), gitCommandTimeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "git", args...)
+	// These reads run in the background on every turn. Without this, git
+	// status takes .git/index.lock to refresh stale stat data, and the
+	// user's own git add or commit fails if it runs at the same moment.
+	cmd.Env = append(os.Environ(), "GIT_OPTIONAL_LOCKS=0")
 	out, err := cmd.Output()
 	if err != nil {
 		return ""
