@@ -1,4 +1,4 @@
-import React, { type FC, useEffect, useMemo, useState } from "react";
+import React, { type FC, useEffect, useMemo, useRef, useState } from "react";
 import {
   Box,
   ListView,
@@ -84,24 +84,35 @@ const BackgroundTasksDialog: FC<BackgroundTasksDialogProps> = ({
     setView("detail");
   }, [items.length]);
 
+  // The parent hands down a new onInspectTask on every render, and each
+  // inspection is answered by a detail event that re-renders the parent. An
+  // effect depending on the callback would inspect again on every answer, so
+  // the polling below reads it through a ref and keys only on the task.
+  const onInspectTaskRef = useRef(onInspectTask);
+  onInspectTaskRef.current = onInspectTask;
+  const inspectedKind = selectedItem?.kind;
+  const inspectedId = selectedItem?.id;
+  const inspectedStatus = selectedItem
+    ? detailStatus(selectedItem, detail)
+    : undefined;
+
   useEffect(() => {
-    if (view !== "detail" || !selectedItem) {
+    if (view !== "detail" || !inspectedKind || !inspectedId) {
       return;
     }
 
-    onInspectTask(selectedItem.kind, selectedItem.id);
+    onInspectTaskRef.current(inspectedKind, inspectedId);
 
-    const taskStatus = detailStatus(selectedItem, detail);
-    if (taskStatus !== "running" && taskStatus !== "cancelling") {
+    if (inspectedStatus !== "running" && inspectedStatus !== "cancelling") {
       return;
     }
 
     const timer = setInterval(() => {
-      onInspectTask(selectedItem.kind, selectedItem.id);
+      onInspectTaskRef.current(inspectedKind, inspectedId);
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [detail?.status, onInspectTask, selectedItem, view]);
+  }, [inspectedId, inspectedKind, inspectedStatus, view]);
 
   useEffect(() => {
     const handleResize = () => {
