@@ -3,9 +3,11 @@ package ipc
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"runtime"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -197,4 +199,77 @@ func TestRouterReaderGoroutineExitsWhenContextIsCancelled(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatalf("reader goroutine still running: %d goroutines, started from %d", runtime.NumGoroutine(), before)
+}
+
+// Nothing reads the router while a turn runs, so messages the client sends
+// meanwhile (the Tasks dialog polls every second) pile up. The router used to
+// buffer 16 and then stop reading, so a cancel sent after them was never seen
+// and the stop key stopped working.
+func TestRouterStillCancelsBehindAPileOfUnreadMessages(t *testing.T) {
+	reader, writer := io.Pipe()
+	t.Cleanup(func() { writer.Close() })
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	router := NewMessageRouter(ctx, NewBridge(reader, io.Discard))
+
+	cancelled := make(chan struct{})
+	var once sync.Once
+	router.SetCancelFunc(func() { once.Do(func() { close(cancelled) }) })
+
+	messages := make([]ClientMessage, 0, 101)
+	for i := range 100 {
+		messages = append(messages, userInput(fmt.Sprintf("poll %d", i)))
+	}
+	messages = append(messages, ClientMessage{Type: MsgCancel})
+	go func() { _, _ = io.WriteString(writer, encodeMessages(messages...)) }()
+
+	select {
+	case <-cancelled:
+	case <-time.After(10 * time.Second):
+		t.Fatal("cancel behind 100 unread messages was never handled")
+	}
+	// Nothing was lost while it waited.
+	for i := range 100 {
+		msg, err := router.Next(context.Background())
+		if err != nil || payloadText(t, msg) != fmt.Sprintf("poll %d", i) {
+			t.Fatalf("message %d = %+v, %v", i, msg, err)
+		}
+	}
+}
+
+// A message the bridge cannot use is reported to the client, and the router
+// keeps reading instead of shutting the engine down.
+func TestRouterReportsABadMessageAndKeepsReading(t *testing.T) {
+	var output syncBuffer
+	input := "{not json\n" + encodeMessages(userInput("still here"))
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	router := NewMessageRouter(ctx, NewBridge(strings.NewReader(input), &output))
+
+	msg, err := router.Next(context.Background())
+	if err != nil || payloadText(t, msg) != "still here" {
+		t.Fatalf("Next = %+v, %v; want the message after the bad one", msg, err)
+	}
+	if !strings.Contains(output.String(), `"type":"error"`) || !strings.Contains(output.String(), "dropped") {
+		t.Fatalf("client was not told the message was dropped: %s", output.String())
+	}
+}
+
+// syncBuffer is a bytes.Buffer safe for the router goroutine to write while
+// the test reads it.
+type syncBuffer struct {
+	mu  sync.Mutex
+	buf strings.Builder
+}
+
+func (b *syncBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *syncBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
 }

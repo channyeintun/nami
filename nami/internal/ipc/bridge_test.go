@@ -1,6 +1,7 @@
 package ipc
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -190,5 +191,44 @@ func TestEmitErrorAndNoticeCarryTheirMessage(t *testing.T) {
 	}
 	if !strings.Contains(lines[1], "heads up") {
 		t.Errorf("notice line = %s", lines[1])
+	}
+}
+
+// A single bad line — too long, or not JSON — must not end the session: the
+// stream is framed by lines, so the next message is still readable.
+func TestReadMessageRecoversAfterABadMessage(t *testing.T) {
+	good := `{"type":"user_input","payload":{"text":"after"}}`
+	oversized := `{"type":"user_input","payload":{"text":"` + strings.Repeat("x", maxIPCMessageSize) + `"}}`
+	input := oversized + "\n" + "\n" + "{not json\r\n" + good + "\r\n" + good
+	bridge := NewBridge(strings.NewReader(input), io.Discard)
+
+	for _, want := range []string{"exceeds", "invalid NDJSON"} {
+		_, err := bridge.ReadMessage(t.Context())
+		messageErr, ok := errors.AsType[*MessageError](err)
+		if !ok || !strings.Contains(messageErr.Error(), want) {
+			t.Fatalf("err = %v, want a *MessageError mentioning %q", err, want)
+		}
+	}
+	// A CRLF line and a final line without a newline both decode.
+	for range 2 {
+		msg, err := bridge.ReadMessage(t.Context())
+		if err != nil || msg.Type != MsgUserInput || !strings.Contains(string(msg.Payload), "after") {
+			t.Fatalf("ReadMessage = %+v, %v; want the message after the bad lines", msg, err)
+		}
+	}
+	if _, err := bridge.ReadMessage(t.Context()); !errors.Is(err, io.EOF) {
+		t.Fatalf("err = %v, want io.EOF", err)
+	}
+}
+
+func TestReadBoundedLineKeepsLinesAtTheLimit(t *testing.T) {
+	line := strings.Repeat("a", 100)
+	reader := bufio.NewReaderSize(strings.NewReader(line+"\r\n"+line+"b\n"), 16)
+	got, err := readBoundedLine(reader, 100)
+	if err != nil || string(got) != line {
+		t.Fatalf("readBoundedLine = %d bytes, %v; want the 100-byte line", len(got), err)
+	}
+	if _, err := readBoundedLine(reader, 100); err == nil {
+		t.Fatal("readBoundedLine accepted a line one byte over the limit")
 	}
 }
