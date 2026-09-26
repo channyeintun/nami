@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/channyeintun/nami/internal/agent"
-	"github.com/channyeintun/nami/internal/api"
 )
 
 func TestNormalizeProviderDefaultsToAnthropic(t *testing.T) {
@@ -31,17 +30,6 @@ func TestParseExecutionModeFallsBackToFast(t *testing.T) {
 		if got := parseExecutionMode(input); got != agent.ModeFast {
 			t.Errorf("parseExecutionMode(%q) = %v, want fast", input, got)
 		}
-	}
-}
-
-func TestMergeUsageAccumulatesEveryCounter(t *testing.T) {
-	current := api.Usage{InputTokens: 10, OutputTokens: 20, CacheReadTokens: 30, CacheCreationTokens: 40}
-	next := api.Usage{InputTokens: 1, OutputTokens: 2, CacheReadTokens: 3, CacheCreationTokens: 4}
-
-	got := mergeUsage(current, next)
-	want := api.Usage{InputTokens: 11, OutputTokens: 22, CacheReadTokens: 33, CacheCreationTokens: 44}
-	if got != want {
-		t.Fatalf("mergeUsage = %+v, want %+v", got, want)
 	}
 }
 

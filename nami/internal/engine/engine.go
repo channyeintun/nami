@@ -908,14 +908,6 @@ func (c accountedClient) Stream(ctx context.Context, req api.ModelRequest) (iter
 	return trackModelStream(ctx, c.bridge, c.tracker, c.LLMClient, req)
 }
 
-func mergeUsage(current api.Usage, next api.Usage) api.Usage {
-	current.InputTokens += next.InputTokens
-	current.OutputTokens += next.OutputTokens
-	current.CacheReadTokens += next.CacheReadTokens
-	current.CacheCreationTokens += next.CacheCreationTokens
-	return current
-}
-
 func emitCostUpdate(bridge *ipc.Bridge, tracker *costpkg.Tracker) error {
 	snapshot := tracker.Snapshot()
 	return bridge.Emit(ipc.EventCostUpdate, ipc.CostUpdatePayload{
