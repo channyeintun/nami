@@ -77,6 +77,7 @@ func RunStdioEngine(ctx context.Context, cfg config.Config) error {
 	artifactStore := artifactspkg.NewLocalStore(config.ArtifactsDir())
 	artifactManager := artifactspkg.NewManager(artifactStore)
 	sessionID := newSessionID()
+	setActiveSession(sessionID)
 	sessionDir := sessionStore.SessionDir(sessionID)
 	if err := debuglog.ConfigureSession(sessionID, sessionDir); err != nil && debuglog.Enabled {
 		fmt.Fprintf(os.Stderr, "debuglog: configure session %s: %v\n", sessionID, err)

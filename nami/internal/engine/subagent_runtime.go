@@ -160,17 +160,20 @@ func makeSubagentRunner(
 			return toolpkg.AgentRunResult{}, err
 		}
 		swarmSessionID := toolpkg.CurrentSwarmRuntimeSessionID()
+		// The session the child reports to, which a background child can
+		// outlive.
+		ownerSessionID := activeSessionID()
 		// Snapshot the parent's permissions here, on the calling goroutine. A
 		// background child otherwise copied them from its own goroutine while
 		// the parent's later turns can be adding approval rules to them.
 		childPermissionCtx := permissions.CloneContext(permissionCtx)
 
 		execute := func(runCtx context.Context) (toolpkg.AgentRunResult, error) {
-			return executeSubagent(runCtx, req, subagentType, invocationID, bridge, registry, childPermissionCtx, parentTracker, sessionStore, artifactManager, hookRunner, childClient, childActiveModelID, currentCWD, rolePolicy, childToolNames, swarmSessionID, nil, nil)
+			return executeSubagent(runCtx, req, subagentType, invocationID, bridge, registry, childPermissionCtx, parentTracker, sessionStore, artifactManager, hookRunner, childClient, childActiveModelID, currentCWD, rolePolicy, childToolNames, swarmSessionID, ownerSessionID, nil, nil)
 		}
 		if req.Background {
-			launch := launchBackgroundAgent(bridge, strings.TrimSpace(req.Description), strings.TrimSpace(req.Role), subagentType, invocationID, sessionStore, func(runCtx context.Context, stopControl *agent.StopController, reportStatus func(toolpkg.AgentRunResult)) (toolpkg.AgentRunResult, error) {
-				return executeSubagent(runCtx, req, subagentType, invocationID, bridge, registry, childPermissionCtx, parentTracker, sessionStore, artifactManager, hookRunner, childClient, childActiveModelID, currentCWD, rolePolicy, childToolNames, swarmSessionID, stopControl, reportStatus)
+			launch := launchBackgroundAgent(bridge, strings.TrimSpace(req.Description), strings.TrimSpace(req.Role), subagentType, invocationID, ownerSessionID, sessionStore, func(runCtx context.Context, stopControl *agent.StopController, reportStatus func(toolpkg.AgentRunResult)) (toolpkg.AgentRunResult, error) {
+				return executeSubagent(runCtx, req, subagentType, invocationID, bridge, registry, childPermissionCtx, parentTracker, sessionStore, artifactManager, hookRunner, childClient, childActiveModelID, currentCWD, rolePolicy, childToolNames, swarmSessionID, ownerSessionID, stopControl, reportStatus)
 			})
 			launch.SubagentType = subagentType
 			launch.Tools = append([]string(nil), childToolNames...)
@@ -246,6 +249,7 @@ func executeSubagent(
 	rolePolicy *subagentRolePolicy,
 	childToolNames []string,
 	swarmSessionID string,
+	ownerSessionID string,
 	stopControl *agent.StopController,
 	reportStatus func(toolpkg.AgentRunResult),
 ) (toolpkg.AgentRunResult, error) {
@@ -431,8 +435,7 @@ func executeSubagent(
 	}
 
 	childSnapshot := childTracker.Snapshot()
-	parentTracker.RecordChildAgentSnapshot(childSnapshot)
-	_ = emitCostUpdate(bridge, parentTracker)
+	chargeChildCost(bridge, parentTracker, sessionStore, ownerSessionID, childSnapshot)
 
 	result := toolpkg.AgentRunResult{
 		Status:         status,
@@ -454,6 +457,26 @@ func executeSubagent(
 	}
 	saveAgentResultFile(bridge, result)
 	return result, nil
+}
+
+// chargeChildCost adds a finished child's spend to the session that launched
+// it. While that session is active, the spend goes into the live tracker. A
+// background child can outlive its session, and then the tracker holds the
+// session that replaced it, so the spend is added to the saved total of the
+// child's own session instead.
+func chargeChildCost(bridge *ipc.Bridge, parentTracker *costpkg.Tracker, store *session.Store, ownerSessionID string, snapshot costpkg.TrackerSnapshot) {
+	if ownerSessionID == activeSessionID() {
+		parentTracker.RecordChildAgentSnapshot(snapshot)
+		_ = emitCostUpdate(bridge, parentTracker)
+		return
+	}
+	err := store.UpdateMetadata(ownerSessionID, func(meta session.Metadata) session.Metadata {
+		meta.TotalCostUSD += snapshot.TotalCostUSD
+		return meta
+	})
+	if err != nil && bridge != nil {
+		_ = bridge.EmitNotice(fmt.Sprintf("Could not add a background agent's cost of $%.4f to session %s: %v", snapshot.TotalCostUSD, ownerSessionID, err))
+	}
 }
 
 type childLifecycleTracker struct {

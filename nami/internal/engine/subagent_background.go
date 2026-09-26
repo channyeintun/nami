@@ -27,11 +27,13 @@ type backgroundAgent struct {
 	description  string
 	role         string
 	subagentType string
-	result       toolpkg.AgentRunResult
-	running      bool
-	done         chan struct{}
-	cancel       context.CancelFunc
-	stopControl  *agent.StopController
+	// ownerSessionID is the session that launched the agent.
+	ownerSessionID string
+	result         toolpkg.AgentRunResult
+	running        bool
+	done           chan struct{}
+	cancel         context.CancelFunc
+	stopControl    *agent.StopController
 }
 
 var (
@@ -42,6 +44,30 @@ var (
 	backgroundTeamsMu  sync.RWMutex
 	backgroundTeamCtr  atomic.Uint64
 )
+
+// activeSession is the session the engine is serving. A background agent can
+// outlive the turn and the session that launched it, so it checks this before
+// reporting: one left running across /clear or /resume must not report into
+// the session that replaced its own.
+var activeSession struct {
+	mu sync.RWMutex
+	id string
+}
+
+// setActiveSession records the session the engine now serves. A command that
+// switches sessions calls it before telling the TUI, so no report from the
+// session left behind can arrive after the TUI has moved on.
+func setActiveSession(sessionID string) {
+	activeSession.mu.Lock()
+	defer activeSession.mu.Unlock()
+	activeSession.id = sessionID
+}
+
+func activeSessionID() string {
+	activeSession.mu.RLock()
+	defer activeSession.mu.RUnlock()
+	return activeSession.id
+}
 
 type backgroundTeam struct {
 	id          string
@@ -234,6 +260,12 @@ func emitBackgroundAgentUpdated(bridge *ipc.Bridge, bg *backgroundAgent, result 
 	if bridge == nil || bg == nil {
 		return
 	}
+	// The TUI files every update under the session it shows. An agent whose
+	// session was left keeps its result for agent_status and its result file,
+	// but stays out of the session that replaced its own.
+	if bg.ownerSessionID != activeSessionID() {
+		return
+	}
 	displayResult := toolpkg.DisplaySafeAgentResult(result)
 	_ = bridge.Emit(ipc.EventBackgroundAgentUpdated, ipc.BackgroundAgentUpdatedPayload{
 		AgentID:        bg.id,
@@ -297,6 +329,7 @@ func launchBackgroundAgent(
 	role string,
 	subagentType string,
 	invocationID string,
+	ownerSessionID string,
 	sessionStore *session.Store,
 	execute func(context.Context, *agent.StopController, func(toolpkg.AgentRunResult)) (toolpkg.AgentRunResult, error),
 ) toolpkg.AgentRunResult {
@@ -306,15 +339,16 @@ func launchBackgroundAgent(
 	transcriptPath := filepath.Join(sessionStore.SessionDir(invocationID), "transcript.ndjson")
 	resultFile := filepath.Join(sessionStore.SessionDir(invocationID), "agent-result.json")
 	bg := &backgroundAgent{
-		id:           agentID,
-		invocationID: invocationID,
-		description:  description,
-		role:         role,
-		subagentType: subagentType,
-		done:         make(chan struct{}),
-		cancel:       cancel,
-		stopControl:  stopControl,
-		running:      true,
+		id:             agentID,
+		invocationID:   invocationID,
+		description:    description,
+		role:           role,
+		subagentType:   subagentType,
+		ownerSessionID: ownerSessionID,
+		done:           make(chan struct{}),
+		cancel:         cancel,
+		stopControl:    stopControl,
+		running:        true,
 		result: toolpkg.AgentRunResult{
 			Status:         "running",
 			InvocationID:   invocationID,

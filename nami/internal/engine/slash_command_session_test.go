@@ -30,6 +30,8 @@ func isolateUserConfig(t *testing.T) {
 // written to the returned buffer.
 func newTestSlashCommandContext(t *testing.T, store *session.Store, messages []api.Message, timeline *conversationTimeline) (*slashCommandContext, *bytes.Buffer) {
 	t.Helper()
+	// Commands that switch sessions switch the active one too.
+	useActiveSession(t, "old-session")
 	var client api.LLMClient
 	var emitted bytes.Buffer
 	return newSlashCommandContext(
@@ -66,6 +68,7 @@ type pickerHarness struct {
 // router, so a handler can wait on a picker that the test answers.
 func newPickerSlashCommandContext(t *testing.T, store *session.Store, messages []api.Message, timeline *conversationTimeline) (*slashCommandContext, *pickerHarness) {
 	t.Helper()
+	useActiveSession(t, "old-session")
 	inputReader, inputWriter := io.Pipe()
 	t.Cleanup(func() { _ = inputWriter.Close() })
 	output := &lockedBuffer{}

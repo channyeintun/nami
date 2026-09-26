@@ -102,6 +102,7 @@ func handleResumeSlashCommand(cmd *slashCommandContext) error {
 
 	cmd.state.Messages = append(cmd.state.Messages[:0], restored.Messages...)
 	cmd.state.SessionID = restored.Metadata.SessionID
+	setActiveSession(cmd.state.SessionID)
 	// Every save records the tracker's total as the session's cost, so the
 	// tracker has to start from the resumed session's own spend. Left with
 	// the previous session's, the first save would overwrite it.
@@ -458,6 +459,7 @@ func handleClearSlashCommand(cmd *slashCommandContext) error {
 	cmd.state.Timeline = newConversationTimeline()
 	cmd.tracker.Reset()
 	cmd.state.SessionID = newSessionID()
+	setActiveSession(cmd.state.SessionID)
 	cmd.state.StartedAt = time.Now()
 	cmd.state.SubagentModelID = defaultSessionSubagentModel(config.Load(), cmd.state.ActiveModelID)
 	if err := rebindDebugSession(cmd); err != nil && debuglog.IsEnabled() {
