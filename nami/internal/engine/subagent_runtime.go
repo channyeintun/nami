@@ -1059,12 +1059,20 @@ func normalizeSubagentFinalAnswer(content string) string {
 	return inner
 }
 
+// Session data - prompts, transcripts, results - routinely carries secrets
+// from the conversation, so it is kept private to the user like the rest of
+// the session store.
+const (
+	sessionDataDirMode  = 0o700
+	sessionDataFileMode = 0o600
+)
+
 func archiveDelegatedPrompt(sessionDir string, description string, prompt string) (string, error) {
 	prompt = strings.TrimSpace(prompt)
 	if prompt == "" || utf8.RuneCountInString(prompt) <= delegationPromptArchiveLimit {
 		return "", nil
 	}
-	if err := os.MkdirAll(sessionDir, 0o755); err != nil {
+	if err := os.MkdirAll(sessionDir, sessionDataDirMode); err != nil {
 		return "", err
 	}
 	path := filepath.Join(sessionDir, delegationPromptArchiveName)
@@ -1076,7 +1084,7 @@ func archiveDelegatedPrompt(sessionDir string, description string, prompt string
 	}
 	builder.WriteString(prompt)
 	builder.WriteString("\n")
-	if err := os.WriteFile(path, []byte(builder.String()), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(builder.String()), sessionDataFileMode); err != nil {
 		return "", err
 	}
 	return path, nil

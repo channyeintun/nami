@@ -156,8 +156,8 @@ func writeBackgroundAgentResultFile(result toolpkg.AgentRunResult) {
 	if err != nil {
 		return
 	}
-	_ = os.MkdirAll(filepath.Dir(result.OutputFile), 0o755)
-	_ = os.WriteFile(result.OutputFile, data, 0o644)
+	_ = os.MkdirAll(filepath.Dir(result.OutputFile), sessionDataDirMode)
+	_ = os.WriteFile(result.OutputFile, data, sessionDataFileMode)
 }
 
 func readBackgroundAgentResultFile(path string) (toolpkg.AgentRunResult, error) {

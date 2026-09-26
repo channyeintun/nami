@@ -195,6 +195,36 @@ func TestNormalizeDelegatedPromptLineKeepsCharactersWhole(t *testing.T) {
 	}
 }
 
+// requirePrivate fails unless path grants nothing to group or others.
+func requirePrivate(t *testing.T, path string) {
+	t.Helper()
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat %s: %v", path, err)
+	}
+	if perm := info.Mode().Perm(); perm&0o077 != 0 {
+		t.Fatalf("%s has mode %v, want no group or other access", path, perm)
+	}
+}
+
+// The archived prompt is the parent's full instructions to the child, which
+// can quote anything from the conversation.
+func TestArchiveDelegatedPromptIsPrivate(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX permission bits")
+	}
+	sessionDir := filepath.Join(t.TempDir(), "child-session")
+	path, err := archiveDelegatedPrompt(sessionDir, "long task", strings.Repeat("do the thing. ", delegationPromptArchiveLimit))
+	if err != nil {
+		t.Fatalf("archiveDelegatedPrompt: %v", err)
+	}
+	if path == "" {
+		t.Fatal("a prompt over the limit was not archived")
+	}
+	requirePrivate(t, sessionDir)
+	requirePrivate(t, path)
+}
+
 // Without a spec in the project, any role simply adds nothing.
 func TestWithRolePromptSectionsWithoutSwarmSpec(t *testing.T) {
 	root := t.TempDir()

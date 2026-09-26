@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -85,6 +87,18 @@ func TestLookupBackgroundTeamStatusWaitIsBoundedForTheWholeTeam(t *testing.T) {
 	if limit := 3 * waitMs * time.Millisecond; elapsed > limit {
 		t.Fatalf("waited %v for a %dms wait_ms, want at most %v", elapsed, waitMs, limit)
 	}
+}
+
+// The result file holds the child's final answer, which can quote anything it
+// read.
+func TestWriteBackgroundAgentResultFileIsPrivate(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX permission bits")
+	}
+	outputFile := filepath.Join(t.TempDir(), "child-session", "agent-result.json")
+	writeBackgroundAgentResultFile(toolpkg.AgentRunResult{Status: "completed", Summary: "found the key", OutputFile: outputFile})
+	requirePrivate(t, filepath.Dir(outputFile))
+	requirePrivate(t, outputFile)
 }
 
 // A cancelled child rarely unwinds with a bare context.Canceled: the model
