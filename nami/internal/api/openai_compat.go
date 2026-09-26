@@ -125,6 +125,11 @@ func (c *OpenAICompatClient) Stream(ctx context.Context, req ModelRequest) (iter
 		err := readSSE(ctx, sseBody, func(_ string, data string) error {
 			return c.handleEvent(data, &state, yield)
 		})
+		if err == nil && state.stopReason != "" {
+			// Some servers close the stream after the finish chunk without
+			// sending [DONE]. The response is complete, so finish it here.
+			err = state.emitStop(yield)
+		}
 		if err != nil && !errors.Is(err, errStopStream) {
 			yield(ModelEvent{}, err)
 		}

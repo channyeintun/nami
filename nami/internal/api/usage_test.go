@@ -55,6 +55,30 @@ data: [DONE]
 
 `
 
+func TestOpenAICompatStreamFinishesWithoutDone(t *testing.T) {
+	// Some servers close the stream after the finish chunk and never send
+	// [DONE]. The response is complete, so its tool calls, usage and stop
+	// still have to come through.
+	body := `data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"read","arguments":"{\"path\":\"a.go\"}"}}]}}]}
+
+data: {"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":5}}
+
+`
+	client, err := NewOpenAICompatClient("deepseek", "deepseek-v4-flash", "key", serveStream(t, body).URL)
+	if err != nil {
+		t.Fatalf("new client: %v", err)
+	}
+	events := drainStream(t, client, ModelRequest{Messages: []Message{{Role: RoleUser, Content: "hi"}}})
+
+	want := []ModelEventType{ModelEventToolCall, ModelEventUsage, ModelEventStop}
+	if got := eventTypes(events); !slices.Equal(got, want) {
+		t.Fatalf("event types = %v, want %v", got, want)
+	}
+	if got := events[1].Usage; *got != (Usage{InputTokens: 10, OutputTokens: 5}) {
+		t.Fatalf("usage = %+v", got)
+	}
+}
+
 func TestStreamsReportUsageOncePerCall(t *testing.T) {
 	cases := []struct {
 		name      string
