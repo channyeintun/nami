@@ -52,7 +52,7 @@ func buildOpenAICompatMessages(systemPrompt string, messages []Message) ([]openA
 	}
 
 	built := make([]openAICompatMessage, 0, len(messages)+1)
-	for _, msg := range messages {
+	for _, msg := range answerUnansweredToolCalls(messages) {
 		if msg.Role == RoleSystem {
 			if trimmed := strings.TrimSpace(msg.Content); trimmed != "" {
 				systemParts = append(systemParts, trimmed)

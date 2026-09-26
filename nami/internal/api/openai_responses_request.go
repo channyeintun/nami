@@ -63,7 +63,7 @@ func buildOpenAIResponsesInput(systemPrompt string, messages []Message, develope
 
 	assistantIndex := 0
 	toolIndex := 0
-	for _, msg := range messages {
+	for _, msg := range answerUnansweredToolCalls(messages) {
 		trimmed := strings.TrimSpace(msg.Content)
 		switch msg.Role {
 		case RoleSystem:

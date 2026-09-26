@@ -66,7 +66,7 @@ func buildAnthropicMessages(systemPrompt string, messages []Message) ([]anthropi
 	}
 
 	built := make([]anthropicMessage, 0, len(messages))
-	for _, msg := range messages {
+	for _, msg := range answerUnansweredToolCalls(messages) {
 		if msg.Role == RoleSystem {
 			if trimmed := strings.TrimSpace(msg.Content); trimmed != "" {
 				system = append(system, anthropicTextBlock{Type: "text", Text: trimmed})
