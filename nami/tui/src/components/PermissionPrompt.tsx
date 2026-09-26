@@ -53,7 +53,9 @@ const OPTIONS: PermissionOption[] = [
   {
     decision: "always_allow",
     label: "Always Allow",
-    description: "Persist approval for matching requests outside this session.",
+    // The engine keeps this as an in-memory rule matching exactly this tool
+    // call's input; nothing is saved when the session ends.
+    description: "Stop asking for this exact request for the rest of this session.",
     shortcut: "A",
     color: "$primary",
   },
