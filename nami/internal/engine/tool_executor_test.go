@@ -155,3 +155,77 @@ func TestReadStateRemembersTheFileAsItWasRead(t *testing.T) {
 		t.Fatal("the read state records the rewritten file as already read")
 	}
 }
+
+// failingTool fails the way a command does, with its whole output as the error.
+type failingTool struct {
+	name   string
+	output string
+}
+
+func (f failingTool) Name() string        { return f.name }
+func (f failingTool) Description() string { return "fails with a lot of output" }
+func (f failingTool) InputSchema() any {
+	return map[string]any{"type": "object", "properties": map[string]any{}}
+}
+func (f failingTool) Permission() toolpkg.PermissionLevel { return toolpkg.PermissionReadOnly }
+func (f failingTool) Concurrency(toolpkg.ToolInput) toolpkg.ConcurrencyDecision {
+	return toolpkg.ConcurrencySerial
+}
+func (f failingTool) Execute(context.Context, toolpkg.ToolInput) (toolpkg.ToolOutput, error) {
+	return toolpkg.ToolOutput{Output: f.output, IsError: true}, nil
+}
+
+// hugeFailureOutput is far past any tool result budget, as a failing build's
+// log can be.
+var hugeFailureOutput = strings.Repeat("error: something went wrong\n", 40_000)
+
+// requireBudgetedFailure checks that a failed call's result stayed a failure
+// but was cut to fit the tool result budget.
+func requireBudgetedFailure(t *testing.T, result api.ToolResult) {
+	t.Helper()
+	if !result.IsError {
+		t.Fatal("the failed call's result is no longer marked as an error")
+	}
+	if len(result.Output) >= len(hugeFailureOutput)/10 {
+		t.Fatalf("the failed call's result kept %d of %d characters inline", len(result.Output), len(hugeFailureOutput))
+	}
+	if !strings.Contains(result.Output, "Output truncated") {
+		t.Fatalf("the cut result does not say it was truncated: %q", result.Output[len(result.Output)-200:])
+	}
+}
+
+// A failed call's output counts against the context like any other. Sent
+// whole, one failing build's log could fill the model's context.
+func TestFailedToolOutputIsBudgeted(t *testing.T) {
+	client := &scriptedClient{
+		caps: api.ModelCapabilities{SupportsToolUse: true, MaxContextWindow: 200_000, MaxOutputTokens: 8_000},
+		turns: []scriptedTurn{
+			{text: "Building.", toolCalls: []api.ToolCall{{ID: "call-fail", Name: "fail", Input: "{}"}}},
+			{text: "The build failed."},
+		},
+	}
+	h := newTurnHarness(t, client, failingTool{name: "fail", output: hugeFailureOutput})
+
+	if err := handleUserInputMessage(t.Context(), ipc.UserInputPayload{Text: "build it"}, h.deps, h.state); err != nil {
+		t.Fatalf("handleUserInputMessage: %v", err)
+	}
+	for _, message := range h.state.messages {
+		if message.ToolResult != nil && message.ToolResult.ToolCallID == "call-fail" {
+			requireBudgetedFailure(t, *message.ToolResult)
+			return
+		}
+	}
+	t.Fatal("the conversation has no result for the failed call")
+}
+
+func TestFailedChildToolOutputIsBudgeted(t *testing.T) {
+	registry := toolpkg.NewEmptyRegistry()
+	registry.Register(failingTool{name: "bash", output: hugeFailureOutput})
+
+	results, err := executeToolCallsForSubagent(t.Context(), generalPurposeSubagentType, nil, registry, newPermissionContext("bypassPermissions", false), nil, nil, "child-session", t.TempDir(), costpkg.NewTracker(), 8_000,
+		[]api.ToolCall{{ID: "call-fail", Name: "bash", Input: "{}"}})
+	if err != nil {
+		t.Fatalf("executeToolCallsForSubagent: %v", err)
+	}
+	requireBudgetedFailure(t, results[0])
+}

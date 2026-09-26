@@ -125,26 +125,23 @@ func finalizeToolOutput(
 	state *toolExecutionState,
 	feedback string,
 ) (string, bool, bool, error) {
-	spilled := false
-	finalOutput := output.Output
 	spillPath := output.SpillPath
 	truncated := output.Truncated
-	if !output.IsError {
-		budgetedOutput, artifact, budgetInfo, err := budgetToolOutput(ctx, artifactManager, sessionID, state.budget, state.aggregateBudget, call, finalOutput)
-		finalOutput = budgetedOutput
-		spilled = budgetInfo.Spilled
-		if err != nil {
-			if emitErr := bridge.EmitError(fmt.Sprintf("persist tool-log artifact: %v", err), true); emitErr != nil {
-				return "", false, false, emitErr
-			}
+	// A failed call's output is budgeted like any other: a failing command
+	// can return megabytes, and an MCP error has no limit at all.
+	finalOutput, artifact, budgetInfo, err := budgetToolOutput(ctx, artifactManager, sessionID, state.budget, state.aggregateBudget, call, output.Output)
+	spilled := budgetInfo.Spilled
+	if err != nil {
+		if emitErr := bridge.EmitError(fmt.Sprintf("persist tool-log artifact: %v", err), true); emitErr != nil {
+			return "", false, false, emitErr
 		}
-		updateTurnToolStats(turnStats, budgetInfo)
-		if artifact.ID != "" {
-			spillPath = artifact.ContentPath
-			truncated = true
-			if err := emitArtifactCreated(bridge, artifact); err != nil {
-				return "", false, false, err
-			}
+	}
+	updateTurnToolStats(turnStats, budgetInfo)
+	if artifact.ID != "" {
+		spillPath = artifact.ContentPath
+		truncated = true
+		if err := emitArtifactCreated(bridge, artifact); err != nil {
+			return "", false, false, err
 		}
 	}
 	finalOutput = appendPermissionFeedback(finalOutput, feedback)
