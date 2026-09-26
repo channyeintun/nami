@@ -243,7 +243,7 @@ func FormatSessionList(sessions []session.Metadata, currentID string) string {
 		}
 		b.WriteString(fmt.Sprintf("%s%s  %s  %s  %s  $%.4f\n",
 			marker,
-			meta.SessionID[:8],
+			shortSessionID(meta.SessionID),
 			meta.UpdatedAt.Format("2006-01-02 15:04"),
 			meta.Model,
 			title,
@@ -252,6 +252,17 @@ func FormatSessionList(sessions []session.Metadata, currentID string) string {
 		shown++
 	}
 	return strings.TrimSpace(b.String())
+}
+
+// shortSessionID abbreviates a session id for display. The ids come from
+// metadata files on disk, so one shorter than the abbreviation is shown whole
+// rather than sliced out of range.
+func shortSessionID(id string) string {
+	const shown = 8
+	if len(id) <= shown {
+		return id
+	}
+	return id[:shown]
 }
 
 func visibleDescriptors(catalog []Descriptor) []Descriptor {
