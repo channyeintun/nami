@@ -265,17 +265,16 @@ export function formatToken(token: Token): string {
 
       return `${underline(cyan(label))}${gray(` (${token.href})`)}`;
     }
-    case "list":
-      return (token as Tokens.List).items
+    case "list": {
+      const list = token as Tokens.List;
+      // start is "" for bullet lists, and an ordered list may start at 0.
+      const start = typeof list.start === "number" ? list.start : 1;
+      return list.items
         .map((item: Tokens.ListItem, index: number) =>
-          formatListItem(
-            item,
-            (token as Tokens.List).ordered
-              ? Number((token as Tokens.List).start || 1) + index
-              : null,
-          ),
+          formatListItem(item, list.ordered ? start + index : null),
         )
         .join("");
+    }
     case "list_item":
       return formatListItem(token as Tokens.ListItem, null);
     case "checkbox":
