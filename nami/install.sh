@@ -34,6 +34,14 @@ case "$OS" in
   *) echo "Unsupported OS: $OS. On Windows, use nami/install.ps1 instead."; exit 1 ;;
 esac
 
+# A shell running under Rosetta 2 reports x86_64 on Apple Silicon. Install the
+# native arm64 build rather than one that would run emulated.
+if [ "$OS" = "darwin" ] && [ "$ARCH" = "amd64" ] &&
+  [ "$(sysctl -n sysctl.proc_translated 2>/dev/null || true)" = "1" ]; then
+  ARCH="arm64"
+  echo "Your shell is running under Rosetta 2; installing the native arm64 build."
+fi
+
 for tool in curl tar; do
   if ! command -v "$tool" >/dev/null 2>&1; then
     echo "Install failed: this installer needs $tool, which is not on PATH."
