@@ -79,7 +79,11 @@ func (t *CommandStatusTool) Execute(ctx context.Context, input ToolInput) (ToolO
 		return ToolOutput{}, err
 	}
 
-	result, err := renderBackgroundCommandResult(bg.status(time.Duration(waitSeconds) * time.Second))
+	resultPayload, err := bg.status(ctx, time.Duration(waitSeconds)*time.Second)
+	if err != nil {
+		return ToolOutput{}, err
+	}
+	result, err := renderBackgroundCommandResult(resultPayload)
 	if err != nil {
 		return ToolOutput{}, fmt.Errorf("render command status: %w", err)
 	}

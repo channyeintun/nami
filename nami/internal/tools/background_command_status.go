@@ -13,15 +13,22 @@ const backgroundCommandSummaryPreviewBytes = 160
 const backgroundCommandNotificationPreviewBytes = 4096
 
 func forgetBackgroundCommand(commandID string) (BackgroundCommandResult, error) {
+	bg, err := getBackgroundCommand(commandID)
+	if err != nil {
+		return BackgroundCommandResult{}, err
+	}
+
+	// Queue behind the command's other consumers before taking the registry
+	// lock: a status wait can hold consumeMu for minutes, and holding the
+	// registry lock meanwhile stalled every background command, new ones too.
+	bg.consumeMu.Lock()
+	defer bg.consumeMu.Unlock()
+
 	backgroundCommandsMu.Lock()
-	bg, ok := backgroundCommands[commandID]
-	if !ok {
+	if backgroundCommands[commandID] != bg {
 		backgroundCommandsMu.Unlock()
 		return BackgroundCommandResult{}, fmt.Errorf("command %q not found", commandID)
 	}
-
-	bg.consumeMu.Lock()
-	defer bg.consumeMu.Unlock()
 
 	bg.mu.Lock()
 	if bg.running {
@@ -71,16 +78,29 @@ func (bg *backgroundCommand) sendInput(ctx context.Context, input string, wait t
 	}
 	bg.markUpdated(time.Now())
 
-	if wait > 0 {
-		timer := time.NewTimer(wait)
-		defer timer.Stop()
-		select {
-		case <-bg.done:
-		case <-timer.C:
-		}
+	if err := bg.waitForExit(ctx, wait); err != nil {
+		return BackgroundCommandResult{}, err
 	}
-
 	return bg.snapshotDelta(), nil
+}
+
+// waitForExit waits up to wait for the command to exit, returning early with
+// ctx's error once the turn is cancelled. Callers hold consumeMu while they
+// wait, so a wait that outlived its turn kept the command from everyone else.
+func (bg *backgroundCommand) waitForExit(ctx context.Context, wait time.Duration) error {
+	if wait <= 0 {
+		return nil
+	}
+	timer := time.NewTimer(wait)
+	defer timer.Stop()
+	select {
+	case <-bg.done:
+		return nil
+	case <-timer.C:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 // writeInput writes input to the command's stdin. A process that stops reading
@@ -110,22 +130,17 @@ func (bg *backgroundCommand) writeInput(ctx context.Context, stdin io.Writer, in
 	}
 }
 
-func (bg *backgroundCommand) status(wait time.Duration) BackgroundCommandResult {
+func (bg *backgroundCommand) status(ctx context.Context, wait time.Duration) (BackgroundCommandResult, error) {
 	bg.consumeMu.Lock()
 	defer bg.consumeMu.Unlock()
 
-	if wait > 0 {
-		timer := time.NewTimer(wait)
-		defer timer.Stop()
-		select {
-		case <-bg.done:
-		case <-timer.C:
-		}
+	if err := bg.waitForExit(ctx, wait); err != nil {
+		return BackgroundCommandResult{}, err
 	}
-	return bg.snapshotDelta()
+	return bg.snapshotDelta(), nil
 }
 
-func (bg *backgroundCommand) stop(wait time.Duration) BackgroundCommandResult {
+func (bg *backgroundCommand) stop(ctx context.Context, wait time.Duration) (BackgroundCommandResult, error) {
 	// Shut down before queueing behind other consumers: send_command_input
 	// stuck on a process that stopped reading holds consumeMu until the
 	// command exits, and shutdown is what makes it exit.
@@ -134,15 +149,10 @@ func (bg *backgroundCommand) stop(wait time.Duration) BackgroundCommandResult {
 	bg.consumeMu.Lock()
 	defer bg.consumeMu.Unlock()
 
-	if wait > 0 {
-		timer := time.NewTimer(wait)
-		defer timer.Stop()
-		select {
-		case <-bg.done:
-		case <-timer.C:
-		}
+	if err := bg.waitForExit(ctx, wait); err != nil {
+		return BackgroundCommandResult{}, err
 	}
-	return bg.snapshotDelta()
+	return bg.snapshotDelta(), nil
 }
 
 func (bg *backgroundCommand) snapshotDelta() BackgroundCommandResult {
@@ -299,17 +309,9 @@ func InspectBackgroundCommand(ctx context.Context, commandID string, wait time.D
 		return BackgroundCommandDetail{}, err
 	}
 
-	if wait > 0 {
-		timer := time.NewTimer(wait)
-		defer timer.Stop()
-		select {
-		case <-bg.done:
-		case <-timer.C:
-		case <-ctx.Done():
-			return BackgroundCommandDetail{}, ctx.Err()
-		}
+	if err := bg.waitForExit(ctx, wait); err != nil {
+		return BackgroundCommandDetail{}, err
 	}
-
 	return bg.detail(tailBytes), nil
 }
 
@@ -318,7 +320,7 @@ func StopBackgroundCommand(commandID string, wait time.Duration) (BackgroundComm
 	if err != nil {
 		return BackgroundCommandResult{}, err
 	}
-	return bg.stop(wait), nil
+	return bg.stop(context.Background(), wait)
 }
 
 func BackgroundCommandUpdateSnapshot(commandID string) (BackgroundCommandUpdate, error) {

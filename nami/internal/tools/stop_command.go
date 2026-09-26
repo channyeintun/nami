@@ -79,7 +79,10 @@ func (t *StopCommandTool) Execute(ctx context.Context, input ToolInput) (ToolOut
 		return ToolOutput{}, err
 	}
 
-	resultPayload := bg.stop(time.Duration(waitMs) * time.Millisecond)
+	resultPayload, err := bg.stop(ctx, time.Duration(waitMs)*time.Millisecond)
+	if err != nil {
+		return ToolOutput{}, err
+	}
 	result, err := renderBackgroundCommandResult(resultPayload)
 	if err != nil {
 		return ToolOutput{}, fmt.Errorf("render stop command result: %w", err)

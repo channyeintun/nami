@@ -78,7 +78,10 @@ func TestStopKillsEverythingTheBackgroundCommandStarted(t *testing.T) {
 	bg := startTestBackgroundCommand(t, "(trap '' HUP; echo ready; sleep 1; echo alive > survived) & wait")
 	waitForBackgroundOutput(t, bg, "ready", 5*time.Second)
 
-	result := bg.stop(2 * time.Second)
+	result, err := bg.stop(t.Context(), 2*time.Second)
+	if err != nil {
+		t.Fatalf("stop: %v", err)
+	}
 	if result.Running {
 		t.Fatalf("stop returned a running command: %+v", result)
 	}
@@ -100,6 +103,91 @@ func TestBackgroundCommandStatusWhileOutputStreams(t *testing.T) {
 			t.Fatalf("snapshot = %+v, want a running command with an update time", result)
 		}
 		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+// A long wait on a command has to end with the turn. Otherwise a cancelled
+// command_status kept holding the command for the rest of its wait, and the
+// next turn's calls on that command stalled behind it.
+func TestBackgroundCommandWaitsEndWhenTheTurnIsCancelled(t *testing.T) {
+	skipWithoutPOSIXShell(t)
+	bg := startTestBackgroundCommand(t, "sleep 30")
+
+	waits := map[string]func(context.Context) error{
+		"status": func(ctx context.Context) error {
+			_, err := bg.status(ctx, time.Minute)
+			return err
+		},
+		"send input": func(ctx context.Context) error {
+			_, err := bg.sendInput(ctx, "\n", time.Minute)
+			return err
+		},
+	}
+	for name, wait := range waits {
+		ctx, cancel := context.WithCancel(t.Context())
+		time.AfterFunc(200*time.Millisecond, cancel)
+		start := time.Now()
+		if err := wait(ctx); !errors.Is(err, context.Canceled) {
+			t.Fatalf("%s: error = %v, want context.Canceled", name, err)
+		}
+		if elapsed := time.Since(start); elapsed > 5*time.Second {
+			t.Fatalf("%s: returned after %v; the wait ignored cancellation", name, elapsed)
+		}
+	}
+
+	// The command is free again for the next caller.
+	if _, err := bg.status(t.Context(), 0); err != nil {
+		t.Fatalf("status after the cancelled waits: %v", err)
+	}
+}
+
+// forget_command queues behind whoever is using the command. It must not hold
+// the registry lock while it does, or every other background command, new ones
+// included, would stall behind one long status wait.
+func TestForgetWaitingOnABusyCommandDoesNotBlockTheRegistry(t *testing.T) {
+	skipWithoutPOSIXShell(t)
+	busy := startTestBackgroundCommand(t, "sleep 30")
+	other := startTestBackgroundCommand(t, "sleep 30")
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	statusDone := make(chan struct{})
+	go func() {
+		_, _ = busy.status(ctx, time.Minute)
+		close(statusDone)
+	}()
+	time.Sleep(200 * time.Millisecond)
+
+	forgotten := make(chan error, 1)
+	go func() {
+		_, err := forgetBackgroundCommand(busy.id)
+		forgotten <- err
+	}()
+	time.Sleep(200 * time.Millisecond)
+
+	lookedUp := make(chan error, 1)
+	go func() {
+		_, err := getBackgroundCommand(other.id)
+		lookedUp <- err
+	}()
+	select {
+	case err := <-lookedUp:
+		if err != nil {
+			t.Fatalf("lookup of another command: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("looking up another command blocked behind forget_command")
+	}
+
+	cancel()
+	<-statusDone
+	select {
+	case err := <-forgotten:
+		if err == nil || !strings.Contains(err.Error(), "still running") {
+			t.Fatalf("forget error = %v, want the still-running refusal", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("forget_command never returned")
 	}
 }
 
@@ -157,7 +245,10 @@ func TestStopReleasesAnInputWriteStuckOnACommandThatStopsReading(t *testing.T) {
 	time.Sleep(300 * time.Millisecond)
 
 	stopped := make(chan BackgroundCommandResult, 1)
-	go func() { stopped <- bg.stop(2 * time.Second) }()
+	go func() {
+		result, _ := bg.stop(t.Context(), 2*time.Second)
+		stopped <- result
+	}()
 	select {
 	case result := <-stopped:
 		if result.Running {
