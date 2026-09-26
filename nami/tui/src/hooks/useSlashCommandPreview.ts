@@ -136,6 +136,15 @@ function rankSlashCommands(
       return nameIndex !== -1 || descriptionWordIndex !== -1;
     })
     .sort((left, right) => {
+      // A fully typed name is the command the user means, even when a longer
+      // name it prefixes comes earlier in the catalog: Enter runs the
+      // selected command.
+      const leftExact = left.name === normalizedQuery ? 0 : 1;
+      const rightExact = right.name === normalizedQuery ? 0 : 1;
+      if (leftExact !== rightExact) {
+        return leftExact - rightExact;
+      }
+
       const leftStartsWith = left.name.startsWith(normalizedQuery) ? 0 : 1;
       const rightStartsWith = right.name.startsWith(normalizedQuery) ? 0 : 1;
       if (leftStartsWith !== rightStartsWith) {
