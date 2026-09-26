@@ -767,6 +767,9 @@ func suggestedMemoryFilename(memoryType, title string) string {
 	return fmt.Sprintf("%s-%s.md", memoryType, slug)
 }
 
+// memoryFileTemplate renders the example note shown in the stable system
+// prompt. It must not embed the current time: that prompt is the cached
+// prefix, and a changing timestamp makes every new query miss the cache.
 func memoryFileTemplate(memoryType, title string) string {
 	var b strings.Builder
 	b.WriteString("---\n")
@@ -776,9 +779,7 @@ func memoryFileTemplate(memoryType, title string) string {
 	b.WriteString("type: ")
 	b.WriteString(memoryType)
 	b.WriteString("\n")
-	b.WriteString("updated_at: ")
-	b.WriteString(time.Now().UTC().Format(time.RFC3339))
-	b.WriteString("\n")
+	b.WriteString("updated_at: <current UTC time, RFC 3339>\n")
 	b.WriteString("---\n\n")
 	b.WriteString("- Durable note summary\n")
 	b.WriteString("- Why it matters\n")
