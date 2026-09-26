@@ -3,11 +3,23 @@ package agent
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/channyeintun/nami/internal/api"
 	"github.com/channyeintun/nami/internal/ipc"
 )
+
+func TestBuildEditRetryNudgeNamesTheFailedFile(t *testing.T) {
+	// replace_string_in_file accepts filePath as well as file_path.
+	for _, input := range []string{`{"filePath":"internal/agent/loop.go"}`, `{"file_path":"internal/agent/loop.go"}`} {
+		calls := []api.ToolCall{{ID: "call-1", Name: "replace_string_in_file", Input: input}}
+		results := []api.ToolResult{{ToolCallID: "call-1", Output: "old string not found", IsError: true}}
+		if nudge := buildEditRetryNudge(calls, results); !strings.Contains(nudge, "internal/agent/loop.go") {
+			t.Errorf("input %s: nudge does not name the file: %q", input, nudge)
+		}
+	}
+}
 
 func TestHandleToolCallsTurnAnswersEveryToolCall(t *testing.T) {
 	// Providers reject a transcript whose assistant tool_use has no matching

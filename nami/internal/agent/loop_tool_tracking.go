@@ -49,7 +49,7 @@ func extractFilePathFromInput(input string) string {
 	if err := json.Unmarshal([]byte(input), &params); err != nil {
 		return ""
 	}
-	for _, key := range []string{"file_path", "FilePath", "target_file", "TargetFile", "path"} {
+	for _, key := range []string{"file_path", "filePath", "FilePath", "target_file", "TargetFile", "path"} {
 		if value, ok := params[key]; ok {
 			if path, ok := value.(string); ok && path != "" {
 				return path
