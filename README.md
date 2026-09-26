@@ -348,7 +348,7 @@ When Nami wants to run a command or change files, it can ask for approval.
 
 ```text
 ╭─ Permission Required ──────────────────────╮
-│ bash: git status                           │
+│ bash: go test ./...                        │
 │ Risk: execute                              │
 │                                            │
 │ [y] Allow  [n] Deny  [a] Always Allow      │
