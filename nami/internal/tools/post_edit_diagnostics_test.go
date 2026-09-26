@@ -8,7 +8,19 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
+
+func TestSummarizeDiagnosticsOutputKeepsWholeCharacters(t *testing.T) {
+	// One long line of three-byte characters overruns the character budget.
+	summary := summarizeDiagnosticsOutput([]byte("error: " + strings.Repeat("好", 1000)))
+	if !utf8.ValidString(summary) {
+		t.Fatalf("summary ends with a split character: %q", summary[len(summary)-6:])
+	}
+	if len(summary) > maxDiagnosticChars || !strings.HasSuffix(summary, "...") {
+		t.Fatalf("summary is %d bytes ending %q, want at most %d ending in ...", len(summary), summary[len(summary)-6:], maxDiagnosticChars)
+	}
+}
 
 // Diagnostics run after every Go edit. `go build ./...` writes an executable
 // into the module root when the pattern matches a single main package, so the

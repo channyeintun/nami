@@ -11,6 +11,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/channyeintun/nami/internal/textutil"
 )
 
 const postEditDiagnosticsTimeout = 8 * time.Second
@@ -165,7 +167,7 @@ func summarizeDiagnosticsOutput(output []byte) string {
 	}
 	summary := strings.Join(lines, "\n")
 	if len(summary) > maxDiagnosticChars {
-		summary = summary[:maxDiagnosticChars-3] + "..."
+		summary = textutil.TruncateHead(summary, maxDiagnosticChars-3) + "..."
 	}
 	return summary
 }

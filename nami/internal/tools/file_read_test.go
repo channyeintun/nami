@@ -62,6 +62,28 @@ func TestFileReadClipsHugeLinesWithoutLoadingThem(t *testing.T) {
 	}
 }
 
+// Previews are cut to a byte budget; the cut must not split a character.
+func TestFileReadPreviewKeepsWholeCharacters(t *testing.T) {
+	workspace := inWorkspace(t)
+	// "1\tx" puts every two-byte "é" at an odd offset, so byte PreviewChars
+	// falls inside one.
+	path := writeWorkspaceFile(t, workspace, "accents.txt", "x"+strings.Repeat("é", 1500)+"\n")
+
+	output, err := NewFileReadTool().Execute(context.Background(), ToolInput{Params: map[string]any{"filePath": path}})
+	if err != nil {
+		t.Fatalf("read_file: %v", err)
+	}
+	if len(output.Output) <= PreviewChars {
+		t.Fatalf("output is %d bytes; the test needs more than %d", len(output.Output), PreviewChars)
+	}
+	if !utf8.ValidString(output.Preview) {
+		t.Fatalf("preview ends with a split character: %q", output.Preview[len(output.Preview)-4:])
+	}
+	if len(output.Preview) > PreviewChars || len(output.Preview) < PreviewChars-utf8.UTFMax {
+		t.Fatalf("preview is %d bytes, want just under %d", len(output.Preview), PreviewChars)
+	}
+}
+
 // writeNotebook writes a notebook whose code cells have the given sources.
 func writeNotebook(t *testing.T, workspace, name string, sources ...[]string) string {
 	t.Helper()

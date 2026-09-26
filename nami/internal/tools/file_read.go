@@ -148,12 +148,8 @@ func (t *FileReadTool) Execute(ctx context.Context, input ToolInput) (ToolOutput
 	}
 	if readState := GetGlobalFileReadState(); readState != nil && readState.SeenUnchanged(filePath, offset, limit, info) {
 		stub := fmt.Sprintf("[File unchanged since last read: %s (offset=%d limit=%d).]", filePath, offset, limit)
-		preview := stub
-		if len(preview) > PreviewChars {
-			preview = preview[:PreviewChars]
-		}
 		recordFileReadMetric(FileReadMetric{RequestedOffset: offset, RequestedLimit: limit, BytesReturned: len(stub), UnchangedHit: true})
-		return ToolOutput{Output: stub, FilePath: filePath, Preview: preview}, nil
+		return ToolOutput{Output: stub, FilePath: filePath, Preview: textutil.TruncateHead(stub, PreviewChars)}, nil
 	}
 
 	if isNotebookFile(filePath) {
@@ -249,10 +245,6 @@ func (t *FileReadTool) Execute(ctx context.Context, input ToolInput) (ToolOutput
 	}
 
 	output := renderReadOutput(lines, partial, nextOffset, limit)
-	preview := output
-	if len(preview) > PreviewChars {
-		preview = preview[:PreviewChars]
-	}
 	recordFileReadMetric(FileReadMetric{RequestedOffset: offset, RequestedLimit: limit, LinesReturned: len(lines), BytesReturned: len(output), Truncated: partial || lineClipped})
 
 	return ToolOutput{
@@ -261,7 +253,7 @@ func (t *FileReadTool) Execute(ctx context.Context, input ToolInput) (ToolOutput
 		FilePath:   filePath,
 		ReadOffset: offset,
 		ReadLimit:  limit,
-		Preview:    preview,
+		Preview:    textutil.TruncateHead(output, PreviewChars),
 	}, nil
 }
 
@@ -333,17 +325,13 @@ func executeNotebookRead(ctx context.Context, filePath string, offset, limit int
 		parts = append(parts, fmt.Sprintf("[Partial notebook read. Continue with offset=%d limit=%d.]", lastShown+1, limit))
 	}
 	output := strings.Join(parts, "\n\n")
-	preview := output
-	if len(preview) > PreviewChars {
-		preview = preview[:PreviewChars]
-	}
 	return ToolOutput{
 		Output:     output,
 		Truncated:  partial || clipped,
 		FilePath:   filePath,
 		ReadOffset: offset,
 		ReadLimit:  limit,
-		Preview:    preview,
+		Preview:    textutil.TruncateHead(output, PreviewChars),
 	}, nil
 }
 
