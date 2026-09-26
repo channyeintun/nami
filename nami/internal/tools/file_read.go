@@ -13,6 +13,8 @@ import (
 	"strconv"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/channyeintun/nami/internal/textutil"
 )
 
 const fileReadBinarySampleBytes = 8192
@@ -21,6 +23,12 @@ const fileReadMaxLimitLines = 2000
 const fileReadMaxOutputBytes = 50 * 1024
 const fileReadMaxRenderedLineChars = 2000
 const fileReadNotebookPreviewLines = 80
+
+// notebookReadReserveBytes is kept free of cell content in a notebook read for
+// the header and the continuation hint.
+const notebookReadReserveBytes = 256
+
+const notebookCellClippedNote = "\n[cell truncated to fit the read limit]"
 
 // FileReadTool reads file contents from disk with bounded line-based pagination.
 type FileReadTool struct{}
@@ -284,14 +292,13 @@ func executeNotebookRead(ctx context.Context, filePath string, offset, limit int
 		return ToolOutput{Output: message, FilePath: filePath, ReadOffset: offset, ReadLimit: limit, Preview: message}, nil
 	}
 	endIndex := min(len(notebook.Cells), startIndex+limit)
-	partial := endIndex < len(notebook.Cells)
-	nextOffset := endIndex + 1
 
-	sections := make([]string, 0, endIndex-startIndex+1)
-	sections = append(sections, fmt.Sprintf("Notebook cells %d-%d of %d", startIndex+1, endIndex, len(notebook.Cells)))
-	currentBytes := len(sections[0])
-	lastIncluded := startIndex
-
+	// Cells fill the byte budget, leaving room for the header and the
+	// continuation hint.
+	budget := fileReadMaxOutputBytes - notebookReadReserveBytes
+	cells := make([]string, 0, endIndex-startIndex)
+	used := 0
+	clipped := false
 	for index := startIndex; index < endIndex; index++ {
 		select {
 		case <-ctx.Done():
@@ -299,36 +306,34 @@ func executeNotebookRead(ctx context.Context, filePath string, offset, limit int
 		default:
 		}
 		section := renderNotebookCell(index+1, notebook.Cells[index])
-		candidateBytes := currentBytes + 2 + len(section)
-		if candidateBytes > fileReadMaxOutputBytes {
-			partial = true
-			nextOffset = index + 1
+		if used+2+len(section) > budget {
+			// A read always returns at least one cell, clipped if it has to
+			// be: returning none would send the model back to this same
+			// offset forever.
+			if len(cells) == 0 {
+				cells = append(cells, textutil.TruncateHead(section, budget-len(notebookCellClippedNote))+notebookCellClippedNote)
+				clipped = true
+			}
 			break
 		}
-		sections = append(sections, section)
-		currentBytes = candidateBytes
-		lastIncluded = index + 1
+		cells = append(cells, section)
+		used += 2 + len(section)
 	}
 
-	output := strings.Join(sections, "\n\n")
+	lastShown := startIndex + len(cells)
+	partial := lastShown < len(notebook.Cells)
+	parts := append([]string{fmt.Sprintf("Notebook cells %d-%d of %d", startIndex+1, lastShown, len(notebook.Cells))}, cells...)
 	if partial {
-		if lastIncluded < startIndex+1 {
-			nextOffset = startIndex + 1
-		} else if nextOffset <= lastIncluded {
-			nextOffset = lastIncluded + 1
-		}
-		hint := fmt.Sprintf("[Partial notebook read. Continue with offset=%d limit=%d.]", nextOffset, limit)
-		if len(output)+2+len(hint) <= fileReadMaxOutputBytes {
-			output += "\n\n" + hint
-		}
+		parts = append(parts, fmt.Sprintf("[Partial notebook read. Continue with offset=%d limit=%d.]", lastShown+1, limit))
 	}
+	output := strings.Join(parts, "\n\n")
 	preview := output
 	if len(preview) > PreviewChars {
 		preview = preview[:PreviewChars]
 	}
 	return ToolOutput{
 		Output:     output,
-		Truncated:  partial,
+		Truncated:  partial || clipped,
 		FilePath:   filePath,
 		ReadOffset: offset,
 		ReadLimit:  limit,
