@@ -2,6 +2,7 @@ import React, {
   type FC,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -17,7 +18,14 @@ import {
   useToast,
 } from "silvery";
 import { useEngine } from "./hooks/useEngine.js";
-import { useEvents, type UIArtifact } from "./hooks/useEvents.js";
+import {
+  isEngineNotice,
+  useEvents,
+  type UIArtifact,
+  type UIMessage,
+  type UISystemMessage,
+  type UITranscriptEntry,
+} from "./hooks/useEvents.js";
 import ArtifactReviewPrompt from "./components/ArtifactReviewPrompt.js";
 import AskUserQuestionPrompt from "./components/AskUserQuestionPrompt.js";
 import BackgroundTasksDialog from "./components/BackgroundTasksDialog.js";
@@ -57,6 +65,7 @@ const ARTIFACTS_TOGGLE_SHORTCUT_LABEL = "Opt+A";
 const REASONING_TOGGLE_SHORTCUT_LABEL = "Opt+R";
 const TASKS_TOGGLE_SHORTCUT_LABEL = "Opt+B";
 const FOOTER_HINT_REVEAL_MS = 2500;
+const EMPTY_TRANSCRIPT: UITranscriptEntry[] = [];
 
 type BackgroundTaskDetailRecord =
   | BackgroundCommandDetailPayload
@@ -215,6 +224,10 @@ const App: FC<AppProps> = ({ enginePath, model, mode, autoMode }) => {
         uiState.showPlanPanel,
       )
     : [];
+  const startupNotices = useMemo(
+    () => selectStartupNotices(uiState.transcript, uiState.messages),
+    [uiState.messages, uiState.transcript],
+  );
   const isEngineReady = uiState.ready || engine.ready;
   // Nothing can be sent to an engine that has not started or has since died.
   const isEngineAvailable = isEngineReady && !engine.error;
@@ -900,7 +913,11 @@ const App: FC<AppProps> = ({ enginePath, model, mode, autoMode }) => {
               messages={uiState.messages}
               progressEntries={uiState.progressEntries}
               toolCalls={uiState.toolCalls}
-              transcript={uiState.transcript}
+              transcript={
+                startupNotices.length > 0
+                  ? EMPTY_TRANSCRIPT
+                  : uiState.transcript
+              }
               artifacts={visibleArtifacts}
               queuedPrompts={queuedPrompts.map((queuedPrompt) => ({
                 id: queuedPrompt.id,
@@ -922,6 +939,23 @@ const App: FC<AppProps> = ({ enginePath, model, mode, autoMode }) => {
               }
               promptHasDraft={prompt.value.length > 0}
             />
+
+            {startupNotices.length > 0 ? (
+              <Box flexDirection="column" flexShrink={0} paddingLeft={2}>
+                {startupNotices.map((notice) => (
+                  <Box key={notice.id} flexDirection="row" minWidth={0}>
+                    <Box minWidth={2}>
+                      <Text color="$info">◦</Text>
+                    </Box>
+                    <Box flexGrow={1} minWidth={0}>
+                      <Text color="$info" wrap="wrap">
+                        {notice.text}
+                      </Text>
+                    </Box>
+                  </Box>
+                ))}
+              </Box>
+            ) : null}
 
             {uiState.error && (
               <Box
@@ -1258,6 +1292,28 @@ function selectVisibleArtifacts(
   );
 
   return focusedArtifact ? [focusedArtifact, ...remainingArtifacts] : filtered;
+}
+
+/**
+ * The notices that make up the whole transcript, or none if it holds anything
+ * else. Before the first prompt the engine may have sent only notices (MCP
+ * servers connecting, a fallback model), and StreamOutput shows the welcome
+ * banner only for an empty transcript, so App lists these under the banner
+ * instead of letting them replace it.
+ */
+function selectStartupNotices(
+  transcript: UITranscriptEntry[],
+  messages: UIMessage[],
+): UISystemMessage[] {
+  const notices: UISystemMessage[] = [];
+  for (const entry of transcript) {
+    const message = messages.find((candidate) => candidate.id === entry.id);
+    if (!isEngineNotice(message)) {
+      return [];
+    }
+    notices.push(message);
+  }
+  return notices;
 }
 
 function isQueuedPromptDispatchBlocked(

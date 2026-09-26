@@ -503,6 +503,15 @@ function createSystemMessage(
   };
 }
 
+const NOTICE_LABEL = "Notice";
+
+/** Whether this message is a notice the engine sent. */
+export function isEngineNotice(
+  message: UIMessage | undefined,
+): message is UISystemMessage {
+  return message?.role === "system" && message.label === NOTICE_LABEL;
+}
+
 function createProgressEntry(id: string, text: string): UIProgressEntry {
   return {
     id,
@@ -1512,10 +1521,15 @@ export function useEvents(initialModel: string, initialMode: string) {
         const p = event.payload as SessionUpdatedPayload;
         setUIState((s) => {
           const normalizedTitle = p.title?.trim() ? p.title.trim() : null;
+          // Notices belong to no session: the engine sends some before it
+          // names the first one (MCP servers connecting, a fallback model).
+          const noticeIds = new Set(
+            s.messages.filter(isEngineNotice).map((message) => message.id),
+          );
           const hasSessionScopedState =
-            s.messages.length > 0 ||
+            s.messages.some((message) => !noticeIds.has(message.id)) ||
             s.progressEntries.length > 0 ||
-            s.transcript.length > 0 ||
+            s.transcript.some((entry) => !noticeIds.has(entry.id)) ||
             s.liveAssistantBlocks.length > 0 ||
             s.toolCalls.length > 0 ||
             s.artifacts.length > 0 ||
@@ -1641,10 +1655,27 @@ export function useEvents(initialModel: string, initialMode: string) {
       }
       case "notice": {
         const p = event.payload as NoticePayload;
-        setUIState((s) => ({
-          ...s,
-          statusLine: p.message,
-        }));
+        const text = stringOrEmpty(p.message);
+        setUIState((s) => {
+          if (
+            !text ||
+            !belongsInTranscript(text) ||
+            repeatsLastNotice(s.messages, text)
+          ) {
+            return { ...s, statusLine: p.message };
+          }
+
+          const notice = createSystemMessage(text, "info", NOTICE_LABEL);
+          return {
+            ...s,
+            messages: [...s.messages, notice],
+            transcript: appendTranscriptEntry(s.transcript, {
+              id: notice.id,
+              kind: "message",
+            }),
+            statusLine: p.message,
+          };
+        });
         break;
       }
     }
@@ -2504,6 +2535,40 @@ function describeGoalOutcome(
     text: `Goal cleared as unreachable: ${condition}${reasonLine}`,
     tone: "warning",
   };
+}
+
+const OMITTED_NOTICE_PREFIXES = [
+  // Telemetry the agent loop sends on every step of a turn for as long as
+  // the problem lasts (agent/iteration_pipeline.go, agent/loop.go).
+  "session memory unavailable:",
+  "memory recall unavailable:",
+  "session attempt log unavailable:",
+  "session attempt log update unavailable:",
+  // Sent with goal_state_changed { failed: true }, which the transcript
+  // already reports along with the goal's condition.
+  "Goal cleared as unreachable:",
+];
+
+function belongsInTranscript(notice: string): boolean {
+  return !OMITTED_NOTICE_PREFIXES.some((prefix) => notice.startsWith(prefix));
+}
+
+/**
+ * Whether the last notice since the user's last prompt says the same. Some
+ * notices come in runs: the Tasks dialog polls the engine every second, and
+ * a session that cannot be saved fails again at every step of a turn.
+ */
+function repeatsLastNotice(messages: UIMessage[], text: string): boolean {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message.role === "user") {
+      return false;
+    }
+    if (isEngineNotice(message)) {
+      return message.text === text;
+    }
+  }
+  return false;
 }
 
 function buildTurnCompleteStatusLine(stopReason: string): string {
