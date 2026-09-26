@@ -119,8 +119,8 @@ type QueryState struct {
 	blockedStop StopDecision
 }
 
-// stopReasonMaxTurns is the stop reason of a query that used all MaxTurns.
-const stopReasonMaxTurns = "max_turns"
+// StopReasonMaxTurns is the stop reason of a query that used all MaxTurns.
+const StopReasonMaxTurns = "max_turns"
 
 // NewQueryState creates initial state from a request.
 func NewQueryState(req QueryRequest) *QueryState {
@@ -163,7 +163,7 @@ func (s *QueryState) ShouldContinue() bool {
 // continuing. It returns "" while the query is within its limits.
 func (s *QueryState) limitReached() string {
 	if s.TurnCount >= s.MaxTurns {
-		return stopReasonMaxTurns
+		return StopReasonMaxTurns
 	}
 	return s.Continuation.Decision().Reason
 }
@@ -266,7 +266,7 @@ func stopAtLimit(ctx context.Context, state *QueryState, deps QueryDeps, yield f
 func limitStopNotice(state *QueryState, limit string, blocked StopDecision) string {
 	var notice string
 	switch limit {
-	case stopReasonMaxTurns:
+	case StopReasonMaxTurns:
 		notice = fmt.Sprintf("Stopped after %d model turns, the most one request may take.", state.MaxTurns)
 	case ContinuationStopBudgetExhausted:
 		notice = fmt.Sprintf("Stopped: the model wrote %d output tokens without calling a tool, the budget for one reply.", state.Continuation.BudgetUsedTokens)

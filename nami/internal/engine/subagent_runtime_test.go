@@ -283,3 +283,21 @@ func TestSubagentWorkingDirectoryIsReadSafelyWhileTheSessionMoves(t *testing.T) 
 		t.Fatalf("currentSubagentCWD = %q, want one of the session's directories", got)
 	}
 }
+
+// A child that stops at a limit has not finished; its parent must not take
+// the last reply for the result without being told.
+func TestChildSummaryNotesAStopAtALimit(t *testing.T) {
+	messages := []api.Message{
+		{Role: api.RoleUser, Content: "survey the parser"},
+		{Role: api.RoleAssistant, Content: "Looked at lexer.go so far."},
+	}
+	if got := childSummary(messages, "end_turn"); got != "Looked at lexer.go so far." {
+		t.Errorf("finished child summary = %q", got)
+	}
+	for _, reason := range []string{agent.StopReasonMaxTurns, agent.ContinuationStopBudgetExhausted, agent.ContinuationStopDiminishingReturns} {
+		got := childSummary(messages, reason)
+		if !strings.HasPrefix(got, "Looked at lexer.go so far.") || !strings.Contains(got, "stopped at a limit ("+reason+")") {
+			t.Errorf("summary after %s = %q, want the reply and a note about the limit", reason, got)
+		}
+	}
+}

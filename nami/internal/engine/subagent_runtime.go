@@ -451,7 +451,7 @@ func executeSubagent(
 		SessionID:      childSessionID,
 		TranscriptPath: transcriptPath,
 		OutputFile:     resultFile,
-		Summary:        latestAssistantContent(childMessages),
+		Summary:        childSummary(childMessages, turnStopReason),
 		Error:          errorMessage,
 		TotalCostUSD:   childSnapshot.TotalCostUSD,
 		InputTokens:    childSnapshot.TotalInputTokens,
@@ -464,6 +464,21 @@ func executeSubagent(
 	}
 	saveAgentResultFile(bridge, result)
 	return result, nil
+}
+
+// childSummary is the child's last reply, which the parent agent takes as its
+// result. When the child stopped at a limit rather than finishing, a note
+// says so: the reply may be work in progress, and the limit notice the user
+// would see goes nowhere for a child.
+func childSummary(messages []api.Message, stopReason string) string {
+	summary := latestAssistantContent(messages)
+	switch stopReason {
+	case agent.StopReasonMaxTurns, agent.ContinuationStopBudgetExhausted, agent.ContinuationStopDiminishingReturns:
+		note := fmt.Sprintf("[The agent stopped at a limit (%s) before it finished, so this may be incomplete.]", stopReason)
+		return strings.TrimSpace(summary + "\n\n" + note)
+	default:
+		return summary
+	}
 }
 
 // chargeChildCost adds a finished child's spend to the session that launched
