@@ -37,14 +37,22 @@ type Journal struct {
 	writer *bufio.Writer
 }
 
-// OpenJournal creates (or truncates) the journal for a run. When resumeFrom
-// names a readable prior journal, its records seed the replay cache.
+// OpenJournal opens the journal for a run, appending to any journal already at
+// path. When resumeFrom names a readable prior journal, its records seed the
+// replay cache.
+//
+// A run's path is not always new: run ids restart with each process, so a run
+// can land on an earlier run's journal, or on the very journal it resumes
+// from. Truncating it would destroy records not yet replayed. Keeping them is
+// safe, because a record only replays for a node whose key it matches, and
+// the key commits to the node's whole ancestry.
 func OpenJournal(path string, resumeFrom string) (*Journal, error) {
 	path = strings.TrimSpace(path)
 	if path == "" {
 		return nil, nil
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	// Journals hold agents' output, so they are private to the user.
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return nil, err
 	}
 
@@ -55,13 +63,35 @@ func OpenJournal(path string, resumeFrom string) (*Journal, error) {
 		}
 	}
 
-	file, err := os.Create(path)
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0o600)
 	if err != nil {
+		return nil, err
+	}
+	if err := terminateTornLine(file); err != nil {
+		_ = file.Close()
 		return nil, err
 	}
 	journal.file = file
 	journal.writer = bufio.NewWriter(file)
 	return journal, nil
+}
+
+// terminateTornLine ends a line that a killed run left half-written, so the
+// next record starts on a line of its own instead of fusing with the fragment.
+func terminateTornLine(file *os.File) error {
+	info, err := file.Stat()
+	if err != nil || info.Size() == 0 {
+		return err
+	}
+	last := make([]byte, 1)
+	if _, err := file.ReadAt(last, info.Size()-1); err != nil {
+		return err
+	}
+	if last[0] == '\n' {
+		return nil
+	}
+	_, err = file.Write([]byte{'\n'})
+	return err
 }
 
 func (j *Journal) load(path string) error {
@@ -85,9 +115,10 @@ func (j *Journal) load(path string) error {
 		}
 		var record journalRecord
 		if err := json.Unmarshal([]byte(line), &record); err != nil {
-			// A truncated tail is the normal shape of a killed run. Keep the
-			// records read so far rather than discarding a usable prefix.
-			break
+			// A half-written line is the normal shape of a killed run, and a
+			// later run may have appended after it. Every record stands on its
+			// own, so skip the fragment and keep reading.
+			continue
 		}
 		j.cached[record.Key] = record
 	}
@@ -135,6 +166,12 @@ func (j *Journal) append(record journalRecord) {
 	}
 	encoded, err := json.Marshal(record)
 	if err != nil {
+		return
+	}
+	// load stops at a line longer than it will read, which would fail every
+	// resume from this journal, so a result that large is left out and its
+	// node re-runs instead.
+	if len(encoded) >= maxJournalLineBytes {
 		return
 	}
 	// Journaling is best-effort: a run that cannot record its progress should
