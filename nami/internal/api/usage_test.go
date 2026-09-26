@@ -34,6 +34,12 @@ data: {"candidates":[{"content":{"parts":[{"text":" a time"}],"role":"model"},"f
 
 `
 
+// Gemini counts thinking apart from the candidates, and the cached prefix
+// inside the prompt.
+const geminiThinkingUsageStream = `data: {"candidates":[{"content":{"parts":[{"text":"Done."}],"role":"model"},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":1000,"cachedContentTokenCount":800,"candidatesTokenCount":50,"thoughtsTokenCount":300,"totalTokenCount":1350}}
+
+`
+
 // Some OpenAI-compatible servers attach running usage to every chunk.
 const openAICompatUsageStream = `data: {"choices":[{"delta":{"content":"Hi"}}],"usage":{"prompt_tokens":10,"completion_tokens":1,"total_tokens":11}}
 
@@ -101,6 +107,16 @@ func TestStreamsReportUsageOncePerCall(t *testing.T) {
 				return NewGeminiClient("gemini-2.5-pro", "key", baseURL)
 			},
 			want: Usage{InputTokens: 8, OutputTokens: 5},
+		},
+		{
+			name: "gemini thinking",
+			body: geminiThinkingUsageStream,
+			newClient: func(baseURL string) (LLMClient, error) {
+				return NewGeminiClient("gemini-2.5-pro", "key", baseURL)
+			},
+			// Thinking is billed as output, and the cached prefix at the
+			// cache-read rate.
+			want: Usage{InputTokens: 200, OutputTokens: 350, CacheReadTokens: 800},
 		},
 		{
 			name: "openai-compatible",

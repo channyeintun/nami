@@ -71,9 +71,11 @@ type geminiPromptFeedback struct {
 }
 
 type geminiUsageMetadata struct {
-	PromptTokenCount     int `json:"promptTokenCount,omitempty"`
-	CandidatesTokenCount int `json:"candidatesTokenCount,omitempty"`
-	TotalTokenCount      int `json:"totalTokenCount,omitempty"`
+	PromptTokenCount        int `json:"promptTokenCount,omitempty"`
+	CachedContentTokenCount int `json:"cachedContentTokenCount,omitempty"`
+	CandidatesTokenCount    int `json:"candidatesTokenCount,omitempty"`
+	ThoughtsTokenCount      int `json:"thoughtsTokenCount,omitempty"`
+	TotalTokenCount         int `json:"totalTokenCount,omitempty"`
 }
 
 func (u *geminiUsageMetadata) merge(other *geminiUsageMetadata) {
@@ -83,16 +85,29 @@ func (u *geminiUsageMetadata) merge(other *geminiUsageMetadata) {
 	if other.PromptTokenCount > 0 {
 		u.PromptTokenCount = other.PromptTokenCount
 	}
+	if other.CachedContentTokenCount > 0 {
+		u.CachedContentTokenCount = other.CachedContentTokenCount
+	}
 	if other.CandidatesTokenCount > 0 {
 		u.CandidatesTokenCount = other.CandidatesTokenCount
+	}
+	if other.ThoughtsTokenCount > 0 {
+		u.ThoughtsTokenCount = other.ThoughtsTokenCount
 	}
 	if other.TotalTokenCount > 0 {
 		u.TotalTokenCount = other.TotalTokenCount
 	}
 }
 
+// toUsage counts thinking, which Gemini reports apart from the candidates but
+// bills as output, as output, and reports the cached prefix, which the prompt
+// count includes, apart from the rest of the prompt.
 func (u geminiUsageMetadata) toUsage() *Usage {
-	return &Usage{InputTokens: u.PromptTokenCount, OutputTokens: u.CandidatesTokenCount}
+	return &Usage{
+		InputTokens:     max(u.PromptTokenCount-u.CachedContentTokenCount, 0),
+		OutputTokens:    u.CandidatesTokenCount + u.ThoughtsTokenCount,
+		CacheReadTokens: u.CachedContentTokenCount,
+	}
 }
 
 type geminiErrorEnvelope struct {
