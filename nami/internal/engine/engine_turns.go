@@ -418,7 +418,7 @@ func (t *userTurnContext) handlePlanReviewDecision(ctx context.Context, messages
 		return false, nil
 	}
 	reviewResult, reviewErr := handlePlanReviewGate(ctx, t.deps.bridge, t.deps.router, &t.state.mode, t.deps.artifactManager, t.state.sessionID, t.state.messages, messagesBeforeQuery, t.turnStopReason)
-	if reviewErr != nil && reviewErr != context.Canceled {
+	if reviewErr != nil && !errors.Is(reviewErr, context.Canceled) {
 		if emitErr := t.deps.bridge.EmitError(fmt.Sprintf("plan review gate: %v", reviewErr), true); emitErr != nil {
 			return false, emitErr
 		}

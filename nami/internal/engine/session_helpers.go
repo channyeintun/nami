@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"iter"
 	"strings"
@@ -323,7 +324,7 @@ func (s *compactionSummarizer) SummarizeWithPrompt(ctx context.Context, messages
 			s.lastSummaryMode = compact.SummaryModeCacheSafe
 			return compact.NormalizeSummary(summary), nil
 		}
-	} else if err == context.Canceled || err == context.DeadlineExceeded {
+	} else if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return "", err
 	}
 
