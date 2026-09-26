@@ -40,6 +40,7 @@ import {
   type PastedImageData,
 } from "./utils/imagePaste.js";
 import { activeTurnStatusLabel } from "./utils/activeTurnStatus.js";
+import { onClipboardBridgeError } from "./utils/clipboardBridge.js";
 import type {
   BackgroundAgentDetailPayload,
   BackgroundCommandDetailPayload,
@@ -454,6 +455,9 @@ const App: FC<AppProps> = ({ enginePath, model, mode, autoMode }) => {
   const handlePasteWarning = useCallback((warnings: string[]) => {
     setPasteWarning(warnings.length > 0 ? warnings.join(" | ") : null);
   }, []);
+
+  // A failed copy of a mouse selection is shown on the same warning line.
+  useEffect(() => onClipboardBridgeError(setPasteWarning), []);
 
   const handleSubmit = (overrideText?: string) => {
     // Derive text before calling submit – silvery's renderer may defer

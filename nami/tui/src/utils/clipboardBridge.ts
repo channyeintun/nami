@@ -15,6 +15,29 @@ import { spawn } from "node:child_process";
 
 const OSC52_REGEX = /\x1b\]52;c;([A-Za-z0-9+/=]+)\x07/;
 
+type ClipboardBridgeErrorListener = (message: string) => void;
+
+const errorListeners = new Set<ClipboardBridgeErrorListener>();
+
+// Lets the UI say why a selection did not reach the system clipboard. The
+// bridge runs inside stdout writes, so it has nowhere to show that itself.
+export function onClipboardBridgeError(
+  listener: ClipboardBridgeErrorListener,
+): () => void {
+  errorListeners.add(listener);
+  return () => {
+    errorListeners.delete(listener);
+  };
+}
+
+function reportClipboardBridgeError(command: string, error: unknown): void {
+  const reason = error instanceof Error ? error.message : String(error);
+  const message = `Copying to the system clipboard with ${command} failed: ${reason}`;
+  for (const listener of errorListeners) {
+    listener(message);
+  }
+}
+
 function resolveWindowsPowerShell(): string {
   const override =
     process.env.NAMI_POWERSHELL?.trim() ||
@@ -27,43 +50,42 @@ function resolveWindowsPowerShell(): string {
 }
 
 function writeToNativeClipboard(text: string): void {
-  try {
-    let proc;
-    if (process.platform === "darwin") {
-      proc = spawn("pbcopy", [], {
-        stdio: ["pipe", "ignore", "ignore"],
-      });
-    } else if (process.platform === "win32") {
-      proc = spawn(
-        resolveWindowsPowerShell(),
-        [
-          "-NoProfile",
-          "-NonInteractive",
-          "-Command",
-          "$text = [Console]::In.ReadToEnd(); Set-Clipboard -Value $text",
-        ],
-        {
-          stdio: ["pipe", "ignore", "ignore"],
-          windowsHide: true,
-        },
-      );
-    } else {
-      return;
-    }
+  let command: string;
+  let args: string[];
+  if (process.platform === "darwin") {
+    command = "pbcopy";
+    args = [];
+  } else if (process.platform === "win32") {
+    command = resolveWindowsPowerShell();
+    args = [
+      "-NoProfile",
+      "-NonInteractive",
+      "-Command",
+      "$text = [Console]::In.ReadToEnd(); Set-Clipboard -Value $text",
+    ];
+  } else {
+    return;
+  }
 
-    // A missing binary is reported asynchronously as an 'error' event, which
-    // the surrounding try cannot catch. Left unhandled it becomes an uncaught
-    // exception, and silvery ends the app on those.
-    proc.on("error", () => {
-      // Native clipboard unavailable — the terminal may still honor OSC 52.
+  try {
+    const proc = spawn(command, args, {
+      stdio: ["pipe", "ignore", "ignore"],
+      windowsHide: true,
+    });
+
+    // A binary that cannot be started is reported asynchronously as an
+    // 'error' event, which the surrounding try cannot catch. Left unhandled it
+    // becomes an uncaught exception, and silvery ends the app on those.
+    proc.on("error", (error) => {
+      reportClipboardBridgeError(command, error);
     });
     proc.stdin.on("error", () => {
       // Ignore clipboard pipe shutdown races.
     });
     proc.stdin.write(text);
     proc.stdin.end();
-  } catch {
-    // Native clipboard bridge unavailable — no-op.
+  } catch (error) {
+    reportClipboardBridgeError(command, error);
   }
 }
 
