@@ -100,7 +100,9 @@ func runGoDiagnostics(ctx context.Context, scope diagnosticsScope) string {
 	if _, err := exec.LookPath("go"); err != nil {
 		return ""
 	}
-	cmd := exec.CommandContext(ctx, "go", "build", "./...")
+	// Without -o, a pattern that matches a single main package writes its
+	// executable into the module root. The build is only a compile check.
+	cmd := exec.CommandContext(ctx, "go", "build", "-o", os.DevNull, "./...")
 	cmd.Dir = scope.root
 	output, err := cmd.CombinedOutput()
 	label := fmt.Sprintf("Go diagnostics (%s)", relativeDiagnosticsLabel(scope.root))
