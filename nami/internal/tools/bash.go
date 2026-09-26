@@ -153,12 +153,8 @@ func (t *BashTool) Execute(ctx context.Context, input ToolInput) (ToolOutput, er
 		return ToolOutput{Output: result}, nil
 	}
 
-	commandCtx := ctx
-	if timeout := timeoutFromParams(input.Params); timeout > 0 {
-		var cancel context.CancelFunc
-		commandCtx, cancel = context.WithTimeout(ctx, timeout)
-		defer cancel()
-	}
+	commandCtx, cancel := context.WithTimeout(ctx, timeoutFromParams(input.Params, defaultBashTimeout))
+	defer cancel()
 
 	cmd, err := shellCommandContext(commandCtx, command)
 	if err != nil {
@@ -212,10 +208,12 @@ func resolveWorkingDirectory(params map[string]any) (string, error) {
 	return workingDir, nil
 }
 
-func timeoutFromParams(params map[string]any) time.Duration {
+// timeoutFromParams reads the timeout_ms parameter, falling back to fallback
+// when it is absent or not a positive number.
+func timeoutFromParams(params map[string]any, fallback time.Duration) time.Duration {
 	value, ok := params["timeout_ms"]
 	if !ok {
-		return defaultBashTimeout
+		return fallback
 	}
 	switch v := value.(type) {
 	case int:
@@ -236,7 +234,7 @@ func timeoutFromParams(params map[string]any) time.Duration {
 			return time.Duration(parsed) * time.Millisecond
 		}
 	}
-	return defaultBashTimeout
+	return fallback
 }
 
 func shellCommandContext(ctx context.Context, command string) (*exec.Cmd, error) {

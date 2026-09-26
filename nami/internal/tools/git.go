@@ -144,16 +144,13 @@ func (t *GitTool) Execute(ctx context.Context, input ToolInput) (ToolOutput, err
 	if err != nil {
 		return ToolOutput{}, err
 	}
-	repoRoot, err := gitRepoRoot(ctx, workingDir)
+
+	commandCtx, cancel := context.WithTimeout(ctx, timeoutFromParams(input.Params, defaultGitTimeout))
+	defer cancel()
+
+	repoRoot, err := gitRepoRoot(commandCtx, workingDir)
 	if err != nil {
 		return ToolOutput{}, err
-	}
-
-	commandCtx := ctx
-	if timeout := timeoutFromParams(input.Params); timeout > 0 {
-		var cancel context.CancelFunc
-		commandCtx, cancel = context.WithTimeout(ctx, timeout)
-		defer cancel()
 	}
 
 	args, err := buildGitArgs(strings.TrimSpace(operation), input.Params, repoRoot)
@@ -178,10 +175,10 @@ func (t *GitTool) Execute(ctx context.Context, input ToolInput) (ToolOutput, err
 	// Route large diff outputs to a diff-preview artifact.
 	const diffPreviewThreshold = 3000
 	if strings.TrimSpace(operation) == "diff" && len(output) >= diffPreviewThreshold {
-		revision, _ := stringParam(input.Params, "revision")
+		revision, _ := gitRevisionParam(input.Params)
 		description := "git diff"
-		if strings.TrimSpace(revision) != "" {
-			description = "git diff " + strings.TrimSpace(revision)
+		if revision != "" {
+			description = "git diff " + revision
 		} else if boolParam(input.Params, "cached") {
 			description = "git diff --cached"
 		}
@@ -223,8 +220,12 @@ func buildGitArgs(operation string, params map[string]any, repoRoot string) ([]s
 		if boolParam(params, "stat") {
 			args = append(args, "--stat")
 		}
-		if revision, ok := stringParam(params, "revision"); ok && strings.TrimSpace(revision) != "" {
-			args = append(args, strings.TrimSpace(revision))
+		revision, err := gitRevisionParam(params)
+		if err != nil {
+			return nil, err
+		}
+		if revision != "" {
+			args = append(args, revision)
 		}
 		return appendPathspecs(args, params, repoRoot)
 	case "log":
@@ -241,8 +242,12 @@ func buildGitArgs(operation string, params map[string]any, repoRoot string) ([]s
 			}
 			args = append(args, fmt.Sprintf("--max-count=%d", maxCount))
 		}
-		if revision, ok := stringParam(params, "revision"); ok && strings.TrimSpace(revision) != "" {
-			args = append(args, strings.TrimSpace(revision))
+		revision, err := gitRevisionParam(params)
+		if err != nil {
+			return nil, err
+		}
+		if revision != "" {
+			args = append(args, revision)
 		}
 		return appendPathspecs(args, params, repoRoot)
 	case "show":
@@ -253,9 +258,12 @@ func buildGitArgs(operation string, params map[string]any, repoRoot string) ([]s
 		if boolParam(params, "stat") {
 			args = append(args, "--stat")
 		}
-		revision := "HEAD"
-		if value, ok := stringParam(params, "revision"); ok && strings.TrimSpace(value) != "" {
-			revision = strings.TrimSpace(value)
+		revision, err := gitRevisionParam(params)
+		if err != nil {
+			return nil, err
+		}
+		if revision == "" {
+			revision = "HEAD"
 		}
 		args = append(args, revision)
 		return appendPathspecs(args, params, repoRoot)
@@ -269,12 +277,15 @@ func buildGitArgs(operation string, params map[string]any, repoRoot string) ([]s
 		}
 		return args, nil
 	case "blame":
-		args := []string{"blame", "--"}
 		fileArg, err := gitFileArg(params, repoRoot)
 		if err != nil {
 			return nil, err
 		}
-		args = args[:1]
+		revision, err := gitRevisionParam(params)
+		if err != nil {
+			return nil, err
+		}
+		args := []string{"blame"}
 		if lineStart, ok := intParam(params, "line_start"); ok {
 			if lineStart < 1 {
 				return nil, fmt.Errorf("line_start must be >= 1")
@@ -288,8 +299,8 @@ func buildGitArgs(operation string, params map[string]any, repoRoot string) ([]s
 				args = append(args, "-L", fmt.Sprintf("%d,+1", lineStart))
 			}
 		}
-		if revision, ok := stringParam(params, "revision"); ok && strings.TrimSpace(revision) != "" {
-			args = append(args, strings.TrimSpace(revision))
+		if revision != "" {
+			args = append(args, revision)
 		}
 		args = append(args, "--", fileArg)
 		return args, nil
@@ -329,26 +340,36 @@ func gitFileArg(params map[string]any, repoRoot string) (string, error) {
 	return gitPathspec(filePath, repoRoot)
 }
 
+// gitRevisionParam returns the trimmed revision parameter. Git parses an
+// argument that starts with "-" as an option, and some options write files —
+// diff, log, and show all accept --output=<file> — so such a revision is
+// rejected rather than letting a read-only tool overwrite arbitrary paths.
+func gitRevisionParam(params map[string]any) (string, error) {
+	revision, _ := stringParam(params, "revision")
+	revision = strings.TrimSpace(revision)
+	if strings.HasPrefix(revision, "-") {
+		return "", fmt.Errorf("revision %q must not start with '-'", revision)
+	}
+	return revision, nil
+}
+
 func gitPathspec(pathspec string, repoRoot string) (string, error) {
 	pathspec = strings.TrimSpace(pathspec)
 	if pathspec == "" {
 		return "", fmt.Errorf("git pathspec cannot be empty")
 	}
+	relPath := pathspec
 	if filepath.IsAbs(pathspec) {
-		relPath, err := filepath.Rel(repoRoot, pathspec)
+		var err error
+		relPath, err = filepath.Rel(repoRoot, pathspec)
 		if err != nil {
 			return "", fmt.Errorf("convert %q to repo-relative path: %w", pathspec, err)
 		}
-		if strings.HasPrefix(relPath, "..") {
-			return "", fmt.Errorf("path %q is outside repository root", pathspec)
-		}
-		return filepath.ToSlash(relPath), nil
 	}
-	cleaned := filepath.Clean(pathspec)
-	if cleaned == "." || strings.HasPrefix(cleaned, "..") {
+	if !filepath.IsLocal(relPath) {
 		return "", fmt.Errorf("path %q is outside repository root", pathspec)
 	}
-	return filepath.ToSlash(cleaned), nil
+	return filepath.ToSlash(filepath.Clean(relPath)), nil
 }
 
 func runGitCommand(ctx context.Context, workingDir string, args ...string) (string, error) {
