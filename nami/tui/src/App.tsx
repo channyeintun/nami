@@ -420,35 +420,6 @@ const App: FC<AppProps> = ({ enginePath, model, mode, autoMode }) => {
     uiState.pendingResumeSelection,
   ]);
 
-  const handleSendNextQueuedPrompt = useCallback(() => {
-    if (
-      pendingTaskNotifications.length > 0 ||
-      isQueuedPromptDispatchBlocked(
-        uiState,
-        isEngineReady,
-        slashCommandInFlight,
-      )
-    ) {
-      return;
-    }
-
-    const queuedPrompt = queuedPrompts[0];
-    if (!queuedPrompt) {
-      return;
-    }
-
-    setQueuedPrompts((current) => current.slice(1));
-    setPasteWarning(null);
-    submitPrompt(queuedPrompt.text, queuedPrompt.images);
-  }, [
-    isEngineReady,
-    pendingTaskNotifications.length,
-    queuedPrompts,
-    slashCommandInFlight,
-    submitPrompt,
-    uiState,
-  ]);
-
   const handleRemoveNextQueuedPrompt = useCallback(() => {
     setQueuedPrompts((current) => current.slice(1));
   }, []);
@@ -1031,7 +1002,11 @@ const App: FC<AppProps> = ({ enginePath, model, mode, autoMode }) => {
                 onReasoningToggle={handleReasoningToggle}
                 onBackgroundTasksToggle={handleBackgroundTasksToggle}
                 onRevealFooterHints={handleRevealFooterHints}
-                onSendQueuedPromptNow={handleSendNextQueuedPrompt}
+                // Ctrl+Y ("send queued") has nothing to do: queued prompts go
+                // out as soon as the engine is free, and the engine holds a
+                // prompt sent during a turn until the turn ends. Input still
+                // requires a handler for the key.
+                onSendQueuedPromptNow={() => {}}
                 onRemoveQueuedPrompt={handleRemoveNextQueuedPrompt}
                 onCancel={handleCancel}
                 disabled={isPromptDisabled}
