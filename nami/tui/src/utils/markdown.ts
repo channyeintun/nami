@@ -191,33 +191,38 @@ function formatCodeBlock(token: Tokens.Code): string {
 
 function formatListItem(
   token: Tokens.ListItem,
-  depth: number,
   orderedIndex: number | null,
 ): string {
-  const indent = "  ".repeat(depth);
   const marker = orderedIndex === null ? "-" : `${orderedIndex}.`;
   const rendered = (token.tokens ?? [])
-    .map((child) => formatToken(child, depth + 1))
+    // A tight item holds its text in a "text" token that ends without a line
+    // break, so a nested list or code block after it would continue the line.
+    .map((child) =>
+      child.type === "text" ? `${formatToken(child)}${EOL}` : formatToken(child),
+    )
     .join("")
     .trimEnd();
 
   if (!rendered) {
-    return `${indent}${marker}${EOL}`;
+    return `${marker}${EOL}`;
   }
 
+  // Every line after the first - including all lines of a nested list - is
+  // indented under the item here, so each level of nesting adds exactly one
+  // indent.
   const lines = rendered.split(EOL);
   const formattedLines = lines.map((line, index) => {
     if (index === 0) {
-      return `${indent}${marker} ${line}`;
+      return `${marker} ${line}`;
     }
 
-    return line.length > 0 ? `${indent}  ${line}` : line;
+    return line.length > 0 ? `  ${line}` : line;
   });
 
   return `${formattedLines.join(EOL)}${EOL}`;
 }
 
-export function formatToken(token: Token, listDepth = 0): string {
+export function formatToken(token: Token): string {
   switch (token.type) {
     case "blockquote": {
       const inner = formatInlineTokens(token.tokens)
@@ -265,7 +270,6 @@ export function formatToken(token: Token, listDepth = 0): string {
         .map((item: Tokens.ListItem, index: number) =>
           formatListItem(
             item,
-            listDepth,
             (token as Tokens.List).ordered
               ? Number((token as Tokens.List).start || 1) + index
               : null,
@@ -273,7 +277,7 @@ export function formatToken(token: Token, listDepth = 0): string {
         )
         .join("");
     case "list_item":
-      return formatListItem(token as Tokens.ListItem, listDepth, null);
+      return formatListItem(token as Tokens.ListItem, null);
     case "paragraph":
       return `${formatInlineTokens(token.tokens)}${EOL}`;
     case "space":
