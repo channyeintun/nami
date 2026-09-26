@@ -78,13 +78,23 @@ func TestRouterReturnsBridgeErrorAfterEOF(t *testing.T) {
 }
 
 func TestRouterRunsCancelFuncOnCancelMessage(t *testing.T) {
-	router, _ := newTestRouter(t, encodeMessages(
-		ClientMessage{Type: MsgCancel},
-		userInput("after cancel"),
-	))
+	// The router starts reading as soon as it exists, and a cancel that
+	// arrives before a cancel function is registered is dropped as stale. So
+	// the messages are written only once the function is in place.
+	reader, writer := io.Pipe()
+	t.Cleanup(func() { writer.Close() })
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	router := NewMessageRouter(ctx, NewBridge(reader, io.Discard))
 
 	var cancelled atomic.Bool
 	router.SetCancelFunc(func() { cancelled.Store(true) })
+	go func() {
+		_, _ = io.WriteString(writer, encodeMessages(
+			ClientMessage{Type: MsgCancel},
+			userInput("after cancel"),
+		))
+	}()
 
 	msg, err := router.Next(context.Background())
 	if err != nil {
