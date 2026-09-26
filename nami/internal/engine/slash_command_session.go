@@ -104,6 +104,12 @@ func handleResumeSlashCommand(cmd *slashCommandContext) error {
 	}
 	cmd.state.Mode = parseExecutionMode(restored.Metadata.Mode)
 
+	// By now the engine state already belongs to the restored session, so a
+	// model that cannot start must not end the restore halfway: the UI would
+	// keep showing the old conversation while the next prompt went to this
+	// one. Finish the restore without a client instead, as startup does; the
+	// next turn retries the model and /model can pick another.
+	modelUnavailable := ""
 	if restored.Metadata.Model != "" {
 		provider, model := config.ParseModel(restored.Metadata.Model)
 		provider = normalizeProvider(provider)
@@ -111,13 +117,17 @@ func handleResumeSlashCommand(cmd *slashCommandContext) error {
 		if err != nil {
 			*cmd.client = nil
 			cmd.state.ActiveModelID = modelRef(provider, model)
-			return cmd.bridge.EmitError(fmt.Sprintf("restore model %q: %v", restored.Metadata.Model, err), true)
-		}
-		*cmd.client = clientdebug.WrapClient(restoredClient)
-		cmd.state.ActiveModelID = modelRef(provider, restoredClient.ModelID())
-		rememberSuccessfulModelSelection(cmd.state.ActiveModelID)
-		if err := emitToolUseCapabilityNotice(cmd.bridge, cmd.state.ActiveModelID, *cmd.client, nil); err != nil {
-			return err
+			modelUnavailable = fmt.Sprintf("restore model %q: %v", restored.Metadata.Model, err)
+			if err := cmd.bridge.EmitError(modelUnavailable, true); err != nil {
+				return err
+			}
+		} else {
+			*cmd.client = clientdebug.WrapClient(restoredClient)
+			cmd.state.ActiveModelID = modelRef(provider, restoredClient.ModelID())
+			rememberSuccessfulModelSelection(cmd.state.ActiveModelID)
+			if err := emitToolUseCapabilityNotice(cmd.bridge, cmd.state.ActiveModelID, *cmd.client, nil); err != nil {
+				return err
+			}
 		}
 	}
 	cmd.state.SubagentModelID = coerceSessionSubagentModel(config.Load(), cmd.state.ActiveModelID, restored.Metadata.SubagentModel)
@@ -158,7 +168,11 @@ func handleResumeSlashCommand(cmd *slashCommandContext) error {
 	if err := emitSessionArtifacts(cmd.ctx, cmd.bridge, cmd.artifactManager, cmd.state.SessionID); err != nil {
 		return err
 	}
-	return emitTextResponse(cmd.bridge, fmt.Sprintf("Resumed session %s with %d messages.", cmd.state.SessionID, len(cmd.state.Messages)))
+	response := fmt.Sprintf("Resumed session %s with %d messages.", cmd.state.SessionID, len(cmd.state.Messages))
+	if modelUnavailable != "" {
+		response += fmt.Sprintf("\n\nThe session's model is unavailable (%s). Use /model or /connect to choose another.", modelUnavailable)
+	}
+	return emitTextResponse(cmd.bridge, response)
 }
 
 func handleRewindSlashCommand(cmd *slashCommandContext) error {
