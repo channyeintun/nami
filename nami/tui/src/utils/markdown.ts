@@ -177,6 +177,81 @@ function formatInlineTokens(tokens: Token[] | undefined): string {
   return (tokens ?? []).map((token) => formatToken(token)).join("");
 }
 
+// A table that does not fit in availableWidth is laid out as one
+// "header: value" line per cell instead of a grid.
+export function formatTable(token: Tokens.Table, availableWidth: number): string {
+  const renderCell = (cell: Tokens.TableCell) =>
+    formatInlineTokens(cell.tokens).trim();
+  const headers = token.header.map(renderCell);
+  const rows = token.rows.map((row) => row.map(renderCell));
+
+  const columnWidths = headers.map((header, index) => {
+    const rowWidths = rows.map((row) => displayWidth(row[index] ?? ""));
+    return Math.max(displayWidth(header), ...rowWidths, 3);
+  });
+
+  const totalWidth =
+    columnWidths.reduce((sum, width) => sum + width, 0) +
+    columnWidths.length * 3 +
+    1;
+
+  if (totalWidth > availableWidth) {
+    return rows
+      .map((row, rowIndex) => {
+        const lines = row.map((cell, cellIndex) => {
+          const label = headers[cellIndex] || `Column ${cellIndex + 1}`;
+          return `${label}: ${cell}`;
+        });
+
+        if (rowIndex === 0) {
+          return lines.join("\n");
+        }
+
+        return ["─".repeat(Math.max(10, availableWidth - 2)), ...lines].join(
+          "\n",
+        );
+      })
+      .join("\n");
+  }
+
+  const border = (
+    left: string,
+    middle: string,
+    join: string,
+    right: string,
+  ) =>
+    `${left}${columnWidths
+      .map((width) => middle.repeat(width + 2))
+      .join(join)}${right}`;
+
+  const renderRow = (cells: string[], isHeader: boolean) => {
+    return `│ ${cells
+      .map((cell, index) => {
+        const align = isHeader ? "center" : (token.align[index] ?? "left");
+        return padAligned(
+          cell,
+          displayWidth(cell),
+          columnWidths[index]!,
+          align,
+        );
+      })
+      .join(" │ ")} │`;
+  };
+
+  return [
+    border("┌", "─", "┬", "┐"),
+    renderRow(headers, true),
+    border("├", "─", "┼", "┤"),
+    ...rows.map((row) => renderRow(row, false)),
+    border("└", "─", "┴", "┘"),
+  ].join("\n");
+}
+
+// Columns a transcript row takes around its text (message marker, list and
+// quote indents, scrollbar), so a table nested in a list item or quote - which
+// has no measured box of its own - still fits once it is indented.
+const NESTED_TABLE_CHROME_COLUMNS = 8;
+
 function formatCodeBlock(token: Tokens.Code): string {
   const language = token.lang?.trim();
   const code = token.text.replace(/\n+$/, "");
@@ -298,6 +373,16 @@ export function formatToken(token: Token): string {
     case "html":
       return token.text ? `${token.text}${token.block ? EOL : ""}` : "";
     case "table":
+      // renderMarkdownBlocks hands top-level tables to MarkdownTable, which
+      // measures its box; only tables nested in list items or blockquotes get
+      // here, and they are laid out against the terminal width instead.
+      return `${formatTable(
+        token as Tokens.Table,
+        Math.max(
+          20,
+          (process.stdout.columns ?? 80) - NESTED_TABLE_CHROME_COLUMNS,
+        ),
+      )}${EOL}`;
     case "def":
     case "tag":
     default:
