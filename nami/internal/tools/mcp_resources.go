@@ -5,18 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-	"sync"
 
 	mcppkg "github.com/channyeintun/nami/internal/mcp"
 	"github.com/channyeintun/nami/internal/textutil"
 )
-
-type mcpManagerRuntime struct {
-	mu      sync.RWMutex
-	manager *mcppkg.Manager
-}
-
-var globalMCPManagerRuntime mcpManagerRuntime
 
 type ListMCPResourcesTool struct {
 	manager *mcppkg.Manager
@@ -72,15 +64,6 @@ type readMCPResourceContent struct {
 	Summary  string `json:"summary,omitempty"`
 }
 
-func getGlobalMCPManager() (*mcppkg.Manager, error) {
-	globalMCPManagerRuntime.mu.RLock()
-	defer globalMCPManagerRuntime.mu.RUnlock()
-	if globalMCPManagerRuntime.manager == nil {
-		return nil, fmt.Errorf("mcp manager is unavailable")
-	}
-	return globalMCPManagerRuntime.manager, nil
-}
-
 func NewListMCPResourcesTool() *ListMCPResourcesTool {
 	return &ListMCPResourcesTool{}
 }
@@ -97,18 +80,20 @@ func NewReadMCPResourceToolWithManager(manager *mcppkg.Manager) *ReadMCPResource
 	return &ReadMCPResourceTool{manager: manager}
 }
 
+// mcpManager returns the tool's MCP manager. The registry's defaults have none;
+// the engine replaces them with manager-backed tools when it starts.
 func (t *ListMCPResourcesTool) mcpManager() (*mcppkg.Manager, error) {
-	if t != nil && t.manager != nil {
-		return t.manager, nil
+	if t == nil || t.manager == nil {
+		return nil, fmt.Errorf("mcp manager is unavailable")
 	}
-	return getGlobalMCPManager()
+	return t.manager, nil
 }
 
 func (t *ReadMCPResourceTool) mcpManager() (*mcppkg.Manager, error) {
-	if t != nil && t.manager != nil {
-		return t.manager, nil
+	if t == nil || t.manager == nil {
+		return nil, fmt.Errorf("mcp manager is unavailable")
 	}
-	return getGlobalMCPManager()
+	return t.manager, nil
 }
 
 func (t *ListMCPResourcesTool) Name() string {
