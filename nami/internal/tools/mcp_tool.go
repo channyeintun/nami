@@ -19,6 +19,7 @@ type MCPTool struct {
 	description    string
 	inputSchema    any
 	permission     PermissionLevel
+	readOnlyHint   bool
 	manager        *mcppkg.Manager
 }
 
@@ -31,6 +32,7 @@ func NewMCPTool(manager *mcppkg.Manager, descriptor mcppkg.DiscoveredTool) *MCPT
 		description:    buildMCPToolDescription(descriptor),
 		inputSchema:    normalizeMCPToolSchema(descriptor.Tool.InputSchema),
 		permission:     mcpPermissionLevel(descriptor.Permission),
+		readOnlyHint:   descriptor.Tool.ReadOnlyHint,
 		manager:        manager,
 	}
 }
@@ -55,8 +57,16 @@ func (t *MCPTool) Permission() PermissionLevel {
 	return t.permission
 }
 
+// Concurrency lets a call join a parallel batch only when the tool changes
+// nothing: configured with read permission, or annotated read-only by its
+// server. Calls to tools that act, a browser's navigate, click, and type say,
+// must run in the order the model issued them. The annotation only affects
+// scheduling; permission still comes from the user's configuration.
 func (t *MCPTool) Concurrency(input ToolInput) ConcurrencyDecision {
-	return ConcurrencyParallel
+	if t.permission == PermissionReadOnly || t.readOnlyHint {
+		return ConcurrencyParallel
+	}
+	return ConcurrencySerial
 }
 
 func (t *MCPTool) Execute(ctx context.Context, input ToolInput) (ToolOutput, error) {
