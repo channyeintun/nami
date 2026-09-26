@@ -167,6 +167,10 @@ func QueryStream(ctx context.Context, req QueryRequest, deps QueryDeps) iter.Seq
 		}
 
 		state := NewQueryState(req)
+		if err := emitSkippedMemoryFilesNotice(deps.EmitTelemetry, state.SystemContext.SkippedMemoryFiles); err != nil {
+			yield(ipc.StreamEvent{}, err)
+			return
+		}
 
 		for state.ShouldContinue() {
 			select {

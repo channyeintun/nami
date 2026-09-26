@@ -651,7 +651,9 @@ func deriveSessionTitle(messages []api.Message, previous agent.SessionMemorySnap
 }
 
 func buildDurableMemoryCorpus() string {
-	files := agent.LoadMemoryFiles()
+	// The query loop reports skipped instruction files; the corpus only needs
+	// what was loaded.
+	files, _ := agent.LoadMemoryFiles()
 	parts := make([]string, 0, len(files))
 	for _, file := range files {
 		content := normalizeMemoryText(file.Content)

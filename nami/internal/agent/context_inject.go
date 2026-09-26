@@ -21,6 +21,9 @@ type SystemContext struct {
 	OS           string
 	Architecture string
 	MemoryFiles  []MemoryFile
+	// SkippedMemoryFiles are instruction files found but not loaded because
+	// another user could have written them. The query loop reports them.
+	SkippedMemoryFiles []SkippedMemoryFile
 }
 
 // TurnContext holds volatile context refreshed every user turn.
@@ -45,7 +48,7 @@ func LoadSystemContext() SystemContext {
 	ctx.GitUser = gitCommand("config", "user.name")
 	ctx.OS = runtime.GOOS
 	ctx.Architecture = runtime.GOARCH
-	ctx.MemoryFiles = LoadMemoryFiles()
+	ctx.MemoryFiles, ctx.SkippedMemoryFiles = LoadMemoryFiles()
 	return ctx
 }
 

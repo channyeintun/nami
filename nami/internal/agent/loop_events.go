@@ -46,6 +46,20 @@ func emitNoticeTelemetry(emit func(ipc.StreamEvent) error, message string) error
 	return emit(event)
 }
 
+// emitSkippedMemoryFilesNotice tells the user which instruction files were
+// left out of the system prompt and why, so an AGENTS.md that is not being
+// followed says so instead of being dropped without a word.
+func emitSkippedMemoryFilesNotice(emit func(ipc.StreamEvent) error, skipped []SkippedMemoryFile) error {
+	if len(skipped) == 0 {
+		return nil
+	}
+	files := make([]string, 0, len(skipped))
+	for _, file := range skipped {
+		files = append(files, fmt.Sprintf("%s (%s)", file.Path, file.Reason))
+	}
+	return emitNoticeTelemetry(emit, "Ignored instruction files another user could have written: "+strings.Join(files, "; ")+".")
+}
+
 func emitMemoryRecallTelemetry(
 	emit func(ipc.StreamEvent) error,
 	files []MemoryFile,

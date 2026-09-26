@@ -22,6 +22,13 @@ type MemoryFile struct {
 	UpdatedAt time.Time
 }
 
+// SkippedMemoryFile is an instruction file the loader found but did not load,
+// and why.
+type SkippedMemoryFile struct {
+	Path   string
+	Reason string
+}
+
 // MemoryRecallResult holds recalled index lines for a specific durable memory file.
 type MemoryRecallResult struct {
 	Path   string
@@ -83,25 +90,29 @@ var recallTokenPattern = regexp.MustCompile(`[a-z0-9][a-z0-9_\-/]{1,}`)
 //  4. Local instructions: AGENTS.local.md (walking up from cwd to root)
 //
 // Files closer to the working directory have higher priority and are loaded later.
-func LoadMemoryFiles() []MemoryFile {
+//
+// Instruction files that another user could have written are not loaded; the
+// second result lists them so the caller can say so.
+func LoadMemoryFiles() ([]MemoryFile, []SkippedMemoryFile) {
 	cwd, err := os.Getwd()
 	if err != nil {
-		return nil
+		return nil, nil
 	}
 
 	var files []MemoryFile
+	var skipped []SkippedMemoryFile
 	files = appendConfigMemoryIndexes(files, cwd)
 	dirs := walkUpDirs(cwd)
 
 	for _, dir := range slices.Backward(dirs) {
-		files = appendProjectFiles(files, dir)
+		files, skipped = appendProjectFiles(files, skipped, dir)
 	}
 
 	if len(files) > maxMemoryFiles {
 		files = files[len(files)-maxMemoryFiles:]
 	}
 
-	return files
+	return files, skipped
 }
 
 func appendConfigMemoryIndexes(files []MemoryFile, cwd string) []MemoryFile {
@@ -127,18 +138,30 @@ func appendConfigMemoryIndexes(files []MemoryFile, cwd string) []MemoryFile {
 	return files
 }
 
-func appendProjectFiles(files []MemoryFile, dir string) []MemoryFile {
-	if content, err := readMemoryFile(filepath.Join(dir, "AGENTS.md")); err == nil {
-		path := filepath.Join(dir, "AGENTS.md")
-		files = append(files, MemoryFile{Path: path, Type: memoryTypeProject, Content: content, UpdatedAt: fileUpdatedAt(path)})
+// appendProjectFiles loads the instruction files in one directory of the walk
+// up from the working directory. The walk reaches every ancestor, shared ones
+// such as /tmp included, so a file another user could have written is skipped
+// rather than read into the system prompt.
+func appendProjectFiles(files []MemoryFile, skipped []SkippedMemoryFile, dir string) ([]MemoryFile, []SkippedMemoryFile) {
+	for _, instructions := range []struct {
+		name     string
+		fileType string
+	}{
+		{name: "AGENTS.md", fileType: memoryTypeProject},
+		{name: "AGENTS.local.md", fileType: memoryTypeLocal},
+	} {
+		path := filepath.Join(dir, instructions.name)
+		if reason := instructionFileDistrust(path); reason != "" {
+			skipped = append(skipped, SkippedMemoryFile{Path: path, Reason: reason})
+			continue
+		}
+		content, err := readMemoryFile(path)
+		if err != nil {
+			continue
+		}
+		files = append(files, MemoryFile{Path: path, Type: instructions.fileType, Content: content, UpdatedAt: fileUpdatedAt(path)})
 	}
-
-	if content, err := readMemoryFile(filepath.Join(dir, "AGENTS.local.md")); err == nil {
-		path := filepath.Join(dir, "AGENTS.local.md")
-		files = append(files, MemoryFile{Path: path, Type: memoryTypeLocal, Content: content, UpdatedAt: fileUpdatedAt(path)})
-	}
-
-	return files
+	return files, skipped
 }
 
 func walkUpDirs(start string) []string {
