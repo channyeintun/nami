@@ -45,6 +45,7 @@
             >Source</a
           >
           <button
+            type="button"
             id="menu-toggle"
             class="md:hidden flex items-center gap-2 bg-brand/10 text-brand px-3 py-1 rounded-sm border border-brand/20 text-xs font-bold uppercase tracking-wider"
           >
@@ -292,7 +293,7 @@
                   class="bg-subtle p-6 border border-[#1a1a1a] rounded-md text-sm text-gray-300 overflow-x-auto relative group"
                 ><code>sudo install -m 755 nami /usr/local/bin/nami
 sudo install -m 755 nami.js /usr/local/bin/nami.js
-sudo install -m 755 nami-engine /usr/local/bin/nami-engine</code><button class="copy-button absolute top-6 right-6 text-gray-700 hover:text-white transition"><i data-lucide="copy" class="w-4 h-4"></i></button></pre>
+sudo install -m 755 nami-engine /usr/local/bin/nami-engine</code><button type="button" aria-label="Copy commands" class="copy-button absolute top-6 right-6 text-gray-700 hover:text-white transition"><i data-lucide="copy" class="w-4 h-4"></i></button></pre>
               </div>
               <div>
                 <h4
@@ -305,7 +306,7 @@ sudo install -m 755 nami-engine /usr/local/bin/nami-engine</code><button class="
                 ><code>mkdir -p "$HOME/.local/bin"
 install -m 755 nami "$HOME/.local/bin/nami"
 install -m 755 nami.js "$HOME/.local/bin/nami.js"
-install -m 755 nami-engine "$HOME/.local/bin/nami-engine"</code><button class="copy-button absolute top-6 right-6 text-gray-700 hover:text-white transition"><i data-lucide="copy" class="w-4 h-4"></i></button></pre>
+install -m 755 nami-engine "$HOME/.local/bin/nami-engine"</code><button type="button" aria-label="Copy commands" class="copy-button absolute top-6 right-6 text-gray-700 hover:text-white transition"><i data-lucide="copy" class="w-4 h-4"></i></button></pre>
               </div>
             </div>
           </section>
@@ -419,7 +420,7 @@ install -m 755 nami-engine "$HOME/.local/bin/nami-engine"</code><button class="c
                 Ollama Example
               </div>
               <code>nami --model ollama/gemma4:e4b</code>
-              <button class="copy-button absolute top-6 right-6 text-gray-700 hover:text-white transition"><i data-lucide="copy" class="w-4 h-4"></i></button>
+              <button type="button" aria-label="Copy command" class="copy-button absolute top-6 right-6 text-gray-700 hover:text-white transition"><i data-lucide="copy" class="w-4 h-4"></i></button>
             </div>
             <div
               class="bg-subtle p-6 border border-[#1a1a1a] rounded-md text-sm text-gray-300 font-mono overflow-x-auto relative group mt-4"
@@ -430,7 +431,7 @@ install -m 755 nami-engine "$HOME/.local/bin/nami-engine"</code><button class="c
                 DeepSeek Example
               </div>
               <code>nami --model deepseek/deepseek-v4-flash</code>
-              <button class="copy-button absolute top-6 right-6 text-gray-700 hover:text-white transition"><i data-lucide="copy" class="w-4 h-4"></i></button>
+              <button type="button" aria-label="Copy command" class="copy-button absolute top-6 right-6 text-gray-700 hover:text-white transition"><i data-lucide="copy" class="w-4 h-4"></i></button>
             </div>
           </section>
 
@@ -2865,7 +2866,12 @@ make install        # Install to /usr/local/bin</code></pre>
           class="text-xs font-black uppercase tracking-[0.2em] text-gray-600"
           >Navigation</span
         >
-        <button id="close-menu" class="text-gray-400 hover:text-white">
+        <button
+          type="button"
+          id="close-menu"
+          aria-label="Close menu"
+          class="text-gray-400 hover:text-white"
+        >
           <i data-lucide="x" class="w-6 h-6"></i>
         </button>
       </div>

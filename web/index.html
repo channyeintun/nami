@@ -23,7 +23,7 @@
 <body class="bg-pure text-white selection:bg-brand/30">
     <nav class="fixed top-0 w-full z-50 border-b border-[#1a1a1a] bg-pure/80 backdrop-blur-md px-8 py-5">
         <div class="container-max flex justify-between items-center">
-            <div class="brand-lockup" aria-label="Nami">
+            <div class="brand-lockup">
                 <span class="brand-wordmark text-xl font-bold tracking-tight font-['Outfit'] uppercase">Nami</span>
             </div>
             <div class="hidden md:flex gap-10 text-xs font-bold uppercase tracking-widest text-gray-500">
@@ -67,7 +67,7 @@
                 </div>
                 <div class="relative">
                     <span class="code-prompt">$</span><code>curl -fsSL https://raw.githubusercontent.com/channyeintun/nami/main/nami/install.sh \ <br> &nbsp;&nbsp;| sh</code>
-                    <button data-copy-text="curl -fsSL https://raw.githubusercontent.com/channyeintun/nami/main/nami/install.sh | sh" class="copy-button absolute top-0 right-0 text-gray-700 hover:text-white transition"><i data-lucide="copy" class="w-4 h-4"></i></button>
+                    <button type="button" aria-label="Copy install command" data-copy-text="curl -fsSL https://raw.githubusercontent.com/channyeintun/nami/main/nami/install.sh | sh" class="copy-button absolute top-0 right-0 text-gray-700 hover:text-white transition"><i data-lucide="copy" class="w-4 h-4"></i></button>
                     
                     <div class="mt-6 space-y-1">
                         <span class="term-output">>&nbsp;<span class="term-success">Installation complete.</span> Global binary available at /usr/local/bin/nami</span>

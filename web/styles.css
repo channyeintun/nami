@@ -523,11 +523,16 @@ td {
   flex-direction: column;
   padding: 6rem 2rem 2rem;
   transform: translateX(100%);
-  transition: transform 0.4s cubic-bezier(0.19, 1, 0.22, 1);
+  /* Hidden, not just off-screen, so its links leave the tab order while closed. */
+  visibility: hidden;
+  transition:
+    transform 0.4s cubic-bezier(0.19, 1, 0.22, 1),
+    visibility 0.4s;
 }
 
 #mobile-drawer.open {
   transform: translateX(0);
+  visibility: visible;
 }
 
 /* Responsive Overrides */
