@@ -255,7 +255,7 @@ export interface PromptController {
   setValue: (value: string) => void;
   setCursorOffset: (offset: number) => void;
   insertImageReference: (id: number) => void;
-  submit: (overrideText?: string) => string;
+  submit: (overrideText?: string) => void;
   navigateUp: () => void;
   navigateDown: () => void;
   insertText: (text: string) => void;
@@ -270,8 +270,8 @@ export interface PromptController {
   moveWordRight: () => void;
   moveUp: () => void;
   moveDown: () => void;
-  moveVisualUp: (columns: number) => boolean;
-  moveVisualDown: (columns: number) => boolean;
+  moveUpOrRecallPrevious: (columns: number) => void;
+  moveDownOrRecallNext: (columns: number) => void;
   moveLineStart: () => void;
   moveLineEnd: () => void;
   clear: () => void;
@@ -286,6 +286,71 @@ interface PromptHistoryState {
 }
 
 const MAX_HISTORY_ENTRIES = 50;
+
+function recallPreviousEntry(current: PromptHistoryState): PromptHistoryState {
+  if (current.entries.length === 0 || current.index >= current.entries.length) {
+    return current;
+  }
+
+  const nextIndex = current.index + 1;
+  const nextValue = current.entries[nextIndex - 1] ?? current.value;
+  return {
+    ...current,
+    index: nextIndex,
+    draft: current.index === 0 ? current.value : current.draft,
+    value: nextValue,
+    cursorOffset: nextValue.length,
+  };
+}
+
+function recallNextEntry(current: PromptHistoryState): PromptHistoryState {
+  if (current.index === 0) {
+    return current;
+  }
+
+  if (current.index === 1) {
+    return {
+      ...current,
+      index: 0,
+      value: current.draft,
+      draft: "",
+      cursorOffset: current.draft.length,
+    };
+  }
+
+  const nextIndex = current.index - 1;
+  const nextValue = current.entries[nextIndex - 1] ?? "";
+
+  return {
+    ...current,
+    index: nextIndex,
+    value: nextValue,
+    cursorOffset: nextValue.length,
+  };
+}
+
+// The cursor moved one visual row up (-1) or down (1), keeping its column, or
+// null when there is no such row.
+function moveToAdjacentRow(
+  current: PromptHistoryState,
+  columns: number,
+  direction: -1 | 1,
+): PromptHistoryState | null {
+  const position = findWrappedCursorPosition(
+    current.value,
+    current.cursorOffset,
+    columns,
+  );
+  const target = position.segments[position.segmentIndex + direction];
+  if (!target) {
+    return null;
+  }
+
+  return {
+    ...current,
+    cursorOffset: offsetAtColumn(target, position.column),
+  };
+}
 
 const initialState: PromptHistoryState = {
   value: "",
@@ -337,16 +402,16 @@ export function usePromptHistory(): PromptController {
     }));
   }, []);
 
-  const submit = useCallback((overrideText?: string): string => {
-    let submitted = "";
-
+  // Clears the prompt and records the text in history. It returns nothing:
+  // the updater may run after this call, so callers read the text to send
+  // from the prompt value themselves.
+  const submit = useCallback((overrideText?: string) => {
     setState((current) => {
       const nextValue = (overrideText ?? current.value).trim();
       if (!nextValue) {
         return current;
       }
 
-      submitted = nextValue;
       return {
         value: "",
         entries: [
@@ -358,57 +423,14 @@ export function usePromptHistory(): PromptController {
         cursorOffset: 0,
       };
     });
-
-    return submitted;
   }, []);
 
   const navigateUp = useCallback(() => {
-    setState((current) => {
-      if (
-        current.entries.length === 0 ||
-        current.index >= current.entries.length
-      ) {
-        return current;
-      }
-
-      const nextIndex = current.index + 1;
-      const nextValue = current.entries[nextIndex - 1] ?? current.value;
-      return {
-        ...current,
-        index: nextIndex,
-        draft: current.index === 0 ? current.value : current.draft,
-        value: nextValue,
-        cursorOffset: nextValue.length,
-      };
-    });
+    setState(recallPreviousEntry);
   }, []);
 
   const navigateDown = useCallback(() => {
-    setState((current) => {
-      if (current.index === 0) {
-        return current;
-      }
-
-      if (current.index === 1) {
-        return {
-          ...current,
-          index: 0,
-          value: current.draft,
-          draft: "",
-          cursorOffset: current.draft.length,
-        };
-      }
-
-      const nextIndex = current.index - 1;
-      const nextValue = current.entries[nextIndex - 1] ?? "";
-
-      return {
-        ...current,
-        index: nextIndex,
-        value: nextValue,
-        cursorOffset: nextValue.length,
-      };
-    });
+    setState(recallNextEntry);
   }, []);
 
   const insertText = useCallback(
@@ -603,65 +625,22 @@ export function usePromptHistory(): PromptController {
     });
   }, []);
 
-  const moveVisualUp = useCallback((columns: number): boolean => {
-    let moved = false;
-
-    setState((current) => {
-      const position = findWrappedCursorPosition(
-        current.value,
-        current.cursorOffset,
-        columns,
-      );
-
-      if (position.segmentIndex <= 0) {
-        return current;
-      }
-
-      const targetSegment = position.segments[position.segmentIndex - 1];
-      if (!targetSegment) {
-        return current;
-      }
-
-      moved = true;
-      return {
-        ...current,
-        cursorOffset: offsetAtColumn(targetSegment, position.column),
-      };
-    });
-
-    return moved;
+  // Up and Down move between the prompt's visual rows and step through
+  // history from its first or last row. The choice is made inside the state
+  // update: React may run an updater after setState has returned, so a flag
+  // set inside it cannot tell the caller whether the cursor moved.
+  const moveUpOrRecallPrevious = useCallback((columns: number) => {
+    setState(
+      (current) =>
+        moveToAdjacentRow(current, columns, -1) ?? recallPreviousEntry(current),
+    );
   }, []);
 
-  const moveVisualDown = useCallback((columns: number): boolean => {
-    let moved = false;
-
-    setState((current) => {
-      const position = findWrappedCursorPosition(
-        current.value,
-        current.cursorOffset,
-        columns,
-      );
-
-      if (
-        position.segmentIndex === -1 ||
-        position.segmentIndex >= position.segments.length - 1
-      ) {
-        return current;
-      }
-
-      const targetSegment = position.segments[position.segmentIndex + 1];
-      if (!targetSegment) {
-        return current;
-      }
-
-      moved = true;
-      return {
-        ...current,
-        cursorOffset: offsetAtColumn(targetSegment, position.column),
-      };
-    });
-
-    return moved;
+  const moveDownOrRecallNext = useCallback((columns: number) => {
+    setState(
+      (current) =>
+        moveToAdjacentRow(current, columns, 1) ?? recallNextEntry(current),
+    );
   }, []);
 
   const clear = useCallback(() => {
@@ -695,8 +674,8 @@ export function usePromptHistory(): PromptController {
     moveWordRight,
     moveUp,
     moveDown,
-    moveVisualUp,
-    moveVisualDown,
+    moveUpOrRecallPrevious,
+    moveDownOrRecallNext,
     moveLineStart,
     moveLineEnd,
     clear,

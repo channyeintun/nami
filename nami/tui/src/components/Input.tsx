@@ -346,10 +346,7 @@ const Input: FC<InputProps> = ({
           return;
         }
 
-        if (!prompt.moveVisualUp(promptTextColumns)) {
-          prompt.navigateUp();
-        }
-
+        prompt.moveUpOrRecallPrevious(promptTextColumns);
         return;
       }
       if (key.downArrow) {
@@ -363,10 +360,7 @@ const Input: FC<InputProps> = ({
           return;
         }
 
-        if (!prompt.moveVisualDown(promptTextColumns)) {
-          prompt.navigateDown();
-        }
-
+        prompt.moveDownOrRecallNext(promptTextColumns);
         return;
       }
       if (key.leftArrow) {
