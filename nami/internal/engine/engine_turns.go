@@ -563,8 +563,7 @@ func (t *userTurnContext) newQueryDeps(planner *agent.Planner) agent.QueryDeps {
 // now begin at the new summary, which also lets the post-turn steps see that
 // this turn compacted.
 func (t *userTurnContext) rebaseAfterCompaction(result compact.CompactResult) {
-	if result.Strategy != compact.StrategySummarize && result.Strategy != compact.StrategyPartial {
-		// Truncating tool output edits messages in place; positions still hold.
+	if !compactionMovedMessages(result) {
 		return
 	}
 	t.queryStart = 0
@@ -579,6 +578,13 @@ func (t *userTurnContext) rebaseAfterCompaction(result compact.CompactResult) {
 	if t.state.timeline != nil {
 		t.state.timeline = rebuildConversationTimeline(t.state.messages)
 	}
+}
+
+// compactionMovedMessages reports whether a compaction replaced earlier
+// messages with a summary, which leaves every position recorded before it
+// stale. Truncating tool output edits messages in place; positions still hold.
+func compactionMovedMessages(result compact.CompactResult) bool {
+	return result.Strategy == compact.StrategySummarize || result.Strategy == compact.StrategyPartial
 }
 
 // persistCurrentMessages saves the conversation mid-turn. A failed save must

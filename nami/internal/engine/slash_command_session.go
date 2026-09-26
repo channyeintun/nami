@@ -47,6 +47,12 @@ func handleCompactSlashCommand(cmd *slashCommandContext) error {
 	}
 
 	cmd.state.Messages = result.Messages
+	if compactionMovedMessages(result) {
+		// The timeline names messages by position, and the summary moved
+		// them; the saved timeline would otherwise point a later /resume at
+		// messages the conversation no longer has.
+		cmd.state.Timeline = rebuildConversationTimeline(cmd.state.Messages)
+	}
 	tokensAfter := compact.EstimateConversationTokens(cmd.state.Messages)
 	if err := cmd.persistState(); err != nil {
 		return err

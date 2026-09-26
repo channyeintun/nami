@@ -354,3 +354,26 @@ func TestRewindToAUserTurn(t *testing.T) {
 		t.Fatalf("response = %q, want it to name user turn 2", text)
 	}
 }
+
+// /compact replaces the conversation with a summary. The timeline names
+// messages by position, so keeping the old one saved entries for messages
+// the session no longer has, and a later /resume rendered the wrong history.
+func TestCompactSlashCommandSavesATimelineForTheCompactedConversation(t *testing.T) {
+	isolateUserConfig(t)
+	messages := longConversation(30)
+	cmd, _ := newTestSlashCommandContext(t, session.NewStore(t.TempDir()), messages, rebuildConversationTimeline(messages))
+	*cmd.client = &scriptedClient{caps: api.ModelCapabilities{SupportsToolUse: true, MaxContextWindow: 20_000, MaxOutputTokens: 1_000}}
+
+	if err := handleCompactSlashCommand(cmd); err != nil {
+		t.Fatalf("handleCompactSlashCommand: %v", err)
+	}
+	if len(cmd.state.Messages) >= len(messages) {
+		t.Fatalf("compaction kept %d of %d messages; the test no longer exercises the rewrite", len(cmd.state.Messages), len(messages))
+	}
+
+	saved, err := cmd.store.LoadConversationTimeline(cmd.state.SessionID)
+	if err != nil {
+		t.Fatalf("LoadConversationTimeline: %v", err)
+	}
+	assertHydratedTimelineMatches(t, saved)
+}
