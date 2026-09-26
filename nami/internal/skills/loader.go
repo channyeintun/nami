@@ -282,7 +282,7 @@ func scoreSkill(skill Skill, lowerPrompt string, promptTokens map[string]struct{
 	}
 	lowerName := strings.ToLower(strings.TrimSpace(skill.Name))
 	if lowerName != "" {
-		if strings.Contains(lowerPrompt, "/"+lowerName) || strings.Contains(lowerPrompt, lowerName) {
+		if containsPhrase(lowerPrompt, lowerName) {
 			score += 8
 		}
 		score += overlapScore(tokenSet(lowerName), promptTokens, 3)
@@ -309,11 +309,40 @@ func scoreKeywords(keywords []string, lowerPrompt string) int {
 		if keyword == "" {
 			continue
 		}
-		if strings.Contains(lowerPrompt, keyword) {
+		if containsPhrase(lowerPrompt, keyword) {
 			score += 6
 		}
 	}
 	return score
+}
+
+// containsPhrase reports whether phrase occurs in text as whole words. A match
+// that starts or ends with an ASCII letter or digit must not be glued to
+// another one, so the keyword "go" matches "in go" and "/go-review" but not
+// "google" or "algorithm". Other characters impose no boundary, which keeps
+// keywords from scripts written without spaces, such as Japanese, matching.
+func containsPhrase(text, phrase string) bool {
+	if phrase == "" {
+		return false
+	}
+	for offset := 0; ; {
+		index := strings.Index(text[offset:], phrase)
+		if index < 0 {
+			return false
+		}
+		start := offset + index
+		end := start + len(phrase)
+		gluedBefore := start > 0 && isASCIIWordByte(phrase[0]) && isASCIIWordByte(text[start-1])
+		gluedAfter := end < len(text) && isASCIIWordByte(phrase[len(phrase)-1]) && isASCIIWordByte(text[end])
+		if !gluedBefore && !gluedAfter {
+			return true
+		}
+		offset = start + 1
+	}
+}
+
+func isASCIIWordByte(b byte) bool {
+	return 'a' <= b && b <= 'z' || 'A' <= b && b <= 'Z' || '0' <= b && b <= '9'
 }
 
 func mergeSkills(existing []Skill, next []Skill) []Skill {
