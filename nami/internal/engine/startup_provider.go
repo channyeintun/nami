@@ -85,7 +85,7 @@ func resolveStartupProviderSelection(cfg config.Config) startupProviderSelection
 	if current, ok := snapshot.LookupProvider(provider); ok && !current.Usable {
 		selection.Notice = appendStartupNotice(selection.Notice, formatNoUsableProviderNotice(current))
 	} else {
-		selection.Notice = appendStartupNotice(selection.Notice, "No usable providers detected. Run /providers for setup guidance.")
+		selection.Notice = appendStartupNotice(selection.Notice, fmt.Sprintf("Provider %s is not available. Run /providers for setup guidance.", provider))
 	}
 	return selection
 }
@@ -125,9 +125,13 @@ func firstStartupFallbackProvider(snapshot commandspkg.ProviderSnapshot) (comman
 	return commandspkg.ProviderStatus{}, false
 }
 
+// formatNoUsableProviderNotice explains that the session's provider is not
+// set up. It names that provider rather than claiming none is usable: a local
+// runtime such as Ollama counts as usable without being checked, so it is
+// never switched to at startup, and /status lists it as the first usable one.
 func formatNoUsableProviderNotice(status commandspkg.ProviderStatus) string {
 	if strings.TrimSpace(status.SetupHint) == "" {
-		return "No usable providers detected. Run /providers for setup guidance."
+		return fmt.Sprintf("%s is not set up. Run /providers for setup guidance.", status.ID)
 	}
-	return fmt.Sprintf("No usable providers detected. %s needs setup: %s Run /providers for more details.", status.ID, status.SetupHint)
+	return fmt.Sprintf("%s is not set up: %s Run /providers for more details.", status.ID, status.SetupHint)
 }
