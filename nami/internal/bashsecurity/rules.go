@@ -362,7 +362,30 @@ func isReadOnlySegment(segment string) bool {
 	if program == "rg" && flagSetContains(arguments, ripgrepExecutingFlags) {
 		return false
 	}
+	if program == "file" && fileCompilesMagic(arguments) {
+		return false
+	}
 	return true
+}
+
+// fileCompilesMagic reports whether file(1) is asked to compile a magic
+// database, which writes a .mgc file into the working directory instead of
+// inspecting anything. That is -C or --compile, and short flags can be grouped,
+// as in -bC. A short option's attached value that contains a C counts too,
+// which errs toward asking.
+func fileCompilesMagic(arguments []string) bool {
+	for _, argument := range arguments {
+		if argument == "--" {
+			return false
+		}
+		if argument == "--compile" {
+			return true
+		}
+		if strings.HasPrefix(argument, "-") && !strings.HasPrefix(argument, "--") && strings.Contains(argument[1:], "C") {
+			return true
+		}
+	}
+	return false
 }
 
 // flagSetContains reports whether any argument is one of the flags in set. A

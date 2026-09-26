@@ -247,3 +247,26 @@ func TestShellWordsStripsQuoting(t *testing.T) {
 		}
 	}
 }
+
+// file inspects, except that -C compiles a magic database and writes the
+// resulting .mgc file into the working directory.
+func TestIsReadOnlyBashCommandRejectsCompilingFile(t *testing.T) {
+	for _, command := range []string{
+		"file -C -m magic",
+		"file --compile -m magic",
+		"file -bC -m magic",
+	} {
+		if IsReadOnlyBashCommand(command) {
+			t.Errorf("%q must not be treated as read-only", command)
+		}
+	}
+	for _, command := range []string{
+		"file main.go",
+		"file -b --mime-type main.go",
+		"file -- -C",
+	} {
+		if !IsReadOnlyBashCommand(command) {
+			t.Errorf("%q should be treated as read-only", command)
+		}
+	}
+}
