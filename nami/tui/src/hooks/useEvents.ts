@@ -1690,6 +1690,30 @@ export function useEvents(initialModel: string, initialMode: string) {
     }));
   }, []);
 
+  // Once the engine is gone nothing it was doing will finish or report back,
+  // so end the turn, keep what streamed, and close the prompts only the
+  // engine could act on.
+  const endTurnOnEngineExit = useCallback(() => {
+    setUIState((s) => ({
+      ...s,
+      ...finishLiveAssistantMessage(s),
+      toolCalls: settleUnfinishedToolCalls(s.toolCalls, "Engine stopped"),
+      activeTurnStatus: "idle",
+      isStreaming: false,
+      compact: null,
+      goalProgress: null,
+      workflowRun: null,
+      pendingPermission: null,
+      pendingAskUserQuestion: null,
+      pendingArtifactReview: null,
+      pendingModelSelection: null,
+      pendingReasoningSelection: null,
+      pendingRewindSelection: null,
+      pendingResumeSelection: null,
+      submittingArtifactReviewRequestId: null,
+    }));
+  }, []);
+
   const clearPermission = useCallback((decision?: string) => {
     setUIState((s) => ({
       ...s,
@@ -1861,6 +1885,7 @@ export function useEvents(initialModel: string, initialMode: string) {
     handleEvent,
     clearStream,
     cancelActiveTurn,
+    endTurnOnEngineExit,
     clearPermission,
     appendUserMessage,
     beginAssistantTurn,

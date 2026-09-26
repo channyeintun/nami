@@ -134,6 +134,7 @@ const App: FC<AppProps> = ({ enginePath, model, mode, autoMode }) => {
     handleEvent,
     clearStream,
     cancelActiveTurn,
+    endTurnOnEngineExit,
     clearPermission,
     appendUserMessage,
     beginAssistantTurn,
@@ -215,6 +216,8 @@ const App: FC<AppProps> = ({ enginePath, model, mode, autoMode }) => {
       )
     : [];
   const isEngineReady = uiState.ready || engine.ready;
+  // Nothing can be sent to an engine that has not started or has since died.
+  const isEngineAvailable = isEngineReady && !engine.error;
 
   useEffect(() => {
     enableBracketedPaste(process.stdout);
@@ -236,6 +239,16 @@ const App: FC<AppProps> = ({ enginePath, model, mode, autoMode }) => {
       dismissAll();
     }
   }, [dismissAll, uiState.isStreaming]);
+
+  // A dead engine sends no turn_complete, so without this the turn would
+  // look busy forever. The Tasks dialog goes too: it would sit over the
+  // engine error, polling an engine that is gone.
+  useEffect(() => {
+    if (engine.error) {
+      endTurnOnEngineExit();
+      setShowBackgroundTasks(false);
+    }
+  }, [endTurnOnEngineExit, engine.error]);
 
   // Depend on the stable callback: `engine` is a new object every render, and
   // re-running this effect sends an inspect whose reply renders again.
@@ -349,7 +362,7 @@ const App: FC<AppProps> = ({ enginePath, model, mode, autoMode }) => {
     if (
       isQueuedPromptDispatchBlocked(
         uiState,
-        isEngineReady,
+        isEngineAvailable,
         slashCommandInFlight,
       )
     ) {
@@ -366,7 +379,7 @@ const App: FC<AppProps> = ({ enginePath, model, mode, autoMode }) => {
     );
     submitTaskNotification(nextNotification.text);
   }, [
-    isEngineReady,
+    isEngineAvailable,
     pendingTaskNotifications,
     slashCommandInFlight,
     submitTaskNotification,
@@ -384,7 +397,7 @@ const App: FC<AppProps> = ({ enginePath, model, mode, autoMode }) => {
     if (
       isQueuedPromptDispatchBlocked(
         uiState,
-        isEngineReady,
+        isEngineAvailable,
         slashCommandInFlight,
       )
     ) {
@@ -405,7 +418,7 @@ const App: FC<AppProps> = ({ enginePath, model, mode, autoMode }) => {
     );
     submitPrompt(nextPrompt.text, nextPrompt.images);
   }, [
-    isEngineReady,
+    isEngineAvailable,
     pendingTaskNotifications.length,
     queuedPrompts,
     slashCommandInFlight,
@@ -851,7 +864,7 @@ const App: FC<AppProps> = ({ enginePath, model, mode, autoMode }) => {
             minWidth={0}
             minHeight={0}
           >
-            {engine.error && !uiState.error && (
+            {engine.error && (
               <Box
                 borderStyle="round"
                 borderColor="$error"
@@ -1249,11 +1262,11 @@ function selectVisibleArtifacts(
 
 function isQueuedPromptDispatchBlocked(
   uiState: ReturnType<typeof useEvents>["uiState"],
-  isEngineReady: boolean,
+  isEngineAvailable: boolean,
   slashCommandInFlight: boolean,
 ): boolean {
   return (
-    !isEngineReady ||
+    !isEngineAvailable ||
     slashCommandInFlight ||
     uiState.isStreaming ||
     uiState.pendingPermission !== null ||
