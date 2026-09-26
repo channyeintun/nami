@@ -413,6 +413,10 @@ func handleClearSlashCommand(cmd *slashCommandContext) error {
 	}
 
 	cmd.state.Messages = cmd.state.Messages[:0]
+	// The timeline indexes messages by position, so the old one would both
+	// leak the previous session's transcript into the new session's saved
+	// timeline and swallow the new messages whose positions it already holds.
+	cmd.state.Timeline = newConversationTimeline()
 	cmd.tracker.Reset()
 	cmd.state.SessionID = newSessionID()
 	cmd.state.StartedAt = time.Now()
