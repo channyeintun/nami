@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/channyeintun/nami/internal/api"
+	"github.com/channyeintun/nami/internal/textutil"
 )
 
 // CompactableTools lists tools whose old results can be safely truncated.
@@ -153,7 +154,7 @@ func compactSnippet(value string, maxLen int) string {
 	if maxLen <= 0 || len(value) <= maxLen {
 		return value
 	}
-	return strings.TrimSpace(value[:maxLen])
+	return strings.TrimSpace(textutil.TruncateHead(value, maxLen))
 }
 
 func canonicalCompactableToolName(name string) string {
