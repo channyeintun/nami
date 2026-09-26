@@ -54,7 +54,7 @@ func (t *FileWriteTool) Validate(input ToolInput) error {
 	info, err := os.Stat(resolvedPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil
+			return fmt.Errorf("file does not exist: %s (use create_file to create it)", resolvedPath)
 		}
 		return fmt.Errorf("stat file %q: %w", resolvedPath, err)
 	}

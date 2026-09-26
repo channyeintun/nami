@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -104,6 +105,17 @@ func TestMultiReplaceAcceptsDeletionsAndWhitespaceSnippets(t *testing.T) {
 	}
 	if got, want := readWorkspaceFile(t, path), "keep\n\nend\n"; got != want {
 		t.Fatalf("content = %q, want %q", got, want)
+	}
+}
+
+// file_write only overwrites. A call it cannot carry out has to fail
+// validation, before anyone is asked to approve it.
+func TestFileWriteValidateRejectsMissingFile(t *testing.T) {
+	workspace := inWorkspace(t)
+	tool := NewFileWriteTool()
+	err := tool.Validate(ToolInput{Params: map[string]any{"file_path": workspace + "/missing.txt", "content": "x"}})
+	if err == nil || !strings.Contains(err.Error(), "create_file") {
+		t.Fatalf("Validate(missing file) = %v, want an error pointing at create_file", err)
 	}
 }
 
