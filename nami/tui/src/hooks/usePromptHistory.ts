@@ -1,4 +1,6 @@
 import { useCallback, useState } from "react";
+import { graphemeWidth } from "silvery";
+import { tabWidthAt } from "../utils/text.js";
 
 function clampOffset(value: string, offset: number): number {
   return Math.max(0, Math.min(offset, value.length));
@@ -75,18 +77,61 @@ function findLinePosition(value: string, cursorOffset: number) {
   };
 }
 
-interface WrappedSegment {
+// One visual row of the prompt. Input draws exactly these rows, and the
+// Up/Down keys move between them, so the two always agree.
+export interface WrappedSegment {
   start: number;
   end: number;
   logicalLineIndex: number;
   text: string;
+  // Only a line's last row has a cursor position after its final character;
+  // on any other row that position is the start of the next row.
+  isLastOfLine: boolean;
 }
 
+// Leave one column for the block cursor so a cursor drawn after the last
+// character of a full row does not spill onto a phantom row.
 function normalizeWrapWidth(columns: number): number {
   return Math.max(1, columns - 1);
 }
 
-function buildWrappedSegments(
+// Printable ASCII takes one column per UTF-16 unit, so such a line can be cut
+// by length. Anything else is measured per grapheme the way silvery lays it
+// out: wide characters wrap before the edge instead of overflowing the row,
+// no surrogate pair or cluster is split across rows, and a tab takes the
+// columns expandTabs gives it when the row is drawn.
+const PRINTABLE_ASCII = /^[\x20-\x7e]*$/;
+
+function graphemeColumns(grapheme: string, column: number): number {
+  return grapheme === "\t" ? tabWidthAt(column) : graphemeWidth(grapheme);
+}
+
+function wrapLine(line: string, wrapWidth: number): Array<[number, number]> {
+  const ranges: Array<[number, number]> = [];
+  if (PRINTABLE_ASCII.test(line)) {
+    for (let start = 0; start < line.length; start += wrapWidth) {
+      ranges.push([start, Math.min(line.length, start + wrapWidth)]);
+    }
+    return ranges;
+  }
+
+  let rowStart = 0;
+  let column = 0;
+  for (const { segment: grapheme, index } of graphemeSegmenter.segment(line)) {
+    let width = graphemeColumns(grapheme, column);
+    if (index > rowStart && column + width > wrapWidth) {
+      ranges.push([rowStart, index]);
+      rowStart = index;
+      column = 0;
+      width = graphemeColumns(grapheme, column);
+    }
+    column += width;
+  }
+  ranges.push([rowStart, line.length]);
+  return ranges;
+}
+
+export function buildWrappedSegments(
   value: string,
   columns: number,
 ): WrappedSegment[] {
@@ -96,28 +141,17 @@ function buildWrappedSegments(
   let lineStartOffset = 0;
 
   logicalLines.forEach((line, logicalLineIndex) => {
-    if (line.length === 0) {
+    const ranges: Array<[number, number]> =
+      line.length === 0 ? [[0, 0]] : wrapLine(line, wrapWidth);
+    ranges.forEach(([start, end], rangeIndex) => {
       segments.push({
-        start: lineStartOffset,
-        end: lineStartOffset,
+        start: lineStartOffset + start,
+        end: lineStartOffset + end,
         logicalLineIndex,
-        text: "",
+        text: line.slice(start, end),
+        isLastOfLine: rangeIndex === ranges.length - 1,
       });
-    } else {
-      for (
-        let startInLine = 0;
-        startInLine < line.length;
-        startInLine += wrapWidth
-      ) {
-        const endInLine = Math.min(line.length, startInLine + wrapWidth);
-        segments.push({
-          start: lineStartOffset + startInLine,
-          end: lineStartOffset + endInLine,
-          logicalLineIndex,
-          text: line.slice(startInLine, endInLine),
-        });
-      }
-    }
+    });
 
     lineStartOffset += line.length;
     if (logicalLineIndex < logicalLines.length - 1) {
@@ -128,53 +162,63 @@ function buildWrappedSegments(
   return segments;
 }
 
+// The row the cursor is drawn on: a cursor on a wrap boundary belongs to the
+// start of the next row, except after the final character of a line.
+export function findCursorSegmentIndex(
+  segments: WrappedSegment[],
+  cursorOffset: number,
+): number {
+  const index = segments.findIndex(
+    (segment) =>
+      (cursorOffset >= segment.start && cursorOffset < segment.end) ||
+      (cursorOffset === segment.end && segment.isLastOfLine),
+  );
+  return index >= 0 ? index : segments.length - 1;
+}
+
+// Columns from the start of a row to `offset` within it.
+function columnsBefore(segment: WrappedSegment, offset: number): number {
+  let column = 0;
+  const prefix = segment.text.slice(0, offset - segment.start);
+  for (const { segment: grapheme } of graphemeSegmenter.segment(prefix)) {
+    column += graphemeColumns(grapheme, column);
+  }
+  return column;
+}
+
+// The offset in a row nearest `column` without passing it.
+function offsetAtColumn(segment: WrappedSegment, column: number): number {
+  let current = 0;
+  let lastGraphemeStart = segment.start;
+  for (const { segment: grapheme, index } of graphemeSegmenter.segment(
+    segment.text,
+  )) {
+    const width = graphemeColumns(grapheme, current);
+    if (current + width > column) {
+      return segment.start + index;
+    }
+    current += width;
+    lastGraphemeStart = segment.start + index;
+  }
+  return segment.isLastOfLine ? segment.end : lastGraphemeStart;
+}
+
 function findWrappedCursorPosition(
   value: string,
   cursorOffset: number,
   columns: number,
 ) {
   const segments = buildWrappedSegments(value, columns);
+  const segmentIndex = findCursorSegmentIndex(segments, cursorOffset);
+  const segment = segments[segmentIndex];
 
-  if (segments.length === 0) {
-    return {
-      segments,
-      segmentIndex: -1,
-      column: 0,
-    };
-  }
-
-  for (let index = 0; index < segments.length; index += 1) {
-    const segment = segments[index];
-    if (!segment) {
-      continue;
-    }
-
-    const next = segments[index + 1];
-    const isLastSegmentOfLine =
-      next === undefined || next.logicalLineIndex !== segment.logicalLineIndex;
-    const isWithinSegment =
-      (cursorOffset >= segment.start && cursorOffset < segment.end) ||
-      (cursorOffset === segment.end && isLastSegmentOfLine);
-
-    if (isWithinSegment) {
-      return {
-        segments,
-        segmentIndex: index,
-        column: cursorOffset - segment.start,
-      };
-    }
-  }
-
-  const lastSegment = segments[segments.length - 1]!;
   return {
     segments,
-    segmentIndex: segments.length - 1,
-    column: lastSegment.end - lastSegment.start,
+    segmentIndex,
+    column: segment
+      ? columnsBefore(segment, Math.min(cursorOffset, segment.end))
+      : 0,
   };
-}
-
-function clampWrappedColumn(segment: WrappedSegment, column: number): number {
-  return segment.start + Math.min(column, segment.end - segment.start);
 }
 
 function findPreviousWordStart(value: string, cursorOffset: number): number {
@@ -581,7 +625,7 @@ export function usePromptHistory(): PromptController {
       moved = true;
       return {
         ...current,
-        cursorOffset: clampWrappedColumn(targetSegment, position.column),
+        cursorOffset: offsetAtColumn(targetSegment, position.column),
       };
     });
 
@@ -613,7 +657,7 @@ export function usePromptHistory(): PromptController {
       moved = true;
       return {
         ...current,
-        cursorOffset: clampWrappedColumn(targetSegment, position.column),
+        cursorOffset: offsetAtColumn(targetSegment, position.column),
       };
     });
 

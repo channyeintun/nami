@@ -6,13 +6,18 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { Box, Spinner, Text, useInput } from "silvery";
+import { Box, Spinner, Text, displayWidth, useInput } from "silvery";
 import { usePaste } from "silvery/runtime";
 import { DEFAULT_PROMPT_MARKER } from "../constants/prompt.js";
-import type { PromptController } from "../hooks/usePromptHistory.js";
+import {
+  buildWrappedSegments,
+  findCursorSegmentIndex,
+  type PromptController,
+} from "../hooks/usePromptHistory.js";
 import type { UISlashCommand } from "../hooks/useEvents.js";
 import { useSlashCommandPreview } from "../hooks/useSlashCommandPreview.js";
 import { parsePasteParts, type PastedImageData } from "../utils/imagePaste.js";
+import { expandTabs } from "../utils/text.js";
 import SlashCommandPreview from "./SlashCommandPreview.js";
 import ShimmerText from "./ShimmerText.js";
 
@@ -56,51 +61,25 @@ function renderInputLines(
   cursorOffset: number,
   columns: number,
 ): string[] {
-  // Leave one column for the block cursor so a cursor rendered at the visual end
-  // of a wrapped line does not spill onto an extra phantom segment.
-  const wrapWidth = Math.max(1, columns - 1);
-  const logicalLines = value.split("\n");
-  const renderedLines: string[] = [];
-  let lineStartOffset = 0;
+  // Draw exactly the rows the Up/Down keys move between.
+  const segments = buildWrappedSegments(value, columns);
+  const cursorSegmentIndex = findCursorSegmentIndex(segments, cursorOffset);
 
-  logicalLines.forEach((line, logicalLineIndex) => {
-    if (line.length === 0) {
-      const isCursorHere = cursorOffset === lineStartOffset;
-      renderedLines.push(isCursorHere ? "█" : " ");
-    } else {
-      for (let start = 0; start < line.length; start += wrapWidth) {
-        const end = Math.min(line.length, start + wrapWidth);
-        const segmentStart = lineStartOffset + start;
-        const segmentEnd = lineStartOffset + end;
-        const isLastWrappedSegment = end === line.length;
-        // A cursor on a wrap boundary belongs to the start of the next
-        // segment; only the line's last segment shows it after its final
-        // character, in the column wrapWidth keeps free for it.
-        const isCursorInside =
-          (cursorOffset >= segmentStart && cursorOffset < segmentEnd) ||
-          (cursorOffset === segmentEnd && isLastWrappedSegment);
-
-        if (!isCursorInside) {
-          renderedLines.push(line.slice(start, end));
-          continue;
-        }
-
-        const cursorColumn = cursorOffset - segmentStart;
-        const rendered =
-          line.slice(start, start + cursorColumn) +
-          "█" +
-          line.slice(start + cursorColumn, end);
-        renderedLines.push(rendered);
-      }
+  return segments.map((segment, index) => {
+    if (index !== cursorSegmentIndex) {
+      return expandTabs(segment.text);
     }
 
-    lineStartOffset += line.length;
-    if (logicalLineIndex < logicalLines.length - 1) {
-      lineStartOffset += 1;
-    }
+    // The block cursor uses the column the wrap width keeps free at the end
+    // of every row; tabs after it keep the stops they have without it.
+    const cursorIndex = cursorOffset - segment.start;
+    const before = expandTabs(segment.text.slice(0, cursorIndex));
+    const after = expandTabs(
+      segment.text.slice(cursorIndex),
+      displayWidth(before),
+    );
+    return `${before}█${after}`;
   });
-
-  return renderedLines.length > 0 ? renderedLines : ["█"];
 }
 
 function formatPromptStatusLabel(statusLabel?: string | null): string {
