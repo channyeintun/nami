@@ -41,11 +41,12 @@ func TestTruncateOutputPreviewClampsPreviewLength(t *testing.T) {
 	if !strings.HasPrefix(got, output) {
 		t.Fatalf("oversized preview = %q", got)
 	}
-	// Zero or negative means "no limit" rather than an empty preview.
+	// Zero or negative is a spent budget: none of the output stays inline,
+	// only the note saying it was cut.
 	for _, previewLen := range []int{0, -1} {
 		got := truncateOutputPreview(output, previewLen, "", len(output))
-		if !strings.HasPrefix(got, output) {
-			t.Fatalf("previewLen %d = %q", previewLen, got)
+		if strings.Contains(got, "hello") || !strings.Contains(got, "truncated") {
+			t.Fatalf("previewLen %d = %q, want only the truncation note", previewLen, got)
 		}
 	}
 }

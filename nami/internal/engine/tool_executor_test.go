@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -228,4 +229,49 @@ func TestFailedChildToolOutputIsBudgeted(t *testing.T) {
 		t.Fatalf("executeToolCallsForSubagent: %v", err)
 	}
 	requireBudgetedFailure(t, results[0])
+}
+
+// sizedTool returns as many characters as its "size" parameter asks for.
+type sizedTool struct{}
+
+func (sizedTool) Name() string        { return "bash" }
+func (sizedTool) Description() string { return "prints size characters" }
+func (sizedTool) InputSchema() any {
+	return map[string]any{"type": "object", "properties": map[string]any{"size": map[string]any{"type": "integer"}}}
+}
+func (sizedTool) Permission() toolpkg.PermissionLevel { return toolpkg.PermissionReadOnly }
+func (sizedTool) Concurrency(toolpkg.ToolInput) toolpkg.ConcurrencyDecision {
+	return toolpkg.ConcurrencySerial
+}
+func (sizedTool) Execute(_ context.Context, input toolpkg.ToolInput) (toolpkg.ToolOutput, error) {
+	size, _ := input.Params["size"].(float64)
+	return toolpkg.ToolOutput{Output: strings.Repeat("x", int(size))}, nil
+}
+
+// Once a batch's results have used up the aggregate inline budget, later
+// results may keep nothing inline. A spent budget used to leave a preview
+// length of zero, which the preview read as "no limit", so every result after
+// that went inline whole.
+func TestResultsAfterTheAggregateBudgetIsSpentStayOutOfContext(t *testing.T) {
+	registry := toolpkg.NewEmptyRegistry()
+	registry.Register(sizedTool{})
+	budget := toolpkg.DefaultResultBudgetForModel("", 8_000)
+	sizes := []int{
+		budget.MaxChars - 500, // fits
+		budget.AggregateMaxChars - (budget.MaxChars - 500) - 400, // fits, leaving 400
+		1_000,   // spills, and its preview and note use up the rest
+		500_000, // must stay out of context
+	}
+	calls := make([]api.ToolCall, 0, len(sizes))
+	for index, size := range sizes {
+		calls = append(calls, api.ToolCall{ID: fmt.Sprintf("call-%d", index), Name: "bash", Input: fmt.Sprintf(`{"size": %d}`, size)})
+	}
+
+	results, err := executeToolCallsForSubagent(t.Context(), generalPurposeSubagentType, nil, registry, newPermissionContext("bypassPermissions", false), nil, nil, "child-session", t.TempDir(), costpkg.NewTracker(), 8_000, calls)
+	if err != nil {
+		t.Fatalf("executeToolCallsForSubagent: %v", err)
+	}
+	if last := results[len(results)-1]; len(last.Output) > budget.PreviewLen {
+		t.Fatalf("a result after the budget was spent kept %d of %d characters inline", len(last.Output), sizes[len(sizes)-1])
+	}
 }

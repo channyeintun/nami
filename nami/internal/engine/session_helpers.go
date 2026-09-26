@@ -147,9 +147,9 @@ type toolBudgetInfo struct {
 }
 
 func truncateOutputPreview(output string, previewLen int, artifactPath string, totalChars int) string {
-	if previewLen <= 0 || previewLen > len(output) {
-		previewLen = len(output)
-	}
+	// A preview length of zero is a spent aggregate budget: nothing more fits
+	// inline, so only the note is kept. Read as "no limit", it put every
+	// later result of the batch inline whole.
 	preview := textutil.TruncateHead(output, previewLen)
 	if artifactPath == "" {
 		return fmt.Sprintf("%s\n\n[Output truncated (%d chars).]", preview, totalChars)
