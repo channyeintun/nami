@@ -37,6 +37,7 @@ type backgroundCommand struct {
 	terminal                  *os.File
 	cancel                    context.CancelFunc
 	output                    *boundedOutput
+	readers                   sync.WaitGroup // output readers, done once they reach the end of their streams
 	running                   bool
 	exitCode                  *int
 	errText                   string
@@ -174,7 +175,7 @@ func startBackgroundPTYCommand(streamCtx context.Context, cancel context.CancelF
 	backgroundCommands[id] = bg
 	backgroundCommandsMu.Unlock()
 
-	go streamBackgroundOutput(streamCtx, bg, bg.output, terminal)
+	bg.readers.Go(func() { streamBackgroundOutput(streamCtx, bg, terminal) })
 	go waitForBackgroundCommand(bg)
 
 	return bg, nil
@@ -233,8 +234,11 @@ func startBackgroundPipeCommand(streamCtx context.Context, cancel context.Cancel
 	backgroundCommands[id] = bg
 	backgroundCommandsMu.Unlock()
 
-	for _, reader := range []io.ReadCloser{stdout, stderr} {
-		go streamBackgroundOutput(streamCtx, bg, bg.output, reader)
+	for _, reader := range []*os.File{stdout, stderr} {
+		bg.readers.Go(func() {
+			streamBackgroundOutput(streamCtx, bg, reader)
+			_ = reader.Close()
+		})
 	}
 	go waitForBackgroundCommand(bg)
 
@@ -249,6 +253,7 @@ func closeAll(files ...*os.File) {
 
 func waitForBackgroundCommand(bg *backgroundCommand) {
 	err := bg.cmd.Wait()
+	bg.awaitOutputDrain(commandWaitDelay)
 
 	bg.mu.Lock()
 	if bg.cancel != nil {
@@ -277,6 +282,25 @@ func waitForBackgroundCommand(bg *backgroundCommand) {
 	}
 }
 
+// awaitOutputDrain gives the output readers up to timeout to reach the end of
+// their streams. The process has exited, but what it wrote last can still be
+// buffered in the terminal or pipe, and cancelling the readers or closing the
+// terminal at this point threw that tail away. The wait is bounded because a
+// process the command left running can hold the streams open indefinitely.
+func (bg *backgroundCommand) awaitOutputDrain(timeout time.Duration) {
+	drained := make(chan struct{})
+	go func() {
+		bg.readers.Wait()
+		close(drained)
+	}()
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case <-drained:
+	case <-timer.C:
+	}
+}
+
 // recordExitLocked stores the outcome of cmd.Wait. A non-zero exit is normal
 // for a shell command, so it keeps the code alongside the message; anything
 // else (a signal, a lost process) leaves the exit code unset.
@@ -293,7 +317,7 @@ func (bg *backgroundCommand) recordExitLocked(err error) {
 	}
 }
 
-func streamBackgroundOutput(ctx context.Context, bg *backgroundCommand, buffer *boundedOutput, reader io.ReadCloser) {
+func streamBackgroundOutput(ctx context.Context, bg *backgroundCommand, reader *os.File) {
 	chunk := make([]byte, 4096)
 	for {
 		select {
@@ -302,12 +326,10 @@ func streamBackgroundOutput(ctx context.Context, bg *backgroundCommand, buffer *
 		default:
 		}
 
-		if deadlineReader, ok := reader.(interface{ SetReadDeadline(time.Time) error }); ok {
-			_ = deadlineReader.SetReadDeadline(time.Now().Add(250 * time.Millisecond))
-		}
+		_ = reader.SetReadDeadline(time.Now().Add(250 * time.Millisecond))
 		readLen, err := reader.Read(chunk)
 		if readLen > 0 {
-			_, _ = buffer.Write(chunk[:readLen])
+			_, _ = bg.output.Write(chunk[:readLen])
 			bg.markUpdated(time.Now())
 		}
 		if err == nil {
@@ -316,10 +338,12 @@ func streamBackgroundOutput(ctx context.Context, bg *backgroundCommand, buffer *
 		if timeoutErr, ok := errors.AsType[timeoutError](err); ok && timeoutErr.Timeout() {
 			continue
 		}
-		if errors.Is(err, io.EOF) || errors.Is(err, syscall.EIO) {
+		// EOF and EIO are how a pipe and a terminal report that every writer
+		// is gone; ErrClosed means the stream was torn down on purpose.
+		if errors.Is(err, io.EOF) || errors.Is(err, syscall.EIO) || errors.Is(err, os.ErrClosed) {
 			return
 		}
-		_, _ = buffer.Write(fmt.Appendf(nil, "\n[Background PTY stream closed: %v]\n", err))
+		_, _ = bg.output.Write(fmt.Appendf(nil, "\n[Background PTY stream closed: %v]\n", err))
 		return
 	}
 }
