@@ -278,6 +278,8 @@ export function formatToken(token: Token): string {
         .join("");
     case "list_item":
       return formatListItem(token as Tokens.ListItem, null);
+    case "checkbox":
+      return (token as Tokens.Checkbox).checked ? "[x] " : "[ ] ";
     case "paragraph":
       return `${formatInlineTokens(token.tokens)}${EOL}`;
     case "space":
