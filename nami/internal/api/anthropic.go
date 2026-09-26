@@ -289,7 +289,8 @@ func (c *AnthropicClient) handleEvent(
 
 		inputJSON, err := toolState.inputJSON()
 		if err != nil {
-			return err
+			state.toolInputErr = err
+			return nil
 		}
 		if !yield(ModelEvent{Type: ModelEventToolCall, ToolCall: &ToolCall{ID: toolState.ID, Name: toolState.Name, Input: inputJSON}}, nil) {
 			return errStopStream
@@ -308,6 +309,12 @@ func (c *AnthropicClient) handleEvent(
 		}
 		return nil
 	case "message_stop":
+		// A call cut off by max_tokens cannot run, and the stop reason tells
+		// the agent to try again with more room; broken input on any other
+		// stop is a real fault.
+		if state.toolInputErr != nil && state.stopReason != "max_tokens" {
+			return state.toolInputErr
+		}
 		// message_start and message_delta each carry the running totals, so
 		// usage is reported once, here, when it is final.
 		if state.usage != (anthropicUsage{}) {

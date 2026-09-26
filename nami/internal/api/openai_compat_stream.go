@@ -155,6 +155,15 @@ func (s *openAICompatStreamState) emitStop(yield func(ModelEvent, error) bool) e
 	if s.sentStop {
 		return nil
 	}
+	if s.stopReason == "max_tokens" {
+		// The output can run out inside a call's arguments. That call cannot
+		// run, and the stop reason tells the agent to try again with more
+		// room, so only the calls that were finished are kept.
+		s.toolCalls = slices.DeleteFunc(s.toolCalls, func(call *openAICompatToolCallState) bool {
+			_, err := decodeToolInput(call.Arguments.String())
+			return err != nil
+		})
+	}
 	if len(s.toolCalls) > 0 {
 		if err := s.emitToolCalls(yield); err != nil {
 			return err

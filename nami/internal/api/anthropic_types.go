@@ -132,6 +132,11 @@ type anthropicStreamState struct {
 	usage      anthropicUsage
 	stopReason string
 	toolBlocks map[int]*anthropicToolUseState
+	// toolInputErr holds why a tool call's input failed to decode. A response
+	// cut off by max_tokens ends inside its last call's input, and that is
+	// only known once message_delta arrives, so the error waits for
+	// message_stop.
+	toolInputErr error
 }
 
 type anthropicToolUseState struct {
