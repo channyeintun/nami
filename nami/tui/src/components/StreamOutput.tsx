@@ -52,6 +52,10 @@ interface StreamOutputProps {
     totalMatches: number,
     selectedIndex: number,
   ) => void;
+  // False while a dialog or the transcript search owns the keyboard.
+  keyboardNavigation?: boolean;
+  // True while the prompt holds text; its Up/Down and Home/End edit it then.
+  promptHasDraft?: boolean;
 }
 
 interface QueuedPromptPreview {
@@ -104,6 +108,8 @@ const StreamOutput: FC<StreamOutputProps> = ({
   transcriptSearchQuery = "",
   transcriptSearchSelectedIndex = 0,
   onTranscriptSearchStatsChange,
+  keyboardNavigation = true,
+  promptHasDraft = false,
 }) => {
   const [cursorIndex, setCursorIndex] = useState(0);
   const [userScrolled, setUserScrolled] = useState(false);
@@ -239,12 +245,20 @@ const StreamOutput: FC<StreamOutputProps> = ({
   // The list's built-in key handling also answers j, k, G and Ctrl+U/D, and
   // silvery hands every key to every active handler, so typing "k" into the
   // prompt moved the transcript and switched off auto-follow. It is turned
-  // off below; only navigation keys that type nothing move the transcript.
+  // off below; only navigation keys that type nothing move the transcript,
+  // and not while a dialog owns the keyboard or the prompt's own editing keys
+  // are in use.
   const viewportHeightRef = useRef(1);
   useInput(
     (_input, key) => {
       const last = displayBlocks.length - 1;
       if (last < 0) {
+        return;
+      }
+
+      const editsPrompt =
+        key.upArrow || key.downArrow || key.home || key.end;
+      if (promptHasDraft && editsPrompt) {
         return;
       }
 
@@ -268,7 +282,7 @@ const StreamOutput: FC<StreamOutputProps> = ({
 
       handleCursorChange(Math.max(0, Math.min(last, next)));
     },
-    { isActive: !searchQuery },
+    { isActive: keyboardNavigation && !searchQuery },
   );
 
   useEffect(() => {

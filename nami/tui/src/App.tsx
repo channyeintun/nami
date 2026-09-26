@@ -918,6 +918,10 @@ const App: FC<AppProps> = ({ enginePath, model, mode, autoMode }) => {
               transcriptSearchQuery={transcriptSearchQuery}
               transcriptSearchSelectedIndex={transcriptSearchSelectedIndex}
               onTranscriptSearchStatsChange={handleTranscriptSearchStatsChange}
+              keyboardNavigation={
+                showPromptArea && !overlayDialogContent && !transcriptSearchActive
+              }
+              promptHasDraft={prompt.value.length > 0}
             />
 
             {uiState.error && (
