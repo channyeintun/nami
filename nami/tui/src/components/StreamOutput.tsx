@@ -723,8 +723,10 @@ function toolCallSearchText(toolCall: UIToolCall): string {
 }
 
 function QueuedPromptMessage({ prompt }: { prompt: QueuedPromptPreview }) {
+  // A column, so the row stretches to the full width. In the default row
+  // layout it shrank to its label, and the prompt text got no width at all.
   return (
-    <Box marginTop={1}>
+    <Box marginTop={1} flexDirection="column">
       <MessageRow
         marker={DEFAULT_PROMPT_MARKER.trimEnd()}
         markerColor="$primary"
