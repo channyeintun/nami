@@ -89,9 +89,9 @@ func TestApplyModelFlag(t *testing.T) {
 func TestTUIModelSelectionSurvivesTheRoundTrip(t *testing.T) {
 	configured := config.Config{Provider: "anthropic", Model: "claude-sonnet-5", ModelSource: "config"}
 	chosen := []config.Config{
-		{Provider: "openai", Model: "gpt-5"},
-		{Provider: "groq", Model: "meta-llama/llama-4-scout"},
-		{Provider: "anthropic", Model: "claude-sonnet-5"},
+		{Provider: "openai", Model: "gpt-5", ModelSource: "flag"},
+		{Provider: "groq", Model: "meta-llama/llama-4-scout", ModelSource: "env"},
+		{Provider: "anthropic", Model: "claude-sonnet-5", ModelSource: "flag"},
 	}
 	for _, parent := range chosen {
 		t.Run(parent.Provider+"/"+parent.Model, func(t *testing.T) {
@@ -102,11 +102,23 @@ func TestTUIModelSelectionSurvivesTheRoundTrip(t *testing.T) {
 		})
 	}
 
-	if got := tuiModelSelection(config.Config{Model: "gpt-5"}); got != "gpt-5" {
+	if got := tuiModelSelection(config.Config{Model: "gpt-5", ModelSource: "flag"}); got != "gpt-5" {
 		t.Errorf("tuiModelSelection without a provider = %q, want the bare model", got)
 	}
-	if got := tuiModelSelection(config.Config{Provider: "anthropic"}); got != "" {
+	if got := tuiModelSelection(config.Config{Provider: "anthropic", ModelSource: "flag"}); got != "" {
 		t.Errorf("tuiModelSelection without a model = %q, want empty so the engine picks the default", got)
+	}
+}
+
+// A model the user did not choose must not reach the TUI's engine as --model:
+// that would make it look chosen, and the engine only prefers the model that
+// last worked over a configured or default one.
+func TestTUIModelSelectionLeavesUnchosenModelsToTheEngine(t *testing.T) {
+	for _, source := range []string{"", "default", "config"} {
+		cfg := config.Config{Provider: "anthropic", Model: "claude-sonnet-5", ModelSource: source}
+		if got := tuiModelSelection(cfg); got != "" {
+			t.Errorf("tuiModelSelection with model source %q = %q, want empty", source, got)
+		}
 	}
 }
 
