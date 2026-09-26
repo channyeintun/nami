@@ -13,7 +13,7 @@ Nami combines a terminal UI, a Go-based execution engine, first-class artifacts,
 - **First-class artifacts** — implementation plans, task lists, walkthroughs, and search reports persist as reviewable outputs.
 - **Bounded child agents** — delegate exploration, code search, or terminal-heavy work to specialized subagents.
 - **Permission gating** — risky or sensitive actions require explicit approval.
-- **Multi-provider model support** — works with Anthropic, OpenAI, Google, DeepSeek, Groq, Mistral, Ollama, and GitHub Copilot.
+- **Multi-provider model support** — works with Anthropic, OpenAI, Codex, Google, DeepSeek, Qwen, GLM, Groq, Mistral, Ollama, and GitHub Copilot.
 
 ## Architecture & Vision
 
@@ -35,7 +35,7 @@ Nami is built on three core pillars:
 
 - macOS, Linux, or Windows 11
 - One supported JavaScript runtime to run the `nami` launcher: Node.js 24 or newer, Bun, or Deno. The Windows installer can bootstrap a local Node.js runtime automatically if none is already available.
-- One configured model provider: Anthropic, OpenAI, Google, DeepSeek, Groq, Mistral, Ollama, or GitHub Copilot
+- One configured model provider: Anthropic, OpenAI, Codex, Google, DeepSeek, Qwen, GLM, Groq, Mistral, Ollama, or GitHub Copilot
 - Go 1.27.0 only if building from source or rebuilding `nami-engine`
 
 ### Install
@@ -165,6 +165,8 @@ Supported providers:
 | OpenAI         | `OPENAI_API_KEY`         |
 | Google         | `GEMINI_API_KEY`         |
 | DeepSeek       | `DEEPSEEK_API_KEY` for `deepseek/deepseek-v4-flash` or `deepseek/deepseek-v4-pro` |
+| Qwen           | `DASHSCOPE_API_KEY`      |
+| GLM            | `GLM_API_KEY`            |
 | Groq           | `GROQ_API_KEY`           |
 | Mistral        | `MISTRAL_API_KEY`        |
 | Ollama         | none — runs locally      |
