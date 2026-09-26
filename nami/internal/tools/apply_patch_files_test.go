@@ -179,6 +179,85 @@ func TestApplyPatchReportsRecoverableFailures(t *testing.T) {
 	}
 }
 
+// A patch is all or nothing. If a later section fails, the files earlier
+// sections touched must be left as they were: the failure output only names
+// the failing file, so a model that fixes it and resends the patch would
+// otherwise apply the earlier sections twice.
+func TestApplyPatchFailureLeavesEveryFileUntouched(t *testing.T) {
+	cases := map[string]string{
+		"update then failing update": strings.Join([]string{
+			"*** Begin Patch",
+			"*** Update File: first.txt",
+			"@@",
+			" first",
+			"+inserted",
+			"*** Update File: second.txt",
+			"@@",
+			"-missing line",
+			"+replacement",
+			"*** End Patch",
+		}, "\n"),
+		"add, delete, then failing update": strings.Join([]string{
+			"*** Begin Patch",
+			"*** Add File: added.txt",
+			"+new file",
+			"*** Delete File: first.txt",
+			"*** Update File: second.txt",
+			"@@",
+			"-missing line",
+			"+replacement",
+			"*** End Patch",
+		}, "\n"),
+	}
+	for name, patchText := range cases {
+		t.Run(name, func(t *testing.T) {
+			workspace := inWorkspace(t)
+			first := writeWorkspaceFile(t, workspace, "first.txt", "first\n")
+			second := writeWorkspaceFile(t, workspace, "second.txt", "second\n")
+
+			output := runApplyPatch(t, patchText)
+			if !output.IsError || output.ErrorKind != string(EditFailureNoMatch) {
+				t.Fatalf("output = %+v, want a no_match failure", output)
+			}
+			if got := readWorkspaceFile(t, first); got != "first\n" {
+				t.Fatalf("first.txt = %q, want it untouched", got)
+			}
+			if got := readWorkspaceFile(t, second); got != "second\n" {
+				t.Fatalf("second.txt = %q, want it untouched", got)
+			}
+			if _, err := os.Stat(filepath.Join(workspace, "added.txt")); !os.IsNotExist(err) {
+				t.Fatalf("added.txt exists after a failed patch (stat err = %v)", err)
+			}
+		})
+	}
+}
+
+// Sections that touch the same file apply in order, each seeing the result of
+// the one before.
+func TestApplyPatchAppliesSectionsForTheSameFileInOrder(t *testing.T) {
+	workspace := inWorkspace(t)
+	path := writeWorkspaceFile(t, workspace, "same.txt", "one\n")
+
+	output := runApplyPatch(t, strings.Join([]string{
+		"*** Begin Patch",
+		"*** Update File: same.txt",
+		"@@",
+		"-one",
+		"+two",
+		"*** Update File: same.txt",
+		"@@",
+		"-two",
+		"+three",
+		"*** End Patch",
+	}, "\n"))
+	if output.IsError {
+		t.Fatalf("output = %s", output.Output)
+	}
+	if got := readWorkspaceFile(t, path); got != "three\n" {
+		t.Fatalf("same.txt = %q, want %q", got, "three\n")
+	}
+}
+
 func TestApplyPatchValidateRejectsConflictingTargets(t *testing.T) {
 	workspace := inWorkspace(t)
 	writeWorkspaceFile(t, workspace, "exists.txt", "content\n")

@@ -19,6 +19,7 @@ type ApplyPatchTool struct{}
 type applyPatchFileChange struct {
 	action     patch.Action
 	path       string
+	content    string // the file's new content; empty for deletes
 	preview    string
 	insertions int
 	deletions  int
@@ -152,33 +153,22 @@ func (t *ApplyPatchTool) Execute(ctx context.Context, input ToolInput) (ToolOutp
 		return editFailureOutputFor(editFailureFromPatchError(err))
 	}
 
-	changes := make([]applyPatchFileChange, 0, len(document.Operations))
-	totalInsertions := 0
-	totalDeletions := 0
-
-	for _, operation := range document.Operations {
-		select {
-		case <-ctx.Done():
-			return ToolOutput{}, ctx.Err()
-		default:
+	changes, err := planPatchChanges(ctx, document.Operations)
+	if err != nil {
+		return editFailureOutputFor(err)
+	}
+	for index, change := range changes {
+		if err := writePatchChange(change); err != nil {
+			return patchWriteFailure(changes[:index], err)
 		}
-
-		resolvedPath, err := resolveToolPath(operation.Path)
-		if err != nil {
-			return ToolOutput{}, err
-		}
-
-		change, err := applyPatchOperation(resolvedPath, operation)
-		if err != nil {
-			return editFailureOutputFor(err)
-		}
-		changes = append(changes, change)
-		totalInsertions += change.insertions
-		totalDeletions += change.deletions
 	}
 
+	totalInsertions := 0
+	totalDeletions := 0
 	changedPaths := make([]string, 0, len(changes))
 	for _, change := range changes {
+		totalInsertions += change.insertions
+		totalDeletions += change.deletions
 		changedPaths = append(changedPaths, change.path)
 	}
 
@@ -198,85 +188,138 @@ func ExtractApplyPatchTargets(patchText string) ([]string, error) {
 	return patch.Targets(patchText)
 }
 
-func applyPatchOperation(resolvedPath string, operation patch.FileOperation) (applyPatchFileChange, error) {
+// plannedFile is a file as the patch has left it so far.
+type plannedFile struct {
+	content string
+	exists  bool
+}
+
+// planPatchChanges works out what every section of a patch does before any
+// file is touched, so a section that fails to apply leaves the workspace as it
+// was instead of half patched. Sections see the result of earlier sections on
+// the same file.
+func planPatchChanges(ctx context.Context, operations []patch.FileOperation) ([]applyPatchFileChange, error) {
+	planned := make(map[string]plannedFile, len(operations))
+	changes := make([]applyPatchFileChange, 0, len(operations))
+	for _, operation := range operations {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
+		}
+
+		resolvedPath, err := resolveToolPath(operation.Path)
+		if err != nil {
+			return nil, err
+		}
+		current, err := plannedFileState(planned, resolvedPath)
+		if err != nil {
+			return nil, err
+		}
+		change, err := planPatchOperation(resolvedPath, operation, current)
+		if err != nil {
+			return nil, err
+		}
+		planned[resolvedPath] = plannedFile{content: change.content, exists: change.action != patch.ActionDelete}
+		changes = append(changes, change)
+	}
+	return changes, nil
+}
+
+// plannedFileState returns a file as the patch has left it so far: the result
+// of an earlier section, or else what is on disk.
+func plannedFileState(planned map[string]plannedFile, path string) (plannedFile, error) {
+	if file, ok := planned[path]; ok {
+		return file, nil
+	}
+	data, err := os.ReadFile(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return plannedFile{}, nil
+	}
+	if err != nil {
+		return plannedFile{}, fmt.Errorf("read file %q: %w", path, err)
+	}
+	return plannedFile{content: string(data), exists: true}, nil
+}
+
+func planPatchOperation(resolvedPath string, operation patch.FileOperation, current plannedFile) (applyPatchFileChange, error) {
+	change := applyPatchFileChange{action: operation.Action, path: resolvedPath}
 	switch operation.Action {
 	case patch.ActionAdd:
-		return applyPatchAddFile(resolvedPath, operation)
+		if current.exists {
+			return applyPatchFileChange{}, patchAddTargetExists(resolvedPath)
+		}
+		change.content = strings.Join(operation.Lines, "\n")
+		change.preview, change.insertions, change.deletions = buildFileDiffPreview("", change.content)
 	case patch.ActionDelete:
-		return applyPatchDeleteFile(resolvedPath, operation)
+		if !current.exists {
+			return applyPatchFileChange{}, NewEditFailure(EditFailureTargetMissing, resolvedPath, fmt.Sprintf("file does not exist: %s", resolvedPath), "Reread the workspace and remove the delete section if the file is already gone.")
+		}
+		change.preview, change.insertions, change.deletions = buildFileDiffPreview(current.content, "")
 	case patch.ActionUpdate:
-		return applyPatchUpdateFile(resolvedPath, operation)
+		if !current.exists {
+			return applyPatchFileChange{}, NewEditFailure(EditFailureTargetMissing, resolvedPath, fmt.Sprintf("file does not exist: %s", resolvedPath), "Use create_file to create it first, or switch this section to *** Add File.")
+		}
+		updatedContent, preview, insertions, deletions, err := patchUpdatedFileContent(resolvedPath, current.content, operation)
+		if err != nil {
+			return applyPatchFileChange{}, err
+		}
+		change.content = updatedContent
+		change.preview, change.insertions, change.deletions = preview, insertions, deletions
 	default:
 		return applyPatchFileChange{}, NewEditFailure(EditFailureUnsupportedOperation, resolvedPath, fmt.Sprintf("unsupported apply_patch action: %s", operation.Action), "Use only *** Add File, *** Update File, or *** Delete File sections.")
 	}
+	return change, nil
 }
 
-func applyPatchAddFile(resolvedPath string, operation patch.FileOperation) (applyPatchFileChange, error) {
-	content := strings.Join(operation.Lines, "\n")
-	if err := trackFileBeforeWrite(resolvedPath); err != nil {
-		return applyPatchFileChange{}, err
+// writePatchChange carries out one planned section on disk.
+func writePatchChange(change applyPatchFileChange) error {
+	if err := trackFileBeforeWrite(change.path); err != nil {
+		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(resolvedPath), 0o755); err != nil {
-		return applyPatchFileChange{}, fmt.Errorf("create parent directory %q: %w", filepath.Dir(resolvedPath), err)
-	}
-	if err := writeNewFile(resolvedPath, []byte(content)); err != nil {
-		if errors.Is(err, fs.ErrExist) {
-			return applyPatchFileChange{}, patchAddTargetExists(resolvedPath)
+	switch change.action {
+	case patch.ActionAdd:
+		parentDir := filepath.Dir(change.path)
+		if err := os.MkdirAll(parentDir, 0o755); err != nil {
+			return fmt.Errorf("create parent directory %q: %w", parentDir, err)
 		}
-		return applyPatchFileChange{}, fmt.Errorf("write file %q: %w", resolvedPath, err)
-	}
-	invalidateFileReadState(resolvedPath)
-	preview, insertions, deletions := buildFileDiffPreview("", content)
-	return applyPatchFileChange{action: operation.Action, path: resolvedPath, preview: preview, insertions: insertions, deletions: deletions}, nil
-}
-
-func applyPatchDeleteFile(resolvedPath string, operation patch.FileOperation) (applyPatchFileChange, error) {
-	oldBytes, err := os.ReadFile(resolvedPath)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return applyPatchFileChange{}, NewEditFailure(EditFailureTargetMissing, resolvedPath, fmt.Sprintf("file does not exist: %s", resolvedPath), "Reread the workspace and remove the delete section if the file is already gone.")
+		if err := writeNewFile(change.path, []byte(change.content)); err != nil {
+			if errors.Is(err, fs.ErrExist) {
+				return patchAddTargetExists(change.path)
+			}
+			return fmt.Errorf("write file %q: %w", change.path, err)
 		}
-		return applyPatchFileChange{}, fmt.Errorf("read file %q: %w", resolvedPath, err)
-	}
-	if err := trackFileBeforeWrite(resolvedPath); err != nil {
-		return applyPatchFileChange{}, err
-	}
-	if err := os.Remove(resolvedPath); err != nil {
-		return applyPatchFileChange{}, fmt.Errorf("delete file %q: %w", resolvedPath, err)
-	}
-	invalidateFileReadState(resolvedPath)
-	preview, insertions, deletions := buildFileDiffPreview(string(oldBytes), "")
-	return applyPatchFileChange{action: operation.Action, path: resolvedPath, preview: preview, insertions: insertions, deletions: deletions}, nil
-}
-
-func applyPatchUpdateFile(resolvedPath string, operation patch.FileOperation) (applyPatchFileChange, error) {
-	updatedContent, preview, insertions, deletions, err := patchUpdatedFileContent(resolvedPath, operation)
-	if err != nil {
-		return applyPatchFileChange{}, err
-	}
-	if err := trackFileBeforeWrite(resolvedPath); err != nil {
-		return applyPatchFileChange{}, err
-	}
-	if err := os.WriteFile(resolvedPath, []byte(updatedContent), 0o644); err != nil {
-		return applyPatchFileChange{}, fmt.Errorf("write file %q: %w", resolvedPath, err)
-	}
-	invalidateFileReadState(resolvedPath)
-	return applyPatchFileChange{action: operation.Action, path: resolvedPath, preview: preview, insertions: insertions, deletions: deletions}, nil
-}
-
-func patchUpdatedFileContent(filePath string, operation patch.FileOperation) (string, string, int, int, error) {
-	originalBytes, err := os.ReadFile(filePath)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return "", "", 0, 0, NewEditFailure(EditFailureTargetMissing, filePath, fmt.Sprintf("file does not exist: %s", filePath), "Use create_file to create it first, or switch this section to *** Add File.")
+	case patch.ActionDelete:
+		if err := os.Remove(change.path); err != nil {
+			return fmt.Errorf("delete file %q: %w", change.path, err)
 		}
-		return "", "", 0, 0, fmt.Errorf("read existing file %q: %w", filePath, err)
+	case patch.ActionUpdate:
+		if err := os.WriteFile(change.path, []byte(change.content), 0o644); err != nil {
+			return fmt.Errorf("write file %q: %w", change.path, err)
+		}
 	}
-	sample := originalBytes
-	if len(sample) > fileReadBinarySampleBytes {
-		sample = sample[:fileReadBinarySampleBytes]
+	invalidateFileReadState(change.path)
+	return nil
+}
+
+// patchWriteFailure reports a failure while writing a planned patch. Planning
+// already checked every section, so this is an I/O error or a file that changed
+// underneath the patch. The files already written are named so they are not
+// patched a second time.
+func patchWriteFailure(written []applyPatchFileChange, err error) (ToolOutput, error) {
+	if len(written) == 0 {
+		return editFailureOutputFor(err)
 	}
-	if isLikelyBinaryFile(filePath, sample) {
+	paths := make([]string, 0, len(written))
+	for _, change := range written {
+		paths = append(paths, change.path)
+	}
+	return ToolOutput{}, fmt.Errorf("apply_patch stopped after changing %s: %w", strings.Join(paths, ", "), err)
+}
+
+func patchUpdatedFileContent(filePath, original string, operation patch.FileOperation) (string, string, int, int, error) {
+	sample := original[:min(len(original), fileReadBinarySampleBytes)]
+	if isLikelyBinaryFile(filePath, []byte(sample)) {
 		return "", "", 0, 0, NewEditFailure(EditFailureUnsupportedOperation, filePath, fmt.Sprintf("apply_patch only supports text files: %s", filePath), "Use file_write for full-text replacements or approved shell commands for non-text assets.")
 	}
 
@@ -285,7 +328,7 @@ func patchUpdatedFileContent(filePath string, operation patch.FileOperation) (st
 	// The same located hunks are then spliced into the original bytes, rather
 	// than taking Apply's normalized result, so untouched lines keep their
 	// line endings.
-	text := newLineEndingText(string(originalBytes))
+	text := newLineEndingText(original)
 	if _, err := patch.Apply(text.normalized, filePath, operation.Hunks); err != nil {
 		return "", "", 0, 0, editFailureFromPatchError(err)
 	}
