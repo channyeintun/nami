@@ -1661,6 +1661,9 @@ export function useEvents(initialModel: string, initialMode: string) {
           const stopCompact = p.recoverable && s.compact?.active;
           return {
             ...s,
+            // A fatal error ends the turn with no turn_complete. Keep what
+            // streamed before it: the next prompt clears the live state.
+            ...(p.recoverable ? {} : finishLiveAssistantMessage(s)),
             activeTurnStatus: p.recoverable
               ? stopCompact
                 ? "idle"
