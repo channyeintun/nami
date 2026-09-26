@@ -76,7 +76,7 @@ func (t *WebFetchTool) Execute(ctx context.Context, input ToolInput) (ToolOutput
 		return ToolOutput{}, err
 	}
 
-	normalizedURL, err := webfetch.NormalizeURL(rawURL)
+	normalizedURL, err := webfetch.NormalizeURL(ctx, rawURL)
 	if err != nil {
 		return ToolOutput{}, err
 	}

@@ -1,6 +1,8 @@
 package webfetch
 
 import (
+	"context"
+	"errors"
 	"net/netip"
 	"strings"
 	"testing"
@@ -14,7 +16,7 @@ func TestNormalizeURLUpgradesAndAccepts(t *testing.T) {
 		"https://example.com?q=1":  "https://example.com?q=1",
 	}
 	for input, want := range cases {
-		got, err := NormalizeURL(input)
+		got, err := NormalizeURL(context.Background(), input)
 		if err != nil {
 			t.Errorf("NormalizeURL(%q): %v", input, err)
 			continue
@@ -44,7 +46,7 @@ func TestNormalizeURLRejectsUnsafeInput(t *testing.T) {
 	}
 	for name, rawURL := range cases {
 		t.Run(name, func(t *testing.T) {
-			if got, err := NormalizeURL(rawURL); err == nil {
+			if got, err := NormalizeURL(context.Background(), rawURL); err == nil {
 				t.Fatalf("NormalizeURL(%q) = %q, want an error", rawURL, got)
 			}
 		})
@@ -121,9 +123,23 @@ func TestGuardedDialerRejectsPrivateTargets(t *testing.T) {
 
 func TestValidateHostRejectsBlankAndLocal(t *testing.T) {
 	for _, host := range []string{"", "   ", "localhost", "LOCALHOST", "singleword", "127.0.0.1"} {
-		if err := ValidateHost(host); err == nil {
+		if err := ValidateHost(context.Background(), host); err == nil {
 			t.Errorf("ValidateHost(%q) = nil, want an error", host)
 		}
+	}
+}
+
+// The host check resolves DNS before anything is fetched. It used a
+// background context, so cancelling the tool call could not interrupt a
+// resolver that hangs.
+func TestValidateHostHonoursContextCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := ValidateHost(ctx, "example.com"); !errors.Is(err, context.Canceled) {
+		t.Fatalf("ValidateHost error = %v, want context.Canceled", err)
+	}
+	if _, err := NormalizeURL(ctx, "https://example.com/docs"); !errors.Is(err, context.Canceled) {
+		t.Fatalf("NormalizeURL error = %v, want context.Canceled", err)
 	}
 }
 

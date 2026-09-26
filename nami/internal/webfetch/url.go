@@ -18,8 +18,9 @@ const maxURLLength = 2000
 
 // NormalizeURL vets a URL before it is fetched: absolute http(s) only, no
 // embedded credentials, and a hostname that does not resolve to a private or
-// local address. Plain http is upgraded to https.
-func NormalizeURL(rawURL string) (string, error) {
+// local address. Plain http is upgraded to https. The DNS lookup stops when
+// ctx is done.
+func NormalizeURL(ctx context.Context, rawURL string) (string, error) {
 	rawURL = strings.TrimSpace(rawURL)
 	if rawURL == "" {
 		return "", fmt.Errorf("web_fetch requires url")
@@ -44,7 +45,7 @@ func NormalizeURL(rawURL string) (string, error) {
 	if parsed.Hostname() == "" {
 		return "", fmt.Errorf("web_fetch requires a hostname")
 	}
-	if err := ValidateHost(parsed.Hostname()); err != nil {
+	if err := ValidateHost(ctx, parsed.Hostname()); err != nil {
 		return "", err
 	}
 	parsed.Scheme = "https"
@@ -53,7 +54,7 @@ func NormalizeURL(rawURL string) (string, error) {
 
 // ValidateHost rejects hostnames that are, or resolve to, addresses on the
 // local machine or a private network.
-func ValidateHost(host string) error {
+func ValidateHost(ctx context.Context, host string) error {
 	host = strings.TrimSpace(host)
 	if host == "" {
 		return fmt.Errorf("web_fetch requires a hostname")
@@ -70,7 +71,7 @@ func ValidateHost(host string) error {
 		return fmt.Errorf("web_fetch requires a public hostname")
 	}
 
-	addrs, err := net.DefaultResolver.LookupNetIP(context.Background(), "ip", host)
+	addrs, err := net.DefaultResolver.LookupNetIP(ctx, "ip", host)
 	if err != nil {
 		return fmt.Errorf("resolve host %q: %w", host, err)
 	}
