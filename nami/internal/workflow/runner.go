@@ -186,6 +186,8 @@ type runState struct {
 	keys      []string
 	completed int
 	aborted   bool
+	// abortReason says which failure aborted the run under FailureAbort.
+	abortReason string
 }
 
 type completion struct {
@@ -198,8 +200,8 @@ type completion struct {
 func (r *runState) execute(ctx context.Context) Result {
 	startedAt := r.clock()
 
-	// Cancelling on the way out stops any node still in flight when the run
-	// aborts, so Run never returns while work continues behind it.
+	// Nodes run under their own context so an abort can stop the ones still
+	// in flight. Run returns only after every launched node has settled.
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -241,6 +243,11 @@ func (r *runState) execute(ctx context.Context) Result {
 		inflight--
 		ready = append(ready, r.settle(finished)...)
 		sort.Ints(ready)
+		// Under FailureAbort nothing more of the run is wanted, so stop the
+		// nodes still in flight rather than wait for work that is thrown away.
+		if r.aborted {
+			cancel()
+		}
 	}
 
 	wg.Wait()
@@ -336,6 +343,14 @@ func (r *runState) settle(finished completion) []int {
 	r.completed++
 
 	if finished.err != nil {
+		// A node that fails after the run aborted was stopped by the abort,
+		// or at the least ran for a run that had already failed.
+		if r.aborted {
+			state.Status = StatusSkipped
+			state.Error = fmt.Sprintf("%s; stopped while running: %v", r.abortReason, finished.err)
+			r.emit(idx)
+			return nil
+		}
 		state.Status = StatusFailed
 		state.Error = finished.err.Error()
 		r.emit(idx)
@@ -380,6 +395,7 @@ func (r *runState) propagateFailure(idx int) []int {
 	if r.spec.FailurePolicy == FailureAbort {
 		r.aborted = true
 		reason = fmt.Sprintf("run aborted after %q failed", failedID)
+		r.abortReason = reason
 		doomed = doomed[:0]
 		for _, node := range r.spec.Nodes {
 			if node.ID != failedID {

@@ -198,6 +198,51 @@ func TestRunAbortPolicySkipsIndependentBranches(t *testing.T) {
 	}
 }
 
+// Under abort the run stops nodes already running instead of waiting for
+// them: their work is thrown away with the run, and a child agent can run
+// for minutes.
+func TestRunAbortPolicyStopsNodesInFlight(t *testing.T) {
+	resolved := mustResolve(t, Spec{
+		MaxParallel:   2,
+		OnNodeFailure: string(FailureAbort),
+		Nodes:         []NodeSpec{node("aaa_broken"), node("zzz_slow")},
+	})
+
+	slowStarted := make(chan struct{})
+	start := time.Now()
+	result, err := resolved.Run(t.Context(), Options{
+		Run: func(ctx context.Context, req NodeRequest) (NodeResult, error) {
+			if req.ID == "aaa_broken" {
+				<-slowStarted
+				return NodeResult{}, errors.New("boom")
+			}
+			close(slowStarted)
+			select {
+			case <-ctx.Done():
+				return NodeResult{}, ctx.Err()
+			case <-time.After(10 * time.Second):
+				return NodeResult{Output: req.ID}, nil
+			}
+		},
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if elapsed := time.Since(start); elapsed > 5*time.Second {
+		t.Fatalf("Run waited %v for a node the abort should have stopped", elapsed)
+	}
+	slow := statusOf(result, "zzz_slow")
+	if slow.Status != StatusSkipped || !strings.Contains(slow.Error, `run aborted after "aaa_broken" failed`) {
+		t.Fatalf("zzz_slow = %q (%s), want skipped by the abort", slow.Status, slow.Error)
+	}
+	if got := statusOf(result, "aaa_broken").Status; got != StatusFailed {
+		t.Fatalf("aaa_broken status = %q, want failed", got)
+	}
+	if result.Failed != 1 || result.Skipped != 1 {
+		t.Fatalf("counts = %+v, want one failed and one skipped", result)
+	}
+}
+
 func TestRunExpandsDependencyOutputsIntoPrompts(t *testing.T) {
 	resolved := mustResolve(t, Spec{Nodes: []NodeSpec{
 		node("collect"),
