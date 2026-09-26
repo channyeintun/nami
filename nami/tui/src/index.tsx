@@ -8,7 +8,10 @@ import { installClipboardBridge } from "./utils/clipboardBridge.js";
 installClipboardBridge();
 
 const enginePath = process.env["NAMI_ENGINE_PATH"] ?? "nami-engine";
-const model = process.env["NAMI_MODEL"] ?? "anthropic/claude-sonnet-5";
+// Only a model the user chose goes to the engine as --model (bin/nami.js sets
+// NAMI_MODEL from -m/--model). Without one the engine picks from config, the
+// last model that worked, or its own default, and reports it in model_changed.
+const model = process.env["NAMI_MODEL"]?.trim() ?? "";
 const mode = process.env["NAMI_MODE"] ?? "plan";
 const autoMode = process.env["NAMI_AUTO_MODE"] === "true";
 const theme = createTheme()

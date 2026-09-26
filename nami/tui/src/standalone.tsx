@@ -26,7 +26,9 @@ const enginePath =
   candidates.find((p) => existsSync(p)) ??
   "nami-engine";
 
-let model = "anthropic/claude-sonnet-5";
+// Left empty unless --model is given, so the engine can choose from config;
+// see index.tsx.
+let model = "";
 let mode = "plan";
 let autoMode = false;
 const theme = createTheme()
