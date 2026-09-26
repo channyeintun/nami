@@ -148,16 +148,27 @@ func scheduleBackgroundAgentCleanup(bg *backgroundAgent) {
 	})
 }
 
-func writeBackgroundAgentResultFile(result toolpkg.AgentRunResult) {
+// saveAgentResultFile writes a child's result file and tells the user when
+// that fails: once a background agent is evicted from memory, its team's
+// status can only be read back from this file.
+func saveAgentResultFile(bridge *ipc.Bridge, result toolpkg.AgentRunResult) {
+	if err := writeBackgroundAgentResultFile(result); err != nil && bridge != nil {
+		_ = bridge.EmitNotice(fmt.Sprintf("save child agent result: %v", err))
+	}
+}
+
+func writeBackgroundAgentResultFile(result toolpkg.AgentRunResult) error {
 	if result.OutputFile == "" {
-		return
+		return nil
 	}
 	data, err := json.MarshalIndent(result, "", "  ")
 	if err != nil {
-		return
+		return fmt.Errorf("encode %s: %w", result.OutputFile, err)
 	}
-	_ = os.MkdirAll(filepath.Dir(result.OutputFile), sessionDataDirMode)
-	_ = os.WriteFile(result.OutputFile, data, sessionDataFileMode)
+	if err := os.MkdirAll(filepath.Dir(result.OutputFile), sessionDataDirMode); err != nil {
+		return err
+	}
+	return os.WriteFile(result.OutputFile, data, sessionDataFileMode)
 }
 
 func readBackgroundAgentResultFile(path string) (toolpkg.AgentRunResult, error) {
@@ -335,14 +346,14 @@ func launchBackgroundAgent(
 				bg.result.Status = "cancelled"
 				bg.result.Error = "background child agent cancelled"
 				bg.result = withChildMetadata(bg.result, bg.description, bg.role)
-				writeBackgroundAgentResultFile(bg.result)
+				saveAgentResultFile(bridge, bg.result)
 				emitBackgroundAgentUpdated(bridge, bg, bg.result)
 				return
 			}
 			bg.result.Status = "failed"
 			bg.result.Error = err.Error()
 			bg.result = withChildMetadata(bg.result, bg.description, bg.role)
-			writeBackgroundAgentResultFile(bg.result)
+			saveAgentResultFile(bridge, bg.result)
 			emitBackgroundAgentUpdated(bridge, bg, bg.result)
 			return
 		}
@@ -351,7 +362,7 @@ func launchBackgroundAgent(
 		}
 		result.AgentID = agentID
 		bg.result = withChildMetadata(result, bg.description, bg.role)
-		writeBackgroundAgentResultFile(bg.result)
+		saveAgentResultFile(bridge, bg.result)
 		emitBackgroundAgentUpdated(bridge, bg, bg.result)
 	}()
 

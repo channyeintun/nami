@@ -450,7 +450,7 @@ func executeSubagent(
 	if result.Metadata != nil {
 		result.Metadata.Role = strings.TrimSpace(req.Role)
 	}
-	writeBackgroundAgentResultFile(result)
+	saveAgentResultFile(bridge, result)
 	return result, nil
 }
 

@@ -1,10 +1,12 @@
 package engine
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -96,9 +98,28 @@ func TestWriteBackgroundAgentResultFileIsPrivate(t *testing.T) {
 		t.Skip("POSIX permission bits")
 	}
 	outputFile := filepath.Join(t.TempDir(), "child-session", "agent-result.json")
-	writeBackgroundAgentResultFile(toolpkg.AgentRunResult{Status: "completed", Summary: "found the key", OutputFile: outputFile})
+	if err := writeBackgroundAgentResultFile(toolpkg.AgentRunResult{Status: "completed", Summary: "found the key", OutputFile: outputFile}); err != nil {
+		t.Fatalf("writeBackgroundAgentResultFile: %v", err)
+	}
 	requirePrivate(t, filepath.Dir(outputFile))
 	requirePrivate(t, outputFile)
+}
+
+// Team status falls back to the result file once an agent is evicted, so a
+// file that could not be written has to be reported, not skipped silently.
+func TestSaveAgentResultFileReportsFailures(t *testing.T) {
+	blocker := filepath.Join(t.TempDir(), "not-a-directory")
+	if err := os.WriteFile(blocker, []byte("x"), 0o600); err != nil {
+		t.Fatalf("write blocker: %v", err)
+	}
+	var emitted bytes.Buffer
+	bridge := ipc.NewBridge(strings.NewReader(""), &emitted)
+
+	saveAgentResultFile(bridge, toolpkg.AgentRunResult{Status: "completed", OutputFile: filepath.Join(blocker, "agent-result.json")})
+
+	if !strings.Contains(emitted.String(), `"type":"notice"`) || !strings.Contains(emitted.String(), "save child agent result") {
+		t.Fatalf("no notice for the failed write; emitted %q", emitted.String())
+	}
 }
 
 // A cancelled child rarely unwinds with a bare context.Canceled: the model
