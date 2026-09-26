@@ -154,7 +154,8 @@ func (s *QueryState) ShouldContinue() bool {
 // QueryStream is the core streaming query interface.
 // It returns an iter.Seq2 of StreamEvents, suitable for pull-based consumption.
 func QueryStream(ctx context.Context, req QueryRequest, deps QueryDeps) iter.Seq2[ipc.StreamEvent, error] {
-	return func(yield func(ipc.StreamEvent, error) bool) {
+	return func(consumerYield func(ipc.StreamEvent, error) bool) {
+		yield := stopAwareYield(consumerYield)
 		if deps.Cleanup != nil {
 			defer deps.Cleanup()
 		}
@@ -206,6 +207,24 @@ func QueryStream(ctx context.Context, req QueryRequest, deps QueryDeps) iter.Seq
 			}
 			yield(event, nil)
 		}
+	}
+}
+
+// stopAwareYield wraps a range-over-func yield so it is never called again
+// after the consumer stops iterating, which the Go runtime turns into a panic.
+// Once the consumer stops, yieldEvent reports context.Canceled, the stages
+// unwind, and the error or turn_complete the loop would still send is dropped.
+func stopAwareYield(yield func(ipc.StreamEvent, error) bool) func(ipc.StreamEvent, error) bool {
+	stopped := false
+	return func(event ipc.StreamEvent, err error) bool {
+		if stopped {
+			return false
+		}
+		if !yield(event, err) {
+			stopped = true
+			return false
+		}
+		return true
 	}
 }
 
