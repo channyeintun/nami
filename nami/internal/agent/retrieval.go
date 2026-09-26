@@ -1,6 +1,8 @@
 package agent
 
 import (
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -11,8 +13,11 @@ import (
 )
 
 const (
-	// retrievalMaxSnippetBytes is the maximum bytes read from one file.
+	// retrievalMaxSnippetBytes is the maximum bytes kept from one file.
 	retrievalMaxSnippetBytes = 2_000
+	// retrievalMaxReadBytes bounds how much of a file is read to cut a
+	// snippet from, leaving room for whitespace the snippet trims away.
+	retrievalMaxReadBytes = 4 * retrievalMaxSnippetBytes
 	// retrievalMaxTotalTokens is the soft token cap for the full retrieval section.
 	retrievalMaxTotalTokens = 3_000
 	// retrievalMaxCandidates is the maximum number of candidates to score.
@@ -398,24 +403,50 @@ func resolveFilePath(ref, cwd string) []string {
 	return results
 }
 
+// fileExists reports whether path names a regular file. FIFOs and devices do
+// not count: opening a FIFO blocks until a writer appears, and a device such
+// as /dev/zero never ends.
 func fileExists(path string) bool {
 	info, err := os.Stat(path)
 	if err != nil {
 		return false
 	}
-	return !info.IsDir()
+	return info.Mode().IsRegular()
+}
+
+// readFileHead reads at most limit bytes from the start of a regular file, cut
+// on a rune boundary, and reports whether the file continues past them.
+// Retrieval reads files named in prompts and tool output, which can be any
+// size, but only ever keeps a small prefix.
+func readFileHead(path string, limit int) (string, bool, error) {
+	if !fileExists(path) {
+		return "", false, fmt.Errorf("read %s: not a regular file", path)
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return "", false, err
+	}
+	defer file.Close()
+	data, err := io.ReadAll(io.LimitReader(file, int64(limit)+1))
+	if err != nil {
+		return "", false, fmt.Errorf("read %s: %w", path, err)
+	}
+	if len(data) <= limit {
+		return string(data), false, nil
+	}
+	return textutil.TruncateHead(string(data), limit), true, nil
 }
 
 func readFileSnippet(path string) string {
-	data, err := os.ReadFile(path)
+	prefix, more, err := readFileHead(path, retrievalMaxReadBytes)
 	if err != nil {
 		return ""
 	}
-	content := strings.TrimSpace(string(data))
+	content := strings.TrimSpace(prefix)
 	if content == "" {
 		return ""
 	}
-	if len(content) > retrievalMaxSnippetBytes {
+	if more || len(content) > retrievalMaxSnippetBytes {
 		truncated := textutil.TruncateHead(content, retrievalMaxSnippetBytes)
 		if head, _, ok := strings.CutLast(truncated, "\n"); ok && head != "" {
 			truncated = head
@@ -478,12 +509,12 @@ const maxImportEdgesPerFile = 8
 // expandGoImports parses Go import statements from a source file and resolves
 // local-package imports to files on disk, adding them as candidates.
 func expandGoImports(filePath, modulePath, moduleRoot string, scores map[string]int, reasons map[string]string) {
-	data, err := os.ReadFile(filePath)
+	content, _, err := readFileHead(filePath, graphMaxParseBytes)
 	if err != nil {
 		return
 	}
 
-	imports := parseGoImports(string(data))
+	imports := parseGoImports(content)
 	added := 0
 	for _, imp := range imports {
 		if added >= maxImportEdgesPerFile {

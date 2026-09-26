@@ -68,6 +68,10 @@ const (
 	graphSecondHopMinCandidates = 3
 	graphMaxNodesPerFile        = 40
 	graphMaxImportsPerFile      = 12
+	// graphMaxParseBytes bounds how much of a file is parsed for structure.
+	// Imports and most symbols sit near the top of hand-written source; a
+	// file past this size is generated code or data.
+	graphMaxParseBytes = 1 << 20
 )
 
 // ---------------------------------------------------------------------------
@@ -117,7 +121,7 @@ func (g *RetrievalGraph) EnsureFile(path string) {
 	if err != nil {
 		return
 	}
-	if info.IsDir() {
+	if !info.Mode().IsRegular() {
 		return
 	}
 	modTime := info.ModTime()
@@ -133,11 +137,10 @@ func (g *RetrievalGraph) EnsureFile(path string) {
 	// Register file node.
 	g.addNode(path, NodeFile, modTime)
 
-	data, err := os.ReadFile(path)
+	content, _, err := readFileHead(path, graphMaxParseBytes)
 	if err != nil {
 		return
 	}
-	content := string(data)
 	ext := strings.ToLower(filepath.Ext(path))
 
 	// Parse language-specific structure.

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -121,5 +122,30 @@ func TestRetrievalGraphKeepsImportEdgesIntoInvalidatedFile(t *testing.T) {
 	candidates, _ = ScoreCandidates(anchors, dir, "", nil, graph)
 	if candidateScores(candidates)[lib] == 0 {
 		t.Fatalf("expected the imported file to stay a candidate after it was invalidated, got %+v", candidates)
+	}
+}
+
+func TestRetrievalReadsOnlyAPrefixOfLargeFiles(t *testing.T) {
+	// A file named in the prompt or tool output can be arbitrarily large;
+	// retrieval keeps a small prefix, so it must not read the rest.
+	const size = 64 << 20
+	dir := t.TempDir()
+	path := writeRetrievalFile(t, dir, "dump.go", "package dump\n\nfunc Load() {}\n")
+	if err := os.Truncate(path, size); err != nil {
+		t.Fatalf("grow dump.go: %v", err)
+	}
+
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	graph := NewRetrievalGraph(dir)
+	candidates, _ := ScoreCandidates([]RetrievalAnchor{{FilePath: path}}, dir, "", nil, graph)
+	snippets := ReadLiveSnippets(candidates, retrievalMaxTotalTokens)
+	runtime.ReadMemStats(&after)
+
+	if len(snippets) != 1 || !strings.Contains(snippets[0].Content, "func Load") {
+		t.Fatalf("expected a snippet of the file's head, got %+v", snippets)
+	}
+	if allocated := after.TotalAlloc - before.TotalAlloc; allocated > size/4 {
+		t.Fatalf("retrieval allocated %d bytes for a %d-byte file", allocated, size)
 	}
 }
