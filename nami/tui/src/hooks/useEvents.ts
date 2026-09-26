@@ -795,6 +795,7 @@ export function useEvents(initialModel: string, initialMode: string) {
               transcript: s.transcript,
               liveAssistantMessageId: null,
               liveAssistantBlocks: [],
+              toolCalls: settleUnfinishedToolCalls(s.toolCalls, "Cancelled"),
               activeTurnStatus: "idle",
               goalProgress: null,
               workflowRun: null,
@@ -1659,11 +1660,21 @@ export function useEvents(initialModel: string, initialMode: string) {
         const p = event.payload as ErrorPayload;
         setUIState((s) => {
           const stopCompact = p.recoverable && s.compact?.active;
+          // A fatal error ends the turn with no turn_complete. Keep what
+          // streamed before it (the next prompt clears the live state), and
+          // stop showing calls that will never report back as running.
+          const endTurn = p.recoverable
+            ? {}
+            : {
+                ...finishLiveAssistantMessage(s),
+                toolCalls: settleUnfinishedToolCalls(
+                  s.toolCalls,
+                  "Interrupted by an error",
+                ),
+              };
           return {
             ...s,
-            // A fatal error ends the turn with no turn_complete. Keep what
-            // streamed before it: the next prompt clears the live state.
-            ...(p.recoverable ? {} : finishLiveAssistantMessage(s)),
+            ...endTurn,
             activeTurnStatus: p.recoverable
               ? stopCompact
                 ? "idle"
@@ -3873,6 +3884,33 @@ function upsertToolCall(
             nextToolCall.deletions !== undefined
               ? nextToolCall.deletions
               : toolCall.deletions,
+        }
+      : toolCall,
+  );
+}
+
+/**
+ * Marks calls still waiting for permission or running as failed. The engine
+ * sends no tool_result or tool_error for them when a cancel or a fatal error
+ * ends the turn, so without this they would keep spinning in the transcript.
+ */
+function settleUnfinishedToolCalls(
+  toolCalls: UIToolCall[],
+  reason: string,
+): UIToolCall[] {
+  const isUnfinished = (toolCall: UIToolCall) =>
+    toolCall.status === "running" || toolCall.status === "waiting_permission";
+  if (!toolCalls.some(isUnfinished)) {
+    return toolCalls;
+  }
+
+  return toolCalls.map((toolCall) =>
+    isUnfinished(toolCall)
+      ? {
+          ...toolCall,
+          status: "error",
+          error: reason,
+          permissionRequestId: undefined,
         }
       : toolCall,
   );
