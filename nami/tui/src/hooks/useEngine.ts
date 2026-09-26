@@ -147,19 +147,25 @@ export function useEngine(enginePath: string, options: EngineOptions = {}) {
         proc.stdin.end();
       }
 
+      // Not proc.killed: that only records that a signal was sent, so it
+      // turned true at the SIGTERM and the SIGKILL never followed.
+      const hasExited = () =>
+        proc.exitCode !== null || proc.signalCode !== null;
+      if (hasExited()) return;
+
       const killTimer = setTimeout(() => {
-        if (!proc.killed) {
+        if (!hasExited()) {
           proc.kill("SIGTERM");
         }
       }, 250);
 
       const forceKillTimer = setTimeout(() => {
-        if (!proc.killed) {
+        if (!hasExited()) {
           proc.kill("SIGKILL");
         }
       }, 1000);
 
-      proc.once("close", () => {
+      proc.once("exit", () => {
         clearTimeout(killTimer);
         clearTimeout(forceKillTimer);
       });
