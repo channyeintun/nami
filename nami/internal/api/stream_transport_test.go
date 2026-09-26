@@ -41,13 +41,30 @@ func TestStreamingClientReadsStreamsLongerThanTheIdleTimeout(t *testing.T) {
 	}
 }
 
-func TestStreamingClientAbandonsAStalledStream(t *testing.T) {
+// stallingServer answers with body, if any, and then holds the response open
+// until the client gives up or the test ends.
+func stallingServer(t *testing.T, body string) *httptest.Server {
+	t.Helper()
+	release := make(chan struct{})
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		io.WriteString(w, "data: first\n\n")
-		w.(http.Flusher).Flush()
-		<-r.Context().Done()
+		if body != "" {
+			io.WriteString(w, body)
+			w.(http.Flusher).Flush()
+		}
+		select {
+		case <-r.Context().Done():
+		case <-release:
+		}
 	}))
-	defer server.Close()
+	// Cleanups run last in, first out: the handler is released before the
+	// server waits for it to finish.
+	t.Cleanup(server.Close)
+	t.Cleanup(func() { close(release) })
+	return server
+}
+
+func TestStreamingClientAbandonsAStalledStream(t *testing.T) {
+	server := stallingServer(t, "data: first\n\n")
 
 	client := &http.Client{Transport: newIdleTimeoutTransport(http.DefaultTransport, 50*time.Millisecond)}
 	resp, err := client.Get(server.URL)
@@ -71,13 +88,33 @@ func TestStreamingClientAbandonsAStalledStream(t *testing.T) {
 	}
 }
 
+func TestStreamingClientAbandonsARequestThatNeverAnswers(t *testing.T) {
+	server := stallingServer(t, "")
+
+	// Everything before the response headers, from connecting through
+	// sending the request to the provider's first byte, counts against the
+	// same limit.
+	client := &http.Client{Transport: newIdleTimeoutTransport(http.DefaultTransport, 50*time.Millisecond)}
+	done := make(chan error, 1)
+	go func() {
+		resp, err := client.Get(server.URL)
+		if err == nil {
+			resp.Body.Close()
+		}
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if !errors.Is(err, errStreamIdle) {
+			t.Fatalf("Get error = %v, want the idle timeout", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("a request that never answered was never abandoned")
+	}
+}
+
 func TestStreamingClientLeavesCallerCancellationAlone(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		io.WriteString(w, "data: first\n\n")
-		w.(http.Flusher).Flush()
-		<-r.Context().Done()
-	}))
-	defer server.Close()
+	server := stallingServer(t, "data: first\n\n")
 
 	ctx, cancel := context.WithCancel(context.Background())
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, server.URL, nil)
