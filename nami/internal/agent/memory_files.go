@@ -409,19 +409,48 @@ func looksLikeMalformedMemoryEntry(line string) bool {
 	return strings.Contains(trimmed, "[") || strings.Contains(trimmed, "]") || strings.Contains(trimmed, "(") || strings.Contains(trimmed, ")")
 }
 
+const memoryNoteOutsideIssue = "Referenced memory note resolves outside the memory directory and was skipped."
+
 func resolveMemoryNotePath(indexPath, filename string) (string, string) {
 	baseDir := filepath.Clean(filepath.Dir(indexPath))
 	resolved := filepath.Clean(filepath.Join(baseDir, filename))
 	if !pathWithinBaseDir(baseDir, resolved) {
-		return "", "Referenced memory note resolves outside the memory directory and was skipped."
+		return "", memoryNoteOutsideIssue
 	}
-	if _, err := os.Stat(resolved); err != nil {
+	info, err := os.Stat(resolved)
+	if err != nil {
 		if os.IsNotExist(err) {
 			return resolved, "Referenced memory note file does not exist."
 		}
 		return resolved, fmt.Sprintf("Referenced memory note could not be read: %v", err)
 	}
+	if !info.Mode().IsRegular() {
+		return resolved, "Referenced memory note is not a regular file."
+	}
+	// The lexical check above cannot see symlinks, and a link inside the
+	// memory directory can lead anywhere on disk. Compare the real paths too.
+	within, err := realPathWithinBaseDir(baseDir, resolved)
+	if err != nil {
+		return resolved, fmt.Sprintf("Referenced memory note could not be read: %v", err)
+	}
+	if !within {
+		return "", memoryNoteOutsideIssue
+	}
 	return resolved, ""
+}
+
+// realPathWithinBaseDir is pathWithinBaseDir after resolving symlinks in both
+// paths, so it holds for where a read of candidate actually lands.
+func realPathWithinBaseDir(baseDir, candidate string) (bool, error) {
+	realBase, err := filepath.EvalSymlinks(baseDir)
+	if err != nil {
+		return false, err
+	}
+	realCandidate, err := filepath.EvalSymlinks(candidate)
+	if err != nil {
+		return false, err
+	}
+	return pathWithinBaseDir(realBase, realCandidate), nil
 }
 
 func pathWithinBaseDir(baseDir, candidate string) bool {
