@@ -115,10 +115,11 @@ func NewClient() *Client {
 	return &Client{}
 }
 
+// Load returns the cached snapshot while it is fresh, and otherwise fetches a
+// new one, falling back to a stale cache when the fetch fails. A cache that
+// cannot be read or parsed is treated as missing, so the fetch replaces it.
 func (c *Client) Load(ctx context.Context) (Snapshot, error) {
-	if cached, ok, err := c.loadFreshCache(); err != nil {
-		return Snapshot{}, err
-	} else if ok {
+	if cached, fresh, err := c.loadFreshCache(); err == nil && fresh {
 		return cached, nil
 	}
 
@@ -132,7 +133,7 @@ func (c *Client) Load(ctx context.Context) (Snapshot, error) {
 		return stale, nil
 	}
 
-	return Snapshot{}, fmt.Errorf("fetch models.dev snapshot: %w", err)
+	return Snapshot{}, errors.Join(fmt.Errorf("fetch models.dev snapshot: %w", err), staleErr)
 }
 
 func (c *Client) Refresh(ctx context.Context) (Snapshot, error) {

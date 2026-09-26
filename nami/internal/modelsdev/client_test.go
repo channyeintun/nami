@@ -246,18 +246,55 @@ func TestWriteCacheReplacesFileAtomically(t *testing.T) {
 	}
 }
 
-func TestLoadReportsCorruptCache(t *testing.T) {
-	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprint(w, samplePayload)
-	})
+func writeCorruptCache(t *testing.T, client *Client) {
+	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(client.cachePath()), 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
 	if err := os.WriteFile(client.cachePath(), []byte("{corrupt"), 0o644); err != nil {
 		t.Fatalf("write cache: %v", err)
 	}
-	if _, err := client.Load(context.Background()); err == nil {
-		t.Fatal("Load returned no error for a corrupt fresh cache")
+}
+
+// A corrupt cache is a missed shortcut, not a failure: while its timestamp
+// was fresh it used to block the catalog for up to a day even though the
+// network could replace it.
+func TestLoadRefetchesOverCorruptFreshCache(t *testing.T) {
+	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, samplePayload)
+	})
+	writeCorruptCache(t, client)
+
+	snapshot, err := client.Load(context.Background())
+	if err != nil {
+		t.Fatalf("Load over a corrupt cache: %v", err)
+	}
+	if _, ok := snapshot.Providers["anthropic"]; !ok {
+		t.Fatalf("providers = %+v", snapshot.Providers)
+	}
+	data, err := os.ReadFile(client.cachePath())
+	if err != nil {
+		t.Fatalf("read cache: %v", err)
+	}
+	if string(data) != samplePayload {
+		t.Fatal("the corrupt cache was not replaced")
+	}
+}
+
+func TestLoadReportsCorruptCacheWhenOffline(t *testing.T) {
+	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "upstream down", http.StatusBadGateway)
+	})
+	writeCorruptCache(t, client)
+
+	_, err := client.Load(context.Background())
+	if err == nil {
+		t.Fatal("Load returned no error with a corrupt cache and a failing endpoint")
+	}
+	for _, want := range []string{"502", "parse models.dev cache"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error = %v, want it to mention %q", err, want)
+		}
 	}
 }
 
