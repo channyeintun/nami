@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"maps"
 	"strings"
 	"testing"
 
@@ -244,5 +245,31 @@ func TestEffectiveTransportLabel(t *testing.T) {
 	}
 	if got := effectiveTransportLabel(configpkg.MCPServerConfig{Command: &command}); got == "" {
 		t.Error("a server with only a command should still get a transport label")
+	}
+}
+
+// `nami mcp get` output gets pasted into issues and shown on shared screens,
+// so credentials configured as literal values must not appear in it.
+func TestMaskSecretValuesHidesLiteralCredentials(t *testing.T) {
+	got := maskSecretValues(map[string]string{
+		"GITHUB_TOKEN":  "ghp_abcdefghijklmnopqrstuvwxyz",
+		"Authorization": "Bearer abcdefghijklmnop",
+		"X-Api-Key":     "k-123",
+		"MODE":          "fast",
+		"X-Trace":       "on",
+		"API_KEY":       "$API_KEY",
+		"X-Auth":        "Bearer ${SERVICE_TOKEN}",
+	})
+	want := map[string]string{
+		"GITHUB_TOKEN":  maskedValue,
+		"Authorization": maskedValue,
+		"X-Api-Key":     maskedValue,
+		"MODE":          "fast",
+		"X-Trace":       "on",
+		"API_KEY":       "$API_KEY",
+		"X-Auth":        "Bearer ${SERVICE_TOKEN}",
+	}
+	if !maps.Equal(got, want) {
+		t.Fatalf("maskSecretValues = %#v, want %#v", got, want)
 	}
 }

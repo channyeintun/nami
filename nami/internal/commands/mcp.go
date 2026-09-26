@@ -147,14 +147,14 @@ func RunMCPGet(cwd, rawName, scopeRaw string) (MCPCommandResult, error) {
 	}
 	if len(server.Env) > 0 {
 		result.OutputLines = append(result.OutputLines, "  Environment:")
-		result.OutputLines = append(result.OutputLines, formatSortedKeyValue(server.Env, "    %s=%s")...)
+		result.OutputLines = append(result.OutputLines, formatSortedKeyValue(maskSecretValues(server.Env), "    %s=%s")...)
 	}
 	if server.URL != nil {
 		result.OutputLines = append(result.OutputLines, fmt.Sprintf("  URL: %s", *server.URL))
 	}
 	if len(server.Headers) > 0 {
 		result.OutputLines = append(result.OutputLines, "  Headers:")
-		result.OutputLines = append(result.OutputLines, formatSortedKeyValue(server.Headers, "    %s: %s")...)
+		result.OutputLines = append(result.OutputLines, formatSortedKeyValue(maskSecretValues(server.Headers), "    %s: %s")...)
 	}
 	if len(server.IncludeTools) > 0 {
 		result.OutputLines = append(result.OutputLines, fmt.Sprintf("  Include tools: %s", strings.Join(server.IncludeTools, ", ")))
@@ -552,6 +552,38 @@ func effectiveTransportLabel(server configpkg.MCPServerConfig) string {
 		return string(mcppkg.TransportStdio)
 	}
 	return "unknown"
+}
+
+// maskedValue stands in for a secret in `nami mcp get` output.
+const maskedValue = "********"
+
+// secretNameParts mark an environment variable or header whose value is a
+// credential: GITHUB_TOKEN, API_KEY, Authorization, X-Api-Key, Cookie.
+var secretNameParts = []string{"token", "secret", "password", "passwd", "key", "auth", "credential", "cookie"}
+
+// maskSecretValues hides the values of secret-looking names, so the output of
+// `nami mcp get` can be shared. A value that takes its content from the
+// environment ($GITHUB_TOKEN, "Bearer ${TOKEN}") holds no secret itself and is
+// shown as configured.
+func maskSecretValues(values map[string]string) map[string]string {
+	masked := make(map[string]string, len(values))
+	for name, value := range values {
+		if isSecretName(name) && !strings.Contains(value, "$") {
+			value = maskedValue
+		}
+		masked[name] = value
+	}
+	return masked
+}
+
+func isSecretName(name string) bool {
+	lower := strings.ToLower(name)
+	for _, part := range secretNameParts {
+		if strings.Contains(lower, part) {
+			return true
+		}
+	}
+	return false
 }
 
 func formatSortedKeyValue(values map[string]string, format string) []string {
