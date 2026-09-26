@@ -257,7 +257,7 @@ func (cmd *slashCommandContext) persistState() error {
 		Model:         cmd.state.ActiveModelID,
 		SubagentModel: cmd.state.SubagentModelID,
 		CWD:           cmd.state.CWD,
-		Branch:        agent.LoadTurnContext().GitBranch,
+		Branch:        currentGitBranch(),
 		Tracker:       cmd.tracker,
 		Messages:      cmd.state.Messages,
 	}); err != nil {

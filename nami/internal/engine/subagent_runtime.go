@@ -268,6 +268,10 @@ func executeSubagent(
 	if strings.TrimSpace(workspace.Path) != "" {
 		childCWD = workspace.Path
 	}
+	// Looked up once: the child saves its session after every step, and each
+	// save would otherwise run git again for a branch that goes with the
+	// working directory recorded at launch.
+	childBranch := firstNonEmpty(strings.TrimSpace(workspace.Branch), currentGitBranch())
 	childStartedAt := time.Now()
 	childTracker := costpkg.NewTracker()
 	childRegistry := registry.CloneFiltered(childToolNames)
@@ -303,7 +307,7 @@ func executeSubagent(
 		Model:         childModelID,
 		SubagentModel: "",
 		CWD:           childCWD,
-		Branch:        firstNonEmpty(strings.TrimSpace(workspace.Branch), agent.LoadTurnContext().GitBranch),
+		Branch:        childBranch,
 		Tracker:       childTracker,
 		Messages:      childMessages,
 	}); err != nil {
@@ -317,7 +321,7 @@ func executeSubagent(
 		Model:         childModelID,
 		SubagentModel: "",
 		CWD:           childCWD,
-		Branch:        firstNonEmpty(strings.TrimSpace(workspace.Branch), agent.LoadTurnContext().GitBranch),
+		Branch:        childBranch,
 		TotalCostUSD:  0,
 		Title:         req.Description,
 	})
@@ -357,7 +361,7 @@ func executeSubagent(
 				Model:         childModelID,
 				SubagentModel: "",
 				CWD:           childCWD,
-				Branch:        firstNonEmpty(strings.TrimSpace(workspace.Branch), agent.LoadTurnContext().GitBranch),
+				Branch:        childBranch,
 				Tracker:       childTracker,
 				Messages:      childMessages,
 			})
@@ -414,7 +418,7 @@ func executeSubagent(
 		Model:         childModelID,
 		SubagentModel: "",
 		CWD:           childCWD,
-		Branch:        firstNonEmpty(strings.TrimSpace(workspace.Branch), agent.LoadTurnContext().GitBranch),
+		Branch:        childBranch,
 		Tracker:       childTracker,
 		Messages:      childMessages,
 	}); err != nil {
