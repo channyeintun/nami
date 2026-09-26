@@ -44,6 +44,43 @@ func TestGlobReturnsMatchesFromCompletedWalk(t *testing.T) {
 	}
 }
 
+// An absolute pattern is walked from its last directory before any pattern
+// syntax, and brace alternatives are pattern syntax too.
+func TestGlobAbsolutePatternWithBraces(t *testing.T) {
+	workspace := inWorkspace(t)
+	source := writeWorkspaceFile(t, workspace, "src/a.go", "package src\n")
+	test := writeWorkspaceFile(t, workspace, "test/b.go", "package test\n")
+	writeWorkspaceFile(t, workspace, "other/c.go", "package other\n")
+
+	output := runGlob(t, map[string]any{"query": filepath.Join(workspace, "{src,test}", "*.go")})
+	if want := source + "\n" + test; output.Output != want {
+		t.Fatalf("output = %q, want %q", output.Output, want)
+	}
+}
+
+func TestSplitAbsoluteGlobPattern(t *testing.T) {
+	if filepath.Separator != '/' {
+		t.Skip("patterns are written with forward slashes")
+	}
+	cases := []struct {
+		pattern     string
+		wantDir     string
+		wantPattern string
+	}{
+		{"/ws/src/*.go", "/ws/src", "*.go"},
+		{"/ws/**/*.go", "/ws", "**/*.go"},
+		{"/ws/{src,test}/*.go", "/ws", "{src,test}/*.go"},
+		{"/ws/src/main.go", "/ws/src", "main.go"},
+		{"/*.go", "/", "*.go"},
+	}
+	for _, tc := range cases {
+		dir, pattern := splitAbsoluteGlobPattern(tc.pattern)
+		if dir != tc.wantDir || pattern != tc.wantPattern {
+			t.Errorf("splitAbsoluteGlobPattern(%q) = %q, %q; want %q, %q", tc.pattern, dir, pattern, tc.wantDir, tc.wantPattern)
+		}
+	}
+}
+
 func TestGlobReportsTruncation(t *testing.T) {
 	workspace := inWorkspace(t)
 	for _, name := range []string{"a.go", "b.go", "c.go"} {

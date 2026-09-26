@@ -172,9 +172,12 @@ func resolveGlobSearchDir(params map[string]any) (string, error) {
 	return searchDir, nil
 }
 
+// splitAbsoluteGlobPattern splits an absolute pattern into the directory to
+// walk, the part before any pattern syntax, and the pattern relative to it.
+// doublestar treats braces and escapes as syntax too, not only * ? and [.
 func splitAbsoluteGlobPattern(pattern string) (string, string) {
 	cleaned := filepath.Clean(pattern)
-	index := strings.IndexAny(filepath.ToSlash(cleaned), "*?[")
+	index := strings.IndexAny(filepath.ToSlash(cleaned), "*?[{\\")
 	if index == -1 {
 		return filepath.Dir(cleaned), filepath.Base(cleaned)
 	}
