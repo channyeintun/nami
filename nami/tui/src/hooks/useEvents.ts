@@ -842,46 +842,29 @@ export function useEvents(initialModel: string, initialMode: string) {
       case "tool_start": {
         const p = event.payload as ToolStartPayload;
         resetQueuedAssistantBlocks();
-        setUIState((s) => {
-          const completedBlocks = completedAssistantBlocks(
-            s.liveAssistantBlocks,
-          );
-          const streamedMessage =
-            completedBlocks.length > 0
-              ? createAssistantMessage(completedBlocks, {
-                  id: s.liveAssistantMessageId ?? undefined,
-                  model: s.model,
-                })
-              : null;
-
-          return {
-            ...s,
-            messages: streamedMessage
-              ? [...s.messages, streamedMessage]
-              : s.messages,
-            activeTurnStatus: "running_tools",
-            isStreaming: true,
-            statusLine: null,
-            error: null,
-            liveAssistantMessageId: null,
-            liveAssistantBlocks: [],
-            transcript: appendTranscriptEntry(s.transcript, {
-              id: p.tool_id,
-              kind: "tool_call",
-            }),
-            toolCalls: upsertToolCall(s.toolCalls, {
-              id: p.tool_id,
-              name: p.name,
-              input: sanitizeToolCallInput(p.name, p.input),
-              status: "running",
-              output: undefined,
-              error: undefined,
-              truncated: false,
-              progressBytes: undefined,
-              permissionRequestId: undefined,
-            }),
-          };
-        });
+        setUIState((s) => ({
+          ...s,
+          ...finishLiveAssistantMessage(s),
+          activeTurnStatus: "running_tools",
+          isStreaming: true,
+          statusLine: null,
+          error: null,
+          transcript: appendTranscriptEntry(s.transcript, {
+            id: p.tool_id,
+            kind: "tool_call",
+          }),
+          toolCalls: upsertToolCall(s.toolCalls, {
+            id: p.tool_id,
+            name: p.name,
+            input: sanitizeToolCallInput(p.name, p.input),
+            status: "running",
+            output: undefined,
+            error: undefined,
+            truncated: false,
+            progressBytes: undefined,
+            permissionRequestId: undefined,
+          }),
+        }));
         break;
       }
       case "tool_progress": {
@@ -983,6 +966,9 @@ export function useEvents(initialModel: string, initialMode: string) {
         const p = event.payload as ToolErrorPayload;
         setUIState((s) => ({
           ...s,
+          // A call that fails before it starts (denied, invalid input,
+          // unknown tool) sends no tool_start, so close the text here.
+          ...finishLiveAssistantMessage(s),
           activeTurnStatus: "working",
           isStreaming: true,
           transcript: appendTranscriptEntry(s.transcript, {
@@ -1049,6 +1035,9 @@ export function useEvents(initialModel: string, initialMode: string) {
         const permissionInput = permissionRequestDisplayInput(p);
         setUIState((s) => ({
           ...s,
+          // Permission is asked before tool_start, and a denied call never
+          // starts at all.
+          ...finishLiveAssistantMessage(s),
           activeTurnStatus: "waiting_permission",
           isStreaming: true,
           pendingPermission: p,
@@ -3928,6 +3917,34 @@ function completedAssistantBlocks(
   blocks: UIAssistantBlock[],
 ): UIAssistantBlock[] {
   return blocks.filter((block) => block.text.trim().length > 0);
+}
+
+/**
+ * Turns the text streamed so far into a finished message and clears the live
+ * state, so text that streams after this point starts a new message instead
+ * of being appended to one that sits earlier in the transcript.
+ */
+function finishLiveAssistantMessage(
+  s: EngineUIState,
+): Pick<
+  EngineUIState,
+  "messages" | "liveAssistantMessageId" | "liveAssistantBlocks"
+> {
+  const blocks = completedAssistantBlocks(s.liveAssistantBlocks);
+  return {
+    messages:
+      blocks.length > 0
+        ? [
+            ...s.messages,
+            createAssistantMessage(blocks, {
+              id: s.liveAssistantMessageId ?? undefined,
+              model: s.model,
+            }),
+          ]
+        : s.messages,
+    liveAssistantMessageId: null,
+    liveAssistantBlocks: [],
+  };
 }
 
 function findArtifactField(
