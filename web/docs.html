@@ -925,6 +925,14 @@ install -m 755 nami-engine "$HOME/.local/bin/nami-engine"</code><button type="bu
                 ><br /><span class="text-brand">$</span> nami --auto-mode
               </div>
             </div>
+            <p class="text-sm text-gray-400 mt-6 leading-relaxed">
+              Without <code>--model</code> (or <code>NAMI_MODEL</code>), Nami
+              starts on the model you used last, else the <code>model</code> in
+              your <a href="#config" class="text-brand hover:text-white transition">config file</a>,
+              else <code>anthropic/claude-sonnet-5</code>. If that model's
+              provider is not set up, it switches to the first provider that is
+              and says so.
+            </p>
           </section>
 
           <!-- MCP Management -->

@@ -68,7 +68,9 @@ const usage = `Usage: nami [options]
        nami debug-view --file <debug.log>
 
 Options:
-  --model, -m <provider/model>  Model to use (default: anthropic/claude-sonnet-5)
+  --model, -m <provider/model>  Model to use (default: the model you used last,
+                                else "model" in config.json, else
+                                anthropic/claude-sonnet-5)
   --mode <plan|fast>            Execution mode (default: plan)
   --auto-mode                   Auto-approve non-destructive tool calls
   --help, -h                    Show this help`;

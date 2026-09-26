@@ -247,6 +247,8 @@ nami --auto-mode
 nami --help
 ```
 
+Without `--model` (or `NAMI_MODEL`), Nami starts on the model you used last, else the `model` in your [config file](#configuration), else `anthropic/claude-sonnet-5`. If that model's provider is not set up, it switches to the first provider that is and says so.
+
 ### MCP management
 
 Nami now includes a small MCP management CLI similar to Claude Code's core flow.
