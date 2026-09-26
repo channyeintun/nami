@@ -96,6 +96,12 @@ func evaluateSessionGoal(
 
 	store.NoteEvaluated()
 	verdict := goalpkg.Evaluate(ctx, client, state.Condition, stopReq.Messages)
+	// Stopped while the goal was being judged: the judge fails open on the
+	// cancelled context and would clear the goal as met. It was not judged,
+	// so it stays set, as for a stop the user asked for above.
+	if ctx.Err() != nil {
+		return agent.StopDecision{}, nil
+	}
 	state, _ = store.Snapshot()
 
 	switch {

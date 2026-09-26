@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -74,6 +75,28 @@ func TestEvaluateSessionGoalReleasesWhenTheJudgeIsUnavailable(t *testing.T) {
 	}
 	if store.Active() {
 		t.Fatal("goal survived a Met verdict")
+	}
+}
+
+// Stopping the turn while the goal is being judged must not clear the goal:
+// the judge fails open on the cancelled context, which reads as met.
+func TestEvaluateSessionGoalKeepsTheGoalWhenStoppedMidJudgement(t *testing.T) {
+	store := goalStoreFor(t.TempDir())
+	if _, err := store.Set("all tests pass"); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	decision, err := evaluateSessionGoal(ctx, nil, store, nil, agent.StopRequest{})
+	if err != nil {
+		t.Fatalf("evaluateSessionGoal: %v", err)
+	}
+	if decision.Continue {
+		t.Fatal("a stopped turn was kept going")
+	}
+	if !store.Active() {
+		t.Fatal("the goal was cleared by a judgement that never finished")
 	}
 }
 
