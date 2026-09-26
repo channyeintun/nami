@@ -285,11 +285,10 @@ func resolveSearchResultURL(rawHref string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	// Query already unescapes the redirect target once; decoding it again
+	// would mangle escapes that belong to the target itself.
 	if redirectURL := parsed.Query().Get("uddg"); redirectURL != "" {
-		decoded, err := url.QueryUnescape(redirectURL)
-		if err == nil {
-			rawHref = decoded
-		}
+		rawHref = redirectURL
 	}
 
 	parsed, err = url.Parse(rawHref)
