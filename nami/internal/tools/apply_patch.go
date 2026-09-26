@@ -90,44 +90,34 @@ func (t *ApplyPatchTool) Validate(input ToolInput) error {
 			return err
 		}
 	}
-	return nil
+	// Plan the patch exactly as Execute will. That checks every file's
+	// existence against the patch's own earlier sections as well as the disk,
+	// and rejects a hunk that does not match before anyone is asked to approve
+	// the patch.
+	_, err = planPatchChanges(context.Background(), document.Operations)
+	return err
 }
 
-// validatePatchTarget checks that the on-disk state of a target matches what the
-// requested action expects before any file is touched.
+// validatePatchTarget rejects a section aimed at a directory. Whether target
+// files exist and whether hunks match is checked by planning the patch.
 func validatePatchTarget(action patch.Action, resolvedPath string) error {
-	info, statErr := os.Stat(resolvedPath)
+	info, err := os.Stat(resolvedPath)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("stat file %q: %w", resolvedPath, err)
+	}
+	if !info.IsDir() {
+		return nil
+	}
 	switch action {
 	case patch.ActionAdd:
-		if statErr == nil {
-			if info.IsDir() {
-				return NewEditFailure(EditFailureInvalidRequest, resolvedPath, fmt.Sprintf("cannot add file at directory path: %s", resolvedPath), "Choose a file path that does not already exist.")
-			}
-			return patchAddTargetExists(resolvedPath)
-		}
-		if !errors.Is(statErr, os.ErrNotExist) {
-			return fmt.Errorf("stat file %q: %w", resolvedPath, statErr)
-		}
+		return NewEditFailure(EditFailureInvalidRequest, resolvedPath, fmt.Sprintf("cannot add file at directory path: %s", resolvedPath), "Choose a file path that does not already exist.")
 	case patch.ActionUpdate:
-		if statErr != nil {
-			if errors.Is(statErr, os.ErrNotExist) {
-				return NewEditFailure(EditFailureTargetMissing, resolvedPath, fmt.Sprintf("file does not exist: %s", resolvedPath), "Use create_file to create it first, or switch this section to *** Add File if you intend to create a new file.")
-			}
-			return fmt.Errorf("stat file %q: %w", resolvedPath, statErr)
-		}
-		if info.IsDir() {
-			return NewEditFailure(EditFailureInvalidRequest, resolvedPath, fmt.Sprintf("cannot update directory path: %s", resolvedPath), "Target a regular text file instead of a directory.")
-		}
+		return NewEditFailure(EditFailureInvalidRequest, resolvedPath, fmt.Sprintf("cannot update directory path: %s", resolvedPath), "Target a regular text file instead of a directory.")
 	case patch.ActionDelete:
-		if statErr != nil {
-			if errors.Is(statErr, os.ErrNotExist) {
-				return NewEditFailure(EditFailureTargetMissing, resolvedPath, fmt.Sprintf("file does not exist: %s", resolvedPath), "Reread the workspace and remove the delete section if the file is already gone.")
-			}
-			return fmt.Errorf("stat file %q: %w", resolvedPath, statErr)
-		}
-		if info.IsDir() {
-			return NewEditFailure(EditFailureUnsupportedOperation, resolvedPath, fmt.Sprintf("apply_patch does not delete directories: %s", resolvedPath), "Delete files with *** Delete File sections only; handle directories through shell commands when explicitly approved.")
-		}
+		return NewEditFailure(EditFailureUnsupportedOperation, resolvedPath, fmt.Sprintf("apply_patch does not delete directories: %s", resolvedPath), "Delete files with *** Delete File sections only; handle directories through shell commands when explicitly approved.")
 	}
 	return nil
 }

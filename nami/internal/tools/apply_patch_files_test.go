@@ -258,6 +258,52 @@ func TestApplyPatchAppliesSectionsForTheSameFileInOrder(t *testing.T) {
 	}
 }
 
+// Validation runs the same plan as execution: sections that depend on an
+// earlier section of the patch are accepted, and a patch that cannot apply is
+// rejected before anyone is asked to approve it.
+func TestApplyPatchValidatesAgainstThePatchsOwnSections(t *testing.T) {
+	workspace := inWorkspace(t)
+	writeWorkspaceFile(t, workspace, "existing.txt", "old\n")
+
+	dependent := strings.Join([]string{
+		"*** Begin Patch",
+		"*** Add File: fresh.txt",
+		"+a",
+		"*** Update File: fresh.txt",
+		"@@",
+		"-a",
+		"+b",
+		"*** Delete File: existing.txt",
+		"*** Add File: existing.txt",
+		"+recreated",
+		"*** End Patch",
+	}, "\n")
+	output, err := runValidatedTool(t, NewApplyPatchTool(), map[string]any{"input": dependent})
+	if err != nil || output.IsError {
+		t.Fatalf("dependent patch: err=%v output=%q", err, output.Output)
+	}
+	if got := readWorkspaceFile(t, filepath.Join(workspace, "fresh.txt")); got != "b" {
+		t.Fatalf("fresh.txt = %q, want %q", got, "b")
+	}
+	if got := readWorkspaceFile(t, filepath.Join(workspace, "existing.txt")); got != "recreated" {
+		t.Fatalf("existing.txt = %q, want %q", got, "recreated")
+	}
+
+	stale := strings.Join([]string{
+		"*** Begin Patch",
+		"*** Update File: existing.txt",
+		"@@",
+		"-no such line",
+		"+x",
+		"*** End Patch",
+	}, "\n")
+	err = NewApplyPatchTool().Validate(ToolInput{Params: map[string]any{"input": stale}})
+	failure, ok := ExtractEditFailure(err)
+	if !ok || failure.Kind != EditFailureNoMatch {
+		t.Fatalf("Validate(stale hunk) = %v, want a no_match edit failure", err)
+	}
+}
+
 func TestApplyPatchValidateRejectsConflictingTargets(t *testing.T) {
 	workspace := inWorkspace(t)
 	writeWorkspaceFile(t, workspace, "exists.txt", "content\n")
