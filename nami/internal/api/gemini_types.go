@@ -120,7 +120,8 @@ type geminiErrorBody struct {
 }
 
 type geminiStreamState struct {
-	usage      geminiUsageMetadata
-	stopReason string
-	sentStop   bool
+	usage         geminiUsageMetadata
+	reportedUsage bool
+	stopReason    string
+	sentStop      bool
 }

@@ -155,8 +155,10 @@ const (
 	ModelEventToolCall                       // complete tool call
 	ModelEventStop                           // generation complete
 	// ModelEventUsage carries the call's cumulative token counts so far, never
-	// a delta, so a consumer keeps the latest one it sees. The clients report
-	// it once per stream, with the final totals, just before the stop event.
+	// a delta, so a consumer keeps the latest one it sees. Clients report the
+	// final totals just before the stop event, and may report earlier, as soon
+	// as the prompt's usage is known, so that a call cut off before it
+	// finishes is still charged for the prompt it was billed for.
 	ModelEventUsage
 	ModelEventRateLimits // rate limit windows from provider headers
 )

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"slices"
 	"testing"
 )
@@ -85,7 +86,7 @@ data: {"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":
 	}
 }
 
-func TestStreamsReportUsageOncePerCall(t *testing.T) {
+func TestStreamsReportRunningUsageEndingInTheFinalTotals(t *testing.T) {
 	cases := []struct {
 		name      string
 		body      string
@@ -147,22 +148,96 @@ func TestStreamsReportUsageOncePerCall(t *testing.T) {
 			}
 			events := drainStream(t, client, ModelRequest{Messages: []Message{{Role: RoleUser, Content: "hi"}}})
 
-			// The cost tracker adds up every usage event of a call, so a
-			// stream has to report the call's totals exactly once.
+			// Consumers keep the latest usage event of a call, so every
+			// report must be a running total, never a delta.
 			usages := usageEvents(events)
-			if len(usages) != 1 {
-				t.Fatalf("usage events = %+v, want exactly one", usages)
+			if len(usages) == 0 {
+				t.Fatal("stream reported no usage")
 			}
-			if usages[0] != tc.want {
-				t.Fatalf("usage = %+v, want %+v", usages[0], tc.want)
+			for i := 1; i < len(usages); i++ {
+				if !usageCovers(usages[i], usages[i-1]) {
+					t.Fatalf("usage events are not running totals: %+v", usages)
+				}
+			}
+			if last := usages[len(usages)-1]; last != tc.want {
+				t.Fatalf("final usage = %+v, want %+v", last, tc.want)
 			}
 
-			// The totals are only known at the end, so they arrive just
-			// before the stop event.
+			// The final totals are only known at the end, so the last
+			// usage report comes just before the stop event.
 			types := eventTypes(events)
-			usageAt := slices.Index(types, ModelEventUsage)
-			if usageAt != len(types)-2 || types[len(types)-1] != ModelEventStop {
-				t.Fatalf("event types = %v, want usage then stop at the end", types)
+			if len(types) < 2 || types[len(types)-2] != ModelEventUsage || types[len(types)-1] != ModelEventStop {
+				t.Fatalf("event types = %v, want the final usage then stop at the end", types)
+			}
+		})
+	}
+}
+
+// usageCovers reports whether later is a running total that includes earlier.
+func usageCovers(later, earlier Usage) bool {
+	return later.InputTokens >= earlier.InputTokens &&
+		later.OutputTokens >= earlier.OutputTokens &&
+		later.CacheReadTokens >= earlier.CacheReadTokens &&
+		later.CacheCreationTokens >= earlier.CacheCreationTokens
+}
+
+// A call cut off after the prompt was billed - the user pressed stop, or the
+// connection dropped - must still report the prompt's usage, or its cost is
+// lost from the session total.
+func TestStreamsReportPromptUsageBeforeTheyFinish(t *testing.T) {
+	cases := []struct {
+		name      string
+		body      string
+		newClient func(baseURL string) (LLMClient, error)
+		want      Usage
+	}{
+		{
+			name: "anthropic",
+			body: `event: message_start
+data: {"type":"message_start","message":{"usage":{"input_tokens":100,"cache_read_input_tokens":50,"output_tokens":1}}}
+
+event: content_block_start
+data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}
+
+`,
+			newClient: func(baseURL string) (LLMClient, error) {
+				return NewAnthropicClientForProvider("anthropic", "claude-sonnet-5", "key", baseURL)
+			},
+			want: Usage{InputTokens: 100, OutputTokens: 1, CacheReadTokens: 50},
+		},
+		{
+			name: "gemini",
+			body: `data: {"candidates":[{"content":{"parts":[{"text":"Once"}],"role":"model"}}],"usageMetadata":{"promptTokenCount":8,"totalTokenCount":8}}
+
+`,
+			newClient: func(baseURL string) (LLMClient, error) {
+				return NewGeminiClient("gemini-2.5-pro", "key", baseURL)
+			},
+			want: Usage{InputTokens: 8},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			client, err := tc.newClient(serveStream(t, tc.body).URL)
+			if err != nil {
+				t.Fatalf("new client: %v", err)
+			}
+			stream, err := client.Stream(context.Background(), ModelRequest{Messages: []Message{{Role: RoleUser, Content: "hi"}}})
+			if err != nil {
+				t.Fatalf("Stream: %v", err)
+			}
+			var usage *Usage
+			for event, err := range stream {
+				if err != nil {
+					break
+				}
+				if event.Type == ModelEventUsage {
+					usage = event.Usage
+				}
+			}
+			if usage == nil || *usage != tc.want {
+				t.Fatalf("usage before the cut = %+v, want %+v", usage, tc.want)
 			}
 		})
 	}

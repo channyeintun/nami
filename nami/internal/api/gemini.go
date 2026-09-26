@@ -220,9 +220,17 @@ func (c *GeminiClient) handleEvent(data string, state *geminiStreamState, yield 
 	if response.Error != nil {
 		return &APIError{Type: classifyGeminiErrorType(0, response.Error.Status, response.Error.Message), Message: response.Error.Message}
 	}
-	// Every chunk repeats the running usage, so it is only merged here and
-	// reported once, with the stop event.
+	// Every chunk repeats the running usage, so it is merged here, reported
+	// as soon as the prompt's share is known — a call cut off before its
+	// last chunk is still charged for the prompt — and reported again, final,
+	// with the stop event.
 	state.usage.merge(response.UsageMetadata)
+	if !state.reportedUsage && state.usage != (geminiUsageMetadata{}) {
+		state.reportedUsage = true
+		if !yield(ModelEvent{Type: ModelEventUsage, Usage: state.usage.toUsage()}, nil) {
+			return errStopStream
+		}
+	}
 
 	for _, candidate := range response.Candidates {
 		for _, part := range candidate.Content.Parts {
