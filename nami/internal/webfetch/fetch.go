@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
 	"strings"
 	"time"
@@ -149,7 +150,7 @@ func ToMarkdown(body, contentType string) (string, error) {
 	if body == "" {
 		return "", nil
 	}
-	if !strings.Contains(contentType, "text/html") && !looksLikeHTML(body) {
+	if !isHTML(body, contentType) {
 		return body, nil
 	}
 
@@ -158,6 +159,26 @@ func ToMarkdown(body, contentType string) (string, error) {
 		return "", fmt.Errorf("convert html to markdown: %w", err)
 	}
 	return strings.TrimSpace(markdown), nil
+}
+
+// isHTML decides whether a body goes through HTML conversion. A declared HTML
+// type always does. Only a missing or generic type is sniffed: any other
+// declared type — plain text, markdown, JSON — is taken at its word, so a
+// markdown file that shows an HTML sample in a code block stays markdown.
+func isHTML(body, contentType string) bool {
+	mediaType, _, err := mime.ParseMediaType(contentType)
+	if err != nil && !errors.Is(err, mime.ErrInvalidMediaParameter) {
+		// Without a usable declared type the body has to speak for itself.
+		return looksLikeHTML(body)
+	}
+	switch mediaType {
+	case "text/html", "application/xhtml+xml":
+		return true
+	case "application/octet-stream", "binary/octet-stream", "application/unknown", "unknown/unknown":
+		return looksLikeHTML(body)
+	default:
+		return false
+	}
 }
 
 func looksLikeHTML(body string) bool {

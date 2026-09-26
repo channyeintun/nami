@@ -194,6 +194,9 @@ func TestToMarkdown(t *testing.T) {
 		{"plain text passthrough", "just text", "text/plain", "just text"},
 		{"html by content type", "<p>hello</p>", "text/html", "hello"},
 		{"html by sniffing", "<html><body><p>hi</p></body></html>", "application/octet-stream", "hi"},
+		{"html without content type", "<html><body><p>hi</p></body></html>", "", "hi"},
+		{"html with parameters", "<p>hello</p>", "text/html; charset=utf-8", "hello"},
+		{"xhtml", "<html><body><p>hi</p></body></html>", "application/xhtml+xml", "hi"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -203,6 +206,24 @@ func TestToMarkdown(t *testing.T) {
 			}
 			if !strings.Contains(got, tc.want) {
 				t.Fatalf("ToMarkdown = %q, want it to contain %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// A declared non-HTML type is taken at its word. Sniffing it anyway sent any
+// markdown or text that shows an HTML sample through the HTML converter, which
+// dropped the sample and flattened the document onto one line.
+func TestToMarkdownKeepsDeclaredTextThatMentionsHTML(t *testing.T) {
+	readme := "# Getting started\n\n```html\n<!doctype html>\n<html>\n  <body>\n    <div id=\"root\"></div>\n  </body>\n</html>\n```\n\n- Run `npm start`"
+	for _, contentType := range []string{"text/markdown", "text/plain; charset=utf-8", "application/json"} {
+		t.Run(contentType, func(t *testing.T) {
+			got, err := ToMarkdown(readme, contentType)
+			if err != nil {
+				t.Fatalf("ToMarkdown: %v", err)
+			}
+			if got != readme {
+				t.Fatalf("ToMarkdown rewrote a %s body:\n%s", contentType, got)
 			}
 		})
 	}
