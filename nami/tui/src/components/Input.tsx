@@ -37,7 +37,6 @@ interface InputProps {
   onReasoningToggle: () => void;
   onBackgroundTasksToggle: () => void;
   onRevealFooterHints: () => void;
-  onSendQueuedPromptNow: () => void;
   onRemoveQueuedPrompt: () => void;
   onCancel: () => void;
   disabled?: boolean;
@@ -106,7 +105,6 @@ const Input: FC<InputProps> = ({
   onReasoningToggle,
   onBackgroundTasksToggle,
   onRevealFooterHints,
-  onSendQueuedPromptNow,
   onRemoveQueuedPrompt,
   onCancel,
   disabled,
@@ -271,12 +269,6 @@ const Input: FC<InputProps> = ({
       if (key.meta && input?.toLowerCase() === "b") {
         flushPendingSubmit();
         onBackgroundTasksToggle();
-        return;
-      }
-
-      if (key.ctrl && input === "y") {
-        flushPendingSubmit();
-        onSendQueuedPromptNow();
         return;
       }
 

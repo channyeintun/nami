@@ -119,8 +119,11 @@ function buildInputHint(
   queuedPromptCount: number,
   showExpandedHint: boolean,
 ): string {
+  // Prompts typed during a turn queue up, so dropping them matters most
+  // while one is running.
+  const queueHint = queuedPromptCount > 0 ? " | Ctrl+K drop queued" : "";
   if (isLoading) {
-    return "esc to interrupt";
+    return `esc to interrupt${queueHint}`;
   }
 
   if (!showExpandedHint) {
@@ -133,8 +136,6 @@ function buildInputHint(
         ? " | Cmd+V text | Ctrl+V image"
         : " | Ctrl+V image"
       : "";
-  const queueHint =
-    queuedPromptCount > 0 ? " | Ctrl+Y send queued | Ctrl+K drop queued" : "";
   const tasksHint = ` | ${backgroundTasksShortcutLabel} tasks`;
   const reasoningHint = ` | ${reasoningShortcutLabel} reason`;
 

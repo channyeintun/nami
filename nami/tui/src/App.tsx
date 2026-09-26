@@ -1049,11 +1049,6 @@ const App: FC<AppProps> = ({ enginePath, model, mode, autoMode }) => {
                 onReasoningToggle={handleReasoningToggle}
                 onBackgroundTasksToggle={handleBackgroundTasksToggle}
                 onRevealFooterHints={handleRevealFooterHints}
-                // Ctrl+Y ("send queued") has nothing to do: queued prompts go
-                // out as soon as the engine is free, and the engine holds a
-                // prompt sent during a turn until the turn ends. Input still
-                // requires a handler for the key.
-                onSendQueuedPromptNow={() => {}}
                 onRemoveQueuedPrompt={handleRemoveNextQueuedPrompt}
                 onCancel={handleCancel}
                 disabled={isPromptDisabled}
