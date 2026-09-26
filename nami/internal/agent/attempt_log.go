@@ -2,6 +2,7 @@ package agent
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -47,18 +48,22 @@ func (l *AttemptLog) Record(entry AttemptEntry) error {
 	if err := os.MkdirAll(l.sessionDir, 0o755); err != nil {
 		return fmt.Errorf("attempt log: create session dir: %w", err)
 	}
+	data, err := json.Marshal(entry)
+	if err != nil {
+		return fmt.Errorf("attempt log: marshal: %w", err)
+	}
 	path := filepath.Join(l.sessionDir, attemptLogFilename)
 	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 	if err != nil {
 		return fmt.Errorf("attempt log: open: %w", err)
 	}
-	defer f.Close()
-	data, err := json.Marshal(entry)
-	if err != nil {
-		return fmt.Errorf("attempt log: marshal: %w", err)
+	if _, err := fmt.Fprintf(f, "%s\n", data); err != nil {
+		return errors.Join(fmt.Errorf("attempt log: write: %w", err), f.Close())
 	}
-	_, err = fmt.Fprintf(f, "%s\n", data)
-	return err
+	if err := f.Close(); err != nil {
+		return fmt.Errorf("attempt log: close: %w", err)
+	}
+	return nil
 }
 
 // Load reads all entries from the attempt log for the current session.
