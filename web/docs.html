@@ -1277,6 +1277,36 @@ install -m 755 nami-engine "$HOME/.local/bin/nami-engine"</code><button type="bu
                     <td
                       class="p-4 border-t border-[#1a1a1a] font-bold text-brand"
                     >
+                      agent_team
+                    </td>
+                    <td class="p-4 border-t border-[#1a1a1a]">
+                      Launch a team of independent child agents
+                    </td>
+                  </tr>
+                  <tr>
+                    <td
+                      class="p-4 border-t border-[#1a1a1a] font-bold text-brand"
+                    >
+                      workflow
+                    </td>
+                    <td class="p-4 border-t border-[#1a1a1a]">
+                      Run a dependency graph of child agents
+                    </td>
+                  </tr>
+                  <tr>
+                    <td
+                      class="p-4 border-t border-[#1a1a1a] font-bold text-brand"
+                    >
+                      workflow_status
+                    </td>
+                    <td class="p-4 border-t border-[#1a1a1a]">
+                      Inspect a running or finished workflow
+                    </td>
+                  </tr>
+                  <tr>
+                    <td
+                      class="p-4 border-t border-[#1a1a1a] font-bold text-brand"
+                    >
                       bash
                     </td>
                     <td class="p-4 border-t border-[#1a1a1a]">
@@ -1698,10 +1728,27 @@ install -m 755 nami-engine "$HOME/.local/bin/nami-engine"</code><button type="bu
                   </tr>
                   <tr>
                     <td class="p-4 border-t border-[#1a1a1a]">
+                      <code>NAMI_BASE_URL</code>
+                    </td>
+                    <td class="p-4 border-t border-[#1a1a1a]">
+                      Custom API base URL
+                    </td>
+                  </tr>
+                  <tr>
+                    <td class="p-4 border-t border-[#1a1a1a]">
                       <code>NAMI_DEBUG</code>
                     </td>
                     <td class="p-4 border-t border-[#1a1a1a]">
                       Enable runtime diagnostic log
+                    </td>
+                  </tr>
+                  <tr>
+                    <td class="p-4 border-t border-[#1a1a1a]">
+                      <code>NAMI_PERMISSION_MODE</code>
+                    </td>
+                    <td class="p-4 border-t border-[#1a1a1a]">
+                      <code>default</code>, <code>autoApprove</code>, or
+                      <code>bypassPermissions</code>
                     </td>
                   </tr>
                   <tr>
