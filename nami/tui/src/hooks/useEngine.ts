@@ -62,6 +62,26 @@ export function useEngine(enginePath: string, options: EngineOptions = {}) {
       stdio: ["pipe", "pipe", "pipe"],
     });
     processRef.current = proc;
+    // Set once cleanup starts; from then on the engine going away is expected.
+    let stopping = false;
+
+    // Both of these are emitted as "error" events, which crash the process
+    // when nothing listens: a binary that is missing or not executable (no
+    // "exit" follows), and a write racing the engine's exit (EPIPE).
+    proc.on("error", (err) => {
+      if (stopping) return;
+      setState((prev) => ({
+        ...prev,
+        error: `Could not start engine: ${err.message}`,
+      }));
+    });
+    proc.stdin?.on("error", (err) => {
+      if (stopping) return;
+      setState((prev) => ({
+        ...prev,
+        error: prev.error ?? `Lost connection to engine: ${err.message}`,
+      }));
+    });
 
     const rl = createInterface({ input: proc.stdout! });
     const stderrRl = createInterface({ input: proc.stderr! });
@@ -106,6 +126,7 @@ export function useEngine(enginePath: string, options: EngineOptions = {}) {
     });
 
     return () => {
+      stopping = true;
       rl.close();
       stderrRl.close();
 
