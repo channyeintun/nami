@@ -180,7 +180,7 @@ func (c *OpenAIResponsesClient) openStream(ctx context.Context, payload openAIRe
 		if currentResp.StatusCode >= http.StatusMultipleChoices {
 			defer currentResp.Body.Close()
 			bodyBytes, _ := io.ReadAll(io.LimitReader(currentResp.Body, 1<<20))
-			return classifyOpenAICompatStatus(currentResp.StatusCode, bodyBytes)
+			return withRetryAfter(classifyOpenAICompatStatus(currentResp.StatusCode, bodyBytes), retryAfterHeaderDelay(currentResp.Header))
 		}
 
 		mu.Lock()

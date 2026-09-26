@@ -72,7 +72,6 @@ func (c *GeminiClient) Warmup(ctx context.Context) error {
 }
 
 const geminiMaxEmptyRetries = 2
-const geminiMaxRetryAfter = 60 * time.Second
 
 var geminiRetryDelayBodyRe = regexp.MustCompile(`(?i)(?:please retry in\s+(\d+(?:\.\d+)?)\s*s|"retryDelay"\s*:\s*"(\d+(?:\.\d+)?)s")`)
 
@@ -126,16 +125,11 @@ func (c *GeminiClient) Stream(ctx context.Context, req ModelRequest) (iter.Seq2[
 	}, nil
 }
 
+// geminiRetryAfterDelay reads the retry delay from the standard headers, then
+// from the rate-limit reset headers and the retry hint in the error body.
 func geminiRetryAfterDelay(resp *http.Response, body []byte) time.Duration {
-	if v := resp.Header.Get("Retry-After"); v != "" {
-		if secs, err := strconv.ParseFloat(strings.TrimSpace(v), 64); err == nil && secs > 0 {
-			return time.Duration(secs * float64(time.Second))
-		}
-		if t, err := http.ParseTime(v); err == nil {
-			if d := time.Until(t); d > 0 {
-				return d
-			}
-		}
+	if d := retryAfterHeaderDelay(resp.Header); d > 0 {
+		return d
 	}
 	if v := resp.Header.Get("X-RateLimit-Reset"); v != "" {
 		if ts, err := strconv.ParseInt(strings.TrimSpace(v), 10, 64); err == nil && ts > 0 {
@@ -189,17 +183,7 @@ func (c *GeminiClient) openStream(ctx context.Context, payload geminiGenerateCon
 		if currentResp.StatusCode >= http.StatusMultipleChoices {
 			defer currentResp.Body.Close()
 			bodyBytes, _ := io.ReadAll(io.LimitReader(currentResp.Body, 1<<20))
-			apiErr := classifyGeminiStatus(currentResp.StatusCode, bodyBytes)
-			if d := geminiRetryAfterDelay(currentResp, bodyBytes); d > 0 {
-				if ae, ok := errors.AsType[*APIError](apiErr); ok {
-					if d > geminiMaxRetryAfter {
-						ae.RetryAfter = 0
-						return ae
-					}
-					ae.RetryAfter = d
-				}
-			}
-			return apiErr
+			return withRetryAfter(classifyGeminiStatus(currentResp.StatusCode, bodyBytes), geminiRetryAfterDelay(currentResp, bodyBytes))
 		}
 
 		mu.Lock()

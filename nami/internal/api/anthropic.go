@@ -230,7 +230,7 @@ func (c *AnthropicClient) openStream(ctx context.Context, payload anthropicReque
 		if currentResp.StatusCode >= http.StatusMultipleChoices {
 			defer currentResp.Body.Close()
 			bodyBytes, _ := io.ReadAll(io.LimitReader(currentResp.Body, 1<<20))
-			return classifyAnthropicStatus(currentResp.StatusCode, bodyBytes)
+			return withRetryAfter(classifyAnthropicStatus(currentResp.StatusCode, bodyBytes), retryAfterHeaderDelay(currentResp.Header))
 		}
 
 		mu.Lock()

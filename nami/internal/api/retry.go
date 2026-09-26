@@ -4,8 +4,15 @@ import (
 	"context"
 	"errors"
 	"math"
+	"net/http"
+	"strconv"
+	"strings"
 	"time"
 )
+
+// maxRetryAfter caps how long a server-requested retry delay is honoured; a
+// longer one falls back to the normal backoff rather than stalling the turn.
+const maxRetryAfter = 60 * time.Second
 
 // APIErrorType classifies API errors for retry decisions.
 type APIErrorType int
@@ -65,6 +72,43 @@ func ShouldRetry(err error) bool {
 	default:
 		return false
 	}
+}
+
+// retryAfterHeaderDelay reads the retry delay a server asked for, from the
+// retry-after-ms header OpenAI sends or from Retry-After, which holds either
+// seconds or an HTTP date. It returns 0 when there is none.
+func retryAfterHeaderDelay(header http.Header) time.Duration {
+	if value := strings.TrimSpace(header.Get("Retry-After-Ms")); value != "" {
+		if millis, err := strconv.ParseFloat(value, 64); err == nil && millis > 0 {
+			return time.Duration(millis * float64(time.Millisecond))
+		}
+	}
+	value := strings.TrimSpace(header.Get("Retry-After"))
+	if value == "" {
+		return 0
+	}
+	if seconds, err := strconv.ParseFloat(value, 64); err == nil {
+		if seconds <= 0 {
+			return 0
+		}
+		return time.Duration(seconds * float64(time.Second))
+	}
+	if at, err := http.ParseTime(value); err == nil {
+		return max(time.Until(at), 0)
+	}
+	return 0
+}
+
+// withRetryAfter records on err the retry delay the server asked for, so that
+// RetryWithBackoff waits that long instead of its own backoff. A delay past
+// maxRetryAfter is not recorded.
+func withRetryAfter(err error, delay time.Duration) error {
+	apiErr, ok := errors.AsType[*APIError](err)
+	if !ok || delay <= 0 || delay > maxRetryAfter {
+		return err
+	}
+	apiErr.RetryAfter = delay
+	return err
 }
 
 // BackoffDelay calculates exponential backoff delay for attempt n (0-indexed).

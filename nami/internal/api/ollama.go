@@ -144,7 +144,7 @@ func (c *OllamaClient) openStream(ctx context.Context, payload ollamaChatRequest
 		if currentResp.StatusCode >= http.StatusMultipleChoices {
 			defer currentResp.Body.Close()
 			bodyBytes, _ := io.ReadAll(io.LimitReader(currentResp.Body, 1<<20))
-			return classifyOllamaStatus(currentResp.StatusCode, bodyBytes)
+			return withRetryAfter(classifyOllamaStatus(currentResp.StatusCode, bodyBytes), retryAfterHeaderDelay(currentResp.Header))
 		}
 
 		mu.Lock()
