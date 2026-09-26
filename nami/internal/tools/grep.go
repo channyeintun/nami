@@ -276,7 +276,8 @@ func runGrepFallback(ctx context.Context, searchPath, pattern, outputMode string
 	} else if contextLines, ok := intParam(params, "-C"); ok && outputMode == "content" {
 		args = append(args, "-C", strconv.Itoa(contextLines))
 	}
-	args = append(args, pattern, searchPath)
+	// -e keeps a pattern such as "--verbose" from being parsed as an option.
+	args = append(args, "-e", pattern, "--", searchPath)
 
 	cmd := exec.CommandContext(ctx, "grep", args...)
 	var stdout bytes.Buffer
