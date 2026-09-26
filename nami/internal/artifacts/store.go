@@ -13,27 +13,37 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/channyeintun/nami/internal/fsutil"
 )
 
-// LocalStore implements Service using the local filesystem.
-type LocalStore struct {
-	baseDir string
-}
-
-// NewLocalStore creates a local filesystem artifact store.
+// Artifacts hold plans, diffs and fetched pages from the conversation, so
+// they are private like the session data they come from.
 const (
 	artifactDirMode  os.FileMode = 0o700
 	artifactFileMode os.FileMode = 0o600
 )
 
+// LocalStore implements Service using the local filesystem.
+type LocalStore struct {
+	baseDir string
+	// saveMu serializes saves. A save reads the artifact's current version
+	// and writes the next, and tools save in parallel: two saves of one
+	// artifact would both write the same version, and one would be lost.
+	saveMu sync.Mutex
+}
+
+// NewLocalStore creates a local filesystem artifact store.
 func NewLocalStore(baseDir string) *LocalStore {
 	return &LocalStore{baseDir: baseDir}
 }
 
 func (s *LocalStore) Save(_ context.Context, req SaveRequest) (ArtifactVersion, error) {
+	s.saveMu.Lock()
+	defer s.saveMu.Unlock()
+
 	now := time.Now()
 	id := strings.TrimSpace(req.ID)
 	if id != "" {
@@ -101,8 +111,6 @@ func (s *LocalStore) Save(_ context.Context, req SaveRequest) (ArtifactVersion, 
 		artDir = filepath.Join(s.baseDir, string(req.Kind), id)
 	}
 
-	// Artifacts hold plans, diffs and fetched pages from the conversation, so
-	// they are private like the session data they come from.
 	if err := os.MkdirAll(artDir, artifactDirMode); err != nil {
 		return ArtifactVersion{}, fmt.Errorf("create artifact dir: %w", err)
 	}

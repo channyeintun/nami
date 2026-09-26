@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 )
 
 // MarkdownMimeType is the canonical MIME type for user-facing artifacts.
@@ -13,6 +14,10 @@ const MarkdownMimeType = "text/markdown; charset=utf-8"
 // Manager coordinates markdown-backed artifact lifecycle operations.
 type Manager struct {
 	store Service
+	// upsertMu makes finding a session artifact and saving it one step. Two
+	// parallel upserts of one slot, such as two fetches of the same page,
+	// would otherwise both find nothing and each create an artifact.
+	upsertMu sync.Mutex
 }
 
 // MarkdownRequest describes a markdown artifact save or update.
@@ -165,6 +170,12 @@ func (m *Manager) FindSessionArtifact(ctx context.Context, kind Kind, scope Scop
 
 // UpsertSessionMarkdown updates an existing session artifact when present, or creates one.
 func (m *Manager) UpsertSessionMarkdown(ctx context.Context, req MarkdownRequest, sessionID string, slot string) (Artifact, ArtifactVersion, bool, error) {
+	if m == nil {
+		return Artifact{}, ArtifactVersion{}, false, fmt.Errorf("artifact manager is not configured")
+	}
+	m.upsertMu.Lock()
+	defer m.upsertMu.Unlock()
+
 	existing, found, err := m.FindSessionArtifact(ctx, req.Kind, req.Scope, sessionID, slot)
 	if err != nil {
 		return Artifact{}, ArtifactVersion{}, false, err

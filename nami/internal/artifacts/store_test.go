@@ -2,10 +2,12 @@ package artifacts
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -384,5 +386,43 @@ func TestSavedArtifactsAreOwnerOnly(t *testing.T) {
 		if got := info.Mode().Perm(); got != want {
 			t.Errorf("%s mode = %v, want %v", filepath.Base(path), got, want)
 		}
+	}
+}
+
+// Tools save artifacts in parallel. Upserts of one slot must neither create
+// duplicate artifacts nor write the same version twice.
+func TestParallelUpsertsOfOneSlotKeepEveryVersion(t *testing.T) {
+	manager := NewManager(NewLocalStore(t.TempDir()))
+	const saves = 16
+	var wg sync.WaitGroup
+	errs := make(chan error, saves)
+	for i := range saves {
+		wg.Go(func() {
+			_, _, _, err := manager.UpsertSessionMarkdown(context.Background(), MarkdownRequest{
+				Kind:    KindSearchReport,
+				Scope:   ScopeSession,
+				Title:   "Fetch",
+				Content: fmt.Sprintf("report %d", i),
+			}, "session-1", "web-fetch-example")
+			errs <- err
+		})
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatalf("UpsertSessionMarkdown: %v", err)
+		}
+	}
+
+	artifacts, err := manager.LoadSessionArtifacts(context.Background(), "session-1")
+	if err != nil {
+		t.Fatalf("LoadSessionArtifacts: %v", err)
+	}
+	if len(artifacts) != 1 {
+		t.Fatalf("parallel upserts made %d artifacts, want 1", len(artifacts))
+	}
+	if got := artifacts[0].Artifact.Version; got != saves {
+		t.Fatalf("artifact is at version %d after %d saves, want %d", got, saves, saves)
 	}
 }
