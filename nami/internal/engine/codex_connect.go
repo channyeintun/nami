@@ -22,10 +22,9 @@ func connectCodex(cmd *slashCommandContext, methodInput string) (*connectResult,
 		return nil, emitTextResponse(cmd.bridge, "usage: /connect codex [browser|headless|env]")
 	}
 
-	persisted := config.LoadUser()
-	codexAuth := persisted.Codex
+	codexAuth := config.LoadUser().Codex
 	if method == "env" || method == "manual" {
-		return connectCodexFromEnv(cmd, persisted)
+		return connectCodexFromEnv(cmd)
 	}
 
 	appendSlashResponse(cmd.bridge, "Connecting Codex...\n\n")
@@ -65,9 +64,12 @@ func connectCodex(cmd *slashCommandContext, methodInput string) (*connectResult,
 		applyCodexTokens(&codexAuth, tokens)
 	}
 
-	persisted.Codex = codexAuth
-	persisted.Model = modelRef("codex", api.Presets["codex"].DefaultModel)
-	if err := config.Save(persisted); err != nil {
+	// Saved onto the config as it is now, not as it was loaded before the
+	// login, which can take minutes.
+	if err := config.Update(func(cfg *config.Config) {
+		cfg.Codex = codexAuth
+		cfg.Model = modelRef("codex", api.Presets["codex"].DefaultModel)
+	}); err != nil {
 		return nil, emitTextResponse(cmd.bridge, fmt.Sprintf("save Codex credentials: %v", err))
 	}
 
@@ -83,7 +85,7 @@ func connectCodex(cmd *slashCommandContext, methodInput string) (*connectResult,
 	}, nil
 }
 
-func connectCodexFromEnv(cmd *slashCommandContext, persisted config.Config) (*connectResult, error) {
+func connectCodexFromEnv(cmd *slashCommandContext) (*connectResult, error) {
 	statusCfg := config.LoadForWorkingDir(cmd.state.CWD)
 	statusCfg.Model = cmd.state.ActiveModelID
 	snapshot := commandspkg.DiscoverProviderSnapshot(statusCfg)
@@ -92,11 +94,11 @@ func connectCodexFromEnv(cmd *slashCommandContext, persisted config.Config) (*co
 		spec, _ := commandspkg.LookupConnectProvider("codex")
 		return nil, emitTextResponse(cmd.bridge, commandspkg.FormatConnectProviderGuidance(spec, snapshot))
 	}
-	persisted.Model = modelRef("codex", api.Presets["codex"].DefaultModel)
-	if err := config.Save(persisted); err != nil {
+	model := modelRef("codex", api.Presets["codex"].DefaultModel)
+	if err := config.Update(func(cfg *config.Config) { cfg.Model = model }); err != nil {
 		return nil, emitTextResponse(cmd.bridge, fmt.Sprintf("save Codex configuration: %v", err))
 	}
-	statusCfg.Model = persisted.Model
+	statusCfg.Model = model
 	return &connectResult{
 		Provider: "codex",
 		Model:    api.Presets["codex"].DefaultModel,

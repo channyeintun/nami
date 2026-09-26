@@ -120,13 +120,12 @@ func connectStaticProvider(cmd *slashCommandContext, providerID string, extraArg
 		return nil, emitTextResponse(cmd.bridge, commandspkg.FormatConnectProviderGuidance(spec, snapshot))
 	}
 
-	persisted := config.LoadUser()
-	persisted.Model = modelRef(providerID, spec.DefaultModel)
-	if err := config.Save(persisted); err != nil {
+	model := modelRef(providerID, spec.DefaultModel)
+	if err := config.Update(func(cfg *config.Config) { cfg.Model = model }); err != nil {
 		return nil, emitTextResponse(cmd.bridge, fmt.Sprintf("save %s configuration: %v", spec.Label, err))
 	}
 
-	currentCfg.Model = persisted.Model
+	currentCfg.Model = model
 	return &connectResult{
 		Provider: providerID,
 		Model:    spec.DefaultModel,
@@ -271,13 +270,18 @@ func connectGitHubCopilot(cmd *slashCommandContext, enterpriseInput string) (*co
 		}
 	}
 
-	persisted.GitHubCopilot = copilotAuth
-	persisted.Model = modelRef("github-copilot", api.Presets["github-copilot"].DefaultModel)
-	persisted.SubagentModel = modelRef("github-copilot", api.GitHubCopilotDefaultSubagentModel)
-	if strings.TrimSpace(persisted.ReasoningEffort) == "" {
-		persisted.ReasoningEffort = api.ReasoningEffortMedium
-	}
-	if err := config.Save(persisted); err != nil {
+	// Saved onto the config as it is now, not as it was loaded before the
+	// login, which can take minutes.
+	reasoningEffort := ""
+	if err := config.Update(func(cfg *config.Config) {
+		cfg.GitHubCopilot = copilotAuth
+		cfg.Model = modelRef("github-copilot", api.Presets["github-copilot"].DefaultModel)
+		cfg.SubagentModel = modelRef("github-copilot", api.GitHubCopilotDefaultSubagentModel)
+		if strings.TrimSpace(cfg.ReasoningEffort) == "" {
+			cfg.ReasoningEffort = api.ReasoningEffortMedium
+		}
+		reasoningEffort = cfg.ReasoningEffort
+	}); err != nil {
 		return nil, emitTextResponse(cmd.bridge, fmt.Sprintf("save GitHub Copilot credentials: %v", err))
 	}
 
@@ -292,7 +296,7 @@ func connectGitHubCopilot(cmd *slashCommandContext, enterpriseInput string) (*co
 				"GitHub Copilot connected. Set main model to %s, subagent model to github-copilot/%s, and reasoning effort to %s.%s",
 				activeModelID,
 				api.GitHubCopilotDefaultSubagentModel,
-				persisted.ReasoningEffort,
+				reasoningEffort,
 				policySummary,
 			)
 		},

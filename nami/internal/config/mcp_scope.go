@@ -82,9 +82,7 @@ func SaveMCPConfigForScope(cwd string, scope MCPScope, cfg MCPConfig) (string, e
 
 	switch scope {
 	case MCPScopeUser:
-		persisted := loadUserConfig()
-		persisted.MCP = cloned
-		if err := Save(persisted); err != nil {
+		if err := Update(func(persisted *Config) { persisted.MCP = cloned }); err != nil {
 			return path, err
 		}
 		return path, nil

@@ -180,25 +180,22 @@ func handleSubagentSlashCommand(cmd *slashCommandContext) error {
 func handleLogoutSlashCommand(cmd *slashCommandContext) error {
 	provider := strings.ToLower(strings.TrimSpace(cmd.args))
 
-	cfg := config.LoadUser()
-
 	switch provider {
 	case "github-copilot", "copilot":
-		cfg.GitHubCopilot = config.GitHubCopilotAuth{}
-		if err := config.Save(cfg); err != nil {
+		if err := config.Update(func(cfg *config.Config) { cfg.GitHubCopilot = config.GitHubCopilotAuth{} }); err != nil {
 			return emitTextResponse(cmd.bridge, fmt.Sprintf("Failed to save configuration: %v", err))
 		}
 		return emitTextResponse(cmd.bridge, "Successfully logged out of GitHub Copilot.")
 	case "codex":
-		cfg.Codex = config.CodexAuth{}
-		if err := config.Save(cfg); err != nil {
+		if err := config.Update(func(cfg *config.Config) { cfg.Codex = config.CodexAuth{} }); err != nil {
 			return emitTextResponse(cmd.bridge, fmt.Sprintf("Failed to save configuration: %v", err))
 		}
 		return emitTextResponse(cmd.bridge, "Successfully logged out of Codex.")
 	case "all", "":
-		cfg.GitHubCopilot = config.GitHubCopilotAuth{}
-		cfg.Codex = config.CodexAuth{}
-		if err := config.Save(cfg); err != nil {
+		if err := config.Update(func(cfg *config.Config) {
+			cfg.GitHubCopilot = config.GitHubCopilotAuth{}
+			cfg.Codex = config.CodexAuth{}
+		}); err != nil {
 			return emitTextResponse(cmd.bridge, fmt.Sprintf("Failed to save configuration: %v", err))
 		}
 		return emitTextResponse(cmd.bridge, "Successfully logged out of all providers.")
@@ -429,7 +426,7 @@ func promptReasoningSelection(
 }
 
 func handleReasoningSlashCommand(cmd *slashCommandContext) error {
-	persisted := config.LoadUser()
+	configuredEffort := strings.TrimSpace(config.LoadUser().ReasoningEffort)
 	currentModelID := cmd.state.ActiveModelID
 	if cmd.client != nil && *cmd.client != nil {
 		currentModelID = strings.TrimSpace((*cmd.client).ModelID())
@@ -438,7 +435,7 @@ func handleReasoningSlashCommand(cmd *slashCommandContext) error {
 	if strings.TrimSpace(selection) == "" {
 		picked, cancelled, err := promptReasoningSelection(
 			cmd,
-			strings.TrimSpace(persisted.ReasoningEffort),
+			configuredEffort,
 			currentModelID,
 		)
 		if err != nil {
@@ -457,11 +454,9 @@ func handleReasoningSlashCommand(cmd *slashCommandContext) error {
 		return emitTextResponse(cmd.bridge, err.Error())
 	}
 	if clearSetting {
-		persisted.ReasoningEffort = ""
-	} else {
-		persisted.ReasoningEffort = nextEffort
+		nextEffort = ""
 	}
-	if err := config.Save(persisted); err != nil {
+	if err := config.Update(func(cfg *config.Config) { cfg.ReasoningEffort = nextEffort }); err != nil {
 		return emitTextResponse(cmd.bridge, fmt.Sprintf("save reasoning effort: %v", err))
 	}
 	var activeClient api.LLMClient
@@ -472,6 +467,6 @@ func handleReasoningSlashCommand(cmd *slashCommandContext) error {
 		return err
 	}
 
-	updated := commandspkg.DescribeReasoningEffort(strings.TrimSpace(persisted.ReasoningEffort), currentModelID)
+	updated := commandspkg.DescribeReasoningEffort(nextEffort, currentModelID)
 	return emitTextResponse(cmd.bridge, fmt.Sprintf("Set reasoning effort to %s", updated))
 }

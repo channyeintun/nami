@@ -396,9 +396,7 @@ func setCredentialSaveNotice(notify func(message string)) {
 // read the old credentials from disk, and a Codex refresh token that was
 // rotated would be lost with them.
 func saveRefreshedCredentials(provider string, apply func(*config.Config)) {
-	cfg := config.LoadUser()
-	apply(&cfg)
-	err := config.Save(cfg)
+	err := config.Update(apply)
 	if err == nil {
 		return
 	}

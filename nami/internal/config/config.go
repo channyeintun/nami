@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 // Config holds all CLI configuration.
@@ -315,7 +316,8 @@ func ParseModel(modelStr string) (provider, model string) {
 
 // Save writes the config to disk. The file holds provider OAuth tokens and MCP
 // server credentials, so it is readable by its owner alone, and it is replaced
-// through a rename so a crash mid-write cannot leave it truncated.
+// through a rename so a crash mid-write cannot leave it truncated. To change
+// the saved config, use Update, which saves through here.
 func Save(cfg Config) error {
 	if err := os.MkdirAll(ConfigDir(), 0o700); err != nil {
 		return err
@@ -328,6 +330,23 @@ func Save(cfg Config) error {
 		return err
 	}
 	return writePrivateFile(ConfigPath(), data)
+}
+
+// updateMu makes each Update's load, change and save one step.
+var updateMu sync.Mutex
+
+// Update applies mutate to the configuration as the user saved it (see
+// LoadUser) and saves the result. A change to config.json goes through here
+// rather than LoadUser and Save: token refreshes save from background
+// goroutines while slash commands save from the main loop, and of two
+// read-modify-write cycles that overlap, the later save would silently undo
+// the earlier one's change.
+func Update(mutate func(*Config)) error {
+	updateMu.Lock()
+	defer updateMu.Unlock()
+	cfg := LoadUser()
+	mutate(&cfg)
+	return Save(cfg)
 }
 
 // ensureConfigReplaceable refuses to replace a config file that exists but no
