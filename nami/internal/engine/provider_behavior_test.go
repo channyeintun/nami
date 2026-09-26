@@ -1,6 +1,12 @@
 package engine
 
-import "testing"
+import (
+	"os"
+	"strings"
+	"testing"
+
+	"github.com/channyeintun/nami/internal/config"
+)
 
 // A subagent model named without a provider must run on the provider its name
 // or the session implies, never on an anthropic default that a missing prefix
@@ -55,5 +61,31 @@ func TestResolveSelectionRetainingProvider(t *testing.T) {
 					tt.input, tt.fallbackProvider, provider, model, tt.wantProvider, tt.wantModel)
 			}
 		})
+	}
+}
+
+// Save refuses to replace a config.json that no longer parses, so a refreshed
+// token can fail to be kept. The refresh still works, but the user has to hear
+// that the new credentials are not on disk.
+func TestRefreshedCredentialsThatCannotBeSavedAreReported(t *testing.T) {
+	isolateUserConfig(t)
+	if err := os.MkdirAll(config.ConfigDir(), 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	damaged := `{"codex": {"refresh_token": "keep-me"`
+	if err := os.WriteFile(config.ConfigPath(), []byte(damaged), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	var notices []string
+	setCredentialSaveNotice(func(message string) { notices = append(notices, message) })
+	t.Cleanup(func() { setCredentialSaveNotice(nil) })
+
+	saveRefreshedCredentials("Codex", func(cfg *config.Config) { cfg.Codex.AccessToken = "refreshed" })
+
+	if len(notices) != 1 || !strings.Contains(notices[0], "Codex") || !strings.Contains(notices[0], "does not parse") {
+		t.Fatalf("notices = %q, want one naming Codex and why the save failed", notices)
+	}
+	if data, err := os.ReadFile(config.ConfigPath()); err != nil || string(data) != damaged {
+		t.Fatalf("config.json = %q (%v), want it left for the user to repair", data, err)
 	}
 }

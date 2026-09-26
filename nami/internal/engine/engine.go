@@ -42,6 +42,11 @@ func RunStdioEngine(ctx context.Context, cfg config.Config) error {
 	var stdoutW io.Writer = debuglog.NewIPCWriter(os.Stdout)
 
 	bridge := ipc.NewBridge(stdinR, stdoutW)
+	// A token refresher runs inside whichever request needs the token. A
+	// notice it cannot deliver means the bridge is gone, which the main loop
+	// reports on its next event.
+	setCredentialSaveNotice(func(message string) { _ = bridge.EmitNotice(message) })
+	defer setCredentialSaveNotice(nil)
 	registry := toolpkg.NewRegistry()
 	startupSelection := resolveStartupProviderSelection(cfg)
 	provider := normalizeProvider(startupSelection.Provider)

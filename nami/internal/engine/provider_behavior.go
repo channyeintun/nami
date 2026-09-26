@@ -11,6 +11,7 @@ import (
 	"github.com/channyeintun/nami/internal/catalog"
 	commandspkg "github.com/channyeintun/nami/internal/commands"
 	"github.com/channyeintun/nami/internal/config"
+	"github.com/channyeintun/nami/internal/debuglog"
 	"github.com/channyeintun/nami/internal/modelsdev"
 	"github.com/channyeintun/nami/internal/modelselection"
 )
@@ -375,6 +376,41 @@ func resolveGitHubCopilotCapabilities(cfg config.Config, model string) (api.Mode
 	return capabilities, ok
 }
 
+var (
+	credentialSaveNoticeMu sync.RWMutex
+	credentialSaveNotice   func(message string)
+)
+
+// setCredentialSaveNotice routes reports of refreshed credentials that could
+// not be saved. RunStdioEngine sends them to the TUI; with none set, they reach
+// only the debug log.
+func setCredentialSaveNotice(notify func(message string)) {
+	credentialSaveNoticeMu.Lock()
+	defer credentialSaveNoticeMu.Unlock()
+	credentialSaveNotice = notify
+}
+
+// saveRefreshedCredentials writes credentials a token refresher obtained to
+// config.json. The refresh itself worked, so the request that needed it goes
+// ahead either way. A failed save is still reported: the next start would
+// read the old credentials from disk, and a Codex refresh token that was
+// rotated would be lost with them.
+func saveRefreshedCredentials(provider string, apply func(*config.Config)) {
+	cfg := config.LoadUser()
+	apply(&cfg)
+	err := config.Save(cfg)
+	if err == nil {
+		return
+	}
+	debuglog.Log("credentials", "save_failed", map[string]any{"provider": provider, "error": err.Error()})
+	credentialSaveNoticeMu.RLock()
+	notify := credentialSaveNotice
+	credentialSaveNoticeMu.RUnlock()
+	if notify != nil {
+		notify(fmt.Sprintf("Refreshed %s credentials could not be saved: %v. This session keeps working; a later start may need /connect again.", provider, err))
+	}
+}
+
 type copilotTokenRefresher struct {
 	mu               sync.Mutex
 	githubToken      string
@@ -411,10 +447,10 @@ func (r *copilotTokenRefresher) resolve() (string, error) {
 	r.accessToken = refreshed.AccessToken
 	r.expiresAt = refreshed.ExpiresAt
 
-	loaded := config.LoadUser()
-	loaded.GitHubCopilot.AccessToken = refreshed.AccessToken
-	loaded.GitHubCopilot.ExpiresAtUnixMS = refreshed.ExpiresAt.UnixMilli()
-	_ = config.Save(loaded)
+	saveRefreshedCredentials("GitHub Copilot", func(cfg *config.Config) {
+		cfg.GitHubCopilot.AccessToken = refreshed.AccessToken
+		cfg.GitHubCopilot.ExpiresAtUnixMS = refreshed.ExpiresAt.UnixMilli()
+	})
 
 	return r.accessToken, nil
 }
@@ -465,12 +501,12 @@ func (r *codexTokenRefresher) resolve() (string, error) {
 	}
 	r.expiresAt = time.Now().Add(time.Duration(expiresIn) * time.Second)
 
-	loaded := config.LoadUser()
-	loaded.Codex.AccessToken = r.accessToken
-	loaded.Codex.RefreshToken = r.refreshToken
-	loaded.Codex.ExpiresAtUnixMS = r.expiresAt.UnixMilli()
-	loaded.Codex.AccountID = r.accountID
-	_ = config.Save(loaded)
+	saveRefreshedCredentials("Codex", func(cfg *config.Config) {
+		cfg.Codex.AccessToken = r.accessToken
+		cfg.Codex.RefreshToken = r.refreshToken
+		cfg.Codex.ExpiresAtUnixMS = r.expiresAt.UnixMilli()
+		cfg.Codex.AccountID = r.accountID
+	})
 
 	return r.accessToken, nil
 }
