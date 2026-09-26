@@ -86,11 +86,21 @@ func ConfigPath() string {
 	return filepath.Join(ConfigDir(), "config.json")
 }
 
-// Load reads configuration from file and environment.
+// Load reads configuration from file and environment. Do not pass the result to
+// Save: it carries this process's environment overrides, which would then be
+// written to disk and outlive the process that set them. Use LoadUser instead.
 func Load() Config {
 	cfg := loadUserConfig()
 	applyEnvOverrides(&cfg)
 	return cfg
+}
+
+// LoadUser reads the configuration as the user saved it: defaults plus the
+// config file, with no environment overrides. A read-modify-write cycle that
+// ends in Save starts here, so a one-off NAMI_PERMISSION_MODE or NAMI_BASE_URL
+// stays an override instead of becoming the saved setting.
+func LoadUser() Config {
+	return loadUserConfig()
 }
 
 // LoadForWorkingDir reads user configuration, merges the repo-local MCP

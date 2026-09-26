@@ -22,7 +22,7 @@ func connectCodex(cmd *slashCommandContext, methodInput string) (*connectResult,
 		return nil, emitTextResponse(cmd.bridge, "usage: /connect codex [browser|headless|env]")
 	}
 
-	persisted := config.Load()
+	persisted := config.LoadUser()
 	codexAuth := persisted.Codex
 	if method == "env" || method == "manual" {
 		return connectCodexFromEnv(cmd, persisted)
@@ -74,7 +74,9 @@ func connectCodex(cmd *slashCommandContext, methodInput string) (*connectResult,
 	return &connectResult{
 		Provider: "codex",
 		Model:    api.Presets["codex"].DefaultModel,
-		Config:   persisted,
+		// The client runs on what was just saved plus this process's
+		// environment overrides, which the saved copy deliberately lacks.
+		Config: config.Load(),
 		FormatMessage: func(activeModelID string) string {
 			return fmt.Sprintf("Codex connected. Set main model to %s.", activeModelID)
 		},

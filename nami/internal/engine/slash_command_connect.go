@@ -120,7 +120,7 @@ func connectStaticProvider(cmd *slashCommandContext, providerID string, extraArg
 		return nil, emitTextResponse(cmd.bridge, commandspkg.FormatConnectProviderGuidance(spec, snapshot))
 	}
 
-	persisted := config.Load()
+	persisted := config.LoadUser()
 	persisted.Model = modelRef(providerID, spec.DefaultModel)
 	if err := config.Save(persisted); err != nil {
 		return nil, emitTextResponse(cmd.bridge, fmt.Sprintf("save %s configuration: %v", spec.Label, err))
@@ -188,7 +188,7 @@ func buildConnectProviderSelectionOptions(snapshot commandspkg.ProviderSnapshot,
 }
 
 func connectGitHubCopilot(cmd *slashCommandContext, enterpriseInput string) (*connectResult, error) {
-	persisted := config.Load()
+	persisted := config.LoadUser()
 	domain, err := api.NormalizeGitHubCopilotDomain(enterpriseInput)
 	if err != nil {
 		return nil, emitTextResponse(cmd.bridge, err.Error())
@@ -278,7 +278,9 @@ func connectGitHubCopilot(cmd *slashCommandContext, enterpriseInput string) (*co
 	return &connectResult{
 		Provider: "github-copilot",
 		Model:    api.Presets["github-copilot"].DefaultModel,
-		Config:   persisted,
+		// The client runs on what was just saved plus this process's
+		// environment overrides, which the saved copy deliberately lacks.
+		Config: config.Load(),
 		FormatMessage: func(activeModelID string) string {
 			return fmt.Sprintf(
 				"GitHub Copilot connected. Set main model to %s, subagent model to github-copilot/%s, and reasoning effort to %s.%s",

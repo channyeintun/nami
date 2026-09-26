@@ -410,7 +410,7 @@ func (r *copilotTokenRefresher) resolve() (string, error) {
 	r.accessToken = refreshed.AccessToken
 	r.expiresAt = refreshed.ExpiresAt
 
-	loaded := config.Load()
+	loaded := config.LoadUser()
 	loaded.GitHubCopilot.AccessToken = refreshed.AccessToken
 	loaded.GitHubCopilot.ExpiresAtUnixMS = refreshed.ExpiresAt.UnixMilli()
 	_ = config.Save(loaded)
@@ -464,7 +464,7 @@ func (r *codexTokenRefresher) resolve() (string, error) {
 	}
 	r.expiresAt = time.Now().Add(time.Duration(expiresIn) * time.Second)
 
-	loaded := config.Load()
+	loaded := config.LoadUser()
 	loaded.Codex.AccessToken = r.accessToken
 	loaded.Codex.RefreshToken = r.refreshToken
 	loaded.Codex.ExpiresAtUnixMS = r.expiresAt.UnixMilli()

@@ -180,7 +180,7 @@ func handleSubagentSlashCommand(cmd *slashCommandContext) error {
 func handleLogoutSlashCommand(cmd *slashCommandContext) error {
 	provider := strings.ToLower(strings.TrimSpace(cmd.args))
 
-	cfg := config.Load()
+	cfg := config.LoadUser()
 
 	switch provider {
 	case "github-copilot", "copilot":
@@ -426,7 +426,7 @@ func promptReasoningSelection(
 }
 
 func handleReasoningSlashCommand(cmd *slashCommandContext) error {
-	persisted := config.Load()
+	persisted := config.LoadUser()
 	currentModelID := cmd.state.ActiveModelID
 	if cmd.client != nil && *cmd.client != nil {
 		currentModelID = strings.TrimSpace((*cmd.client).ModelID())

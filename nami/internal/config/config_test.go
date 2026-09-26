@@ -92,6 +92,36 @@ func TestSavePreservesSettingsTurnedOffInTheFile(t *testing.T) {
 	}
 }
 
+// Environment variables override the config for one process. Saving what
+// LoadUser returns must not turn them into the saved setting.
+func TestLoadUserIgnoresEnvironmentOverrides(t *testing.T) {
+	useTempConfigDir(t)
+	t.Setenv("NAMI_PERMISSION_MODE", "bypassPermissions")
+	t.Setenv("NAMI_BASE_URL", "http://127.0.0.1:9999")
+
+	if got := Load().PermissionMode; got != "bypassPermissions" {
+		t.Fatalf("Load().PermissionMode = %q, want the environment override", got)
+	}
+	cfg := LoadUser()
+	if cfg.PermissionMode != "" || cfg.BaseURL != "" {
+		t.Fatalf("LoadUser applied environment overrides: %+v", cfg)
+	}
+
+	cfg.ReasoningEffort = "high"
+	if err := Save(cfg); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	t.Setenv("NAMI_PERMISSION_MODE", "")
+	t.Setenv("NAMI_BASE_URL", "")
+	reloaded := Load()
+	if reloaded.PermissionMode != "" || reloaded.BaseURL != "" {
+		t.Fatalf("environment overrides were persisted: permission %q, base URL %q", reloaded.PermissionMode, reloaded.BaseURL)
+	}
+	if reloaded.ReasoningEffort != "high" {
+		t.Fatalf("ReasoningEffort = %q, want the saved change", reloaded.ReasoningEffort)
+	}
+}
+
 func TestSaveRoundTripsThroughLoad(t *testing.T) {
 	useTempConfigDir(t)
 	for _, name := range []string{"NAMI_PROVIDER", "NAMI_MODEL", "NAMI_API_KEY", "NAMI_BASE_URL"} {
