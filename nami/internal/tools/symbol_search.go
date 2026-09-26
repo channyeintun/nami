@@ -3,7 +3,9 @@ package tools
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -138,16 +140,25 @@ func (t *SymbolSearchTool) Execute(ctx context.Context, input ToolInput) (ToolOu
 		}
 		defer file.Close()
 
-		scanner := bufio.NewScanner(file)
+		// Lines are read bounded: every pattern is anchored at the start of a
+		// line, and a generated line of embedded data can be megabytes long.
+		reader := bufio.NewReader(file)
 		lineNo := 0
-		for scanner.Scan() {
+		for {
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
 			default:
 			}
+			rawLine, readErr := readLineBounded(reader, fileReadMaxLineBytes)
+			if readErr != nil && !errors.Is(readErr, io.EOF) {
+				return fmt.Errorf("read %s: %w", filePath, readErr)
+			}
+			if rawLine == "" && readErr != nil {
+				return nil
+			}
 			lineNo++
-			line := scanner.Text()
+			line := strings.TrimRight(rawLine, "\r\n")
 			for _, pattern := range matcherSet[filepath.Ext(filePath)] {
 				if pattern.regex.MatchString(line) {
 					matches = append(matches, symbolMatch{
@@ -166,7 +177,6 @@ func (t *SymbolSearchTool) Execute(ctx context.Context, input ToolInput) (ToolOu
 				}
 			}
 		}
-		return nil
 	}
 
 	info, err := os.Stat(searchPath)
