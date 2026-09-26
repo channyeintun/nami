@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/channyeintun/nami/internal/api"
+	"github.com/channyeintun/nami/internal/textutil"
 )
 
 const retrievalTouchedLimit = 64
@@ -218,8 +219,5 @@ func errorSignatureFromOutput(output string) string {
 	}
 	lines := strings.SplitN(output, "\n", 4)
 	signature := strings.TrimSpace(lines[0])
-	if len(signature) > 120 {
-		signature = signature[:120]
-	}
-	return signature
+	return textutil.TruncateHead(signature, 120)
 }

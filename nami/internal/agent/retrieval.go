@@ -6,6 +6,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/channyeintun/nami/internal/textutil"
 )
 
 const (
@@ -414,7 +416,7 @@ func readFileSnippet(path string) string {
 		return ""
 	}
 	if len(content) > retrievalMaxSnippetBytes {
-		truncated := content[:retrievalMaxSnippetBytes]
+		truncated := textutil.TruncateHead(content, retrievalMaxSnippetBytes)
 		if head, _, ok := strings.CutLast(truncated, "\n"); ok && head != "" {
 			truncated = head
 		}

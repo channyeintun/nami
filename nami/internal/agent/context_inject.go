@@ -8,6 +8,8 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/channyeintun/nami/internal/textutil"
 )
 
 const gitCommandTimeout = 750 * time.Millisecond
@@ -54,7 +56,7 @@ func LoadTurnContext() TurnContext {
 	ctx.GitBranch = gitCommand("branch", "--show-current")
 	status := gitCommand("status", "--short")
 	if len(status) > 2000 {
-		status = status[:2000] + "\n[truncated]"
+		status = textutil.TruncateHead(status, 2000) + "\n[truncated]"
 	}
 	ctx.GitStatus = status
 	ctx.RecentLog = gitCommand("log", "--oneline", "-n", "5")
@@ -151,7 +153,7 @@ func listDirectory(dir string) string {
 	}
 	listing := strings.TrimSpace(b.String())
 	if len(listing) > 3000 {
-		listing = listing[:3000] + "\n[truncated]"
+		listing = textutil.TruncateHead(listing, 3000) + "\n[truncated]"
 	}
 	return listing
 }

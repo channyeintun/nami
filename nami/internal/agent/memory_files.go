@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/channyeintun/nami/internal/config"
+	"github.com/channyeintun/nami/internal/textutil"
 )
 
 // MemoryFile represents a loaded instruction or memory index file.
@@ -164,7 +165,7 @@ func readMemoryFile(path string) (string, error) {
 		return "", os.ErrNotExist
 	}
 	if len(content) > maxMemoryFileBytes {
-		content = content[:maxMemoryFileBytes] + "\n[truncated]"
+		content = textutil.TruncateHead(content, maxMemoryFileBytes) + "\n[truncated]"
 	}
 	return content, nil
 }
@@ -187,7 +188,7 @@ func readMemoryIndex(path string) (string, error) {
 	}
 	content = strings.TrimSpace(strings.Join(lines, "\n"))
 	if len(content) > maxMemoryIndexBytes {
-		content = strings.TrimSpace(content[:maxMemoryIndexBytes])
+		content = strings.TrimSpace(textutil.TruncateHead(content, maxMemoryIndexBytes))
 		truncated = true
 	}
 	if truncated {
@@ -536,7 +537,7 @@ func loadMemoryNoteExcerpt(path string) string {
 	}
 	excerpt := strings.TrimSpace(strings.Join(lines, "\n"))
 	if len(excerpt) > maxMemoryNoteBytes {
-		excerpt = strings.TrimSpace(excerpt[:maxMemoryNoteBytes]) + "\n[truncated memory note]"
+		excerpt = strings.TrimSpace(textutil.TruncateHead(excerpt, maxMemoryNoteBytes)) + "\n[truncated memory note]"
 	}
 	return excerpt
 }
