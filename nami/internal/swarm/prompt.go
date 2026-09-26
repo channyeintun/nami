@@ -56,8 +56,14 @@ func LoadRolePromptOverlay(cwd string, role string) (PromptOverlay, error) {
 		}
 	}
 
-	if err := appendIfPresent(filepath.Join(baseDir, "roles", role+".md")); err != nil {
-		return PromptOverlay{}, err
+	// The role comes from the model's agent call, and without a project spec
+	// nothing else has validated it. Only a well-formed role name may name a
+	// role file; anything else, such as "../../notes", would read an arbitrary
+	// markdown file into the child's system prompt.
+	if roleNamePattern.MatchString(role) {
+		if err := appendIfPresent(filepath.Join(baseDir, "roles", role+".md")); err != nil {
+			return PromptOverlay{}, err
+		}
 	}
 
 	if len(sections) == 0 {
