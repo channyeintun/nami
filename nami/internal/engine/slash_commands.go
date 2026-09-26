@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"strings"
 	"time"
@@ -100,7 +101,7 @@ func emitSessionArtifacts(ctx context.Context, bridge *ipc.Bridge, artifactManag
 
 	artifacts, err := artifactManager.LoadSessionArtifacts(ctx, sessionID)
 	if err != nil {
-		if warning, ok := err.(*artifactspkg.ArtifactLoadWarning); ok {
+		if warning, ok := errors.AsType[*artifactspkg.ArtifactLoadWarning](err); ok {
 			if emitErr := bridge.Emit(ipc.EventError, ipc.ErrorPayload{Message: warning.Error(), Recoverable: true}); emitErr != nil {
 				return emitErr
 			}
