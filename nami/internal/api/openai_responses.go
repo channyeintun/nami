@@ -146,7 +146,9 @@ func (c *OpenAIResponsesClient) Stream(ctx context.Context, req ModelRequest) (i
 			yield(ModelEvent{}, err)
 			return
 		}
-		if !state.sentStop {
+		// errStopStream also means the consumer stopped ranging, and yielding
+		// after that panics, so only a body that ended cleanly is finished here.
+		if err == nil {
 			state.emitStop("end_turn", yield)
 		}
 	}, nil

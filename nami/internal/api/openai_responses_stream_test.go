@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"strings"
 	"testing"
 )
@@ -44,6 +45,27 @@ func TestResponsesStreamEmitsMessageTextOnce(t *testing.T) {
 		}
 		if streamed.String() != text {
 			t.Errorf("streamed %q, want %q", streamed.String(), text)
+		}
+	}
+}
+
+func TestResponsesStreamStopsWhenTheConsumerDoes(t *testing.T) {
+	client, err := NewOpenAIResponsesClient("openai", "gpt-5.5", "key", serveStream(t, responsesTextStream("Hello world")).URL)
+	if err != nil {
+		t.Fatalf("new client: %v", err)
+	}
+	stream, err := client.Stream(context.Background(), ModelRequest{Messages: []Message{{Role: RoleUser, Content: "hi"}}})
+	if err != nil {
+		t.Fatalf("Stream: %v", err)
+	}
+	// Leaving the loop early must end the stream; yielding again after that
+	// makes the range loop panic.
+	for event, err := range stream {
+		if err != nil {
+			t.Fatalf("stream error: %v", err)
+		}
+		if event.Type == ModelEventToken {
+			break
 		}
 	}
 }
