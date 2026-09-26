@@ -1,6 +1,9 @@
 package swarm
 
 import (
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -520,5 +523,27 @@ func TestTrimUniqueListAndFirstNonEmpty(t *testing.T) {
 	}
 	if firstNonEmpty("", "  ") != "" {
 		t.Fatal("firstNonEmpty should return empty when nothing qualifies")
+	}
+}
+
+// The inbox holds handoff summaries from the conversation and lives with the
+// session's other data, which is owner-only.
+func TestInboxIsOwnerOnly(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix permission bits")
+	}
+	store, sessionID := testStore(t)
+	if _, err := UpsertHandoff(store, sessionID, sampleHandoff()); err != nil {
+		t.Fatalf("UpsertHandoff: %v", err)
+	}
+	path := filepath.Join(store.SessionDir(sessionID), inboxRelativePath)
+	for p, want := range map[string]os.FileMode{path: 0o600, filepath.Dir(path): 0o700} {
+		info, err := os.Stat(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := info.Mode().Perm(); got != want {
+			t.Errorf("%s mode = %v, want %v", p, got, want)
+		}
 	}
 }

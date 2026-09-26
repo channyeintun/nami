@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/channyeintun/nami/internal/fsutil"
 	"github.com/channyeintun/nami/internal/session"
 )
 
@@ -424,7 +425,8 @@ func saveInboxUnlocked(store *session.Store, sessionID string, inbox Inbox) erro
 		return fmt.Errorf("session store is not configured")
 	}
 	path := filepath.Join(store.SessionDir(sessionID), inboxRelativePath)
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	// The inbox lives with the session's other data, which is private.
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return fmt.Errorf("create swarm inbox dir: %w", err)
 	}
 	// Sort a copy: the slice shares its array with the caller, who may still
@@ -440,12 +442,8 @@ func saveInboxUnlocked(store *session.Store, sessionID string, inbox Inbox) erro
 	if err != nil {
 		return fmt.Errorf("encode swarm inbox: %w", err)
 	}
-	tmpPath := path + ".tmp"
-	if err := os.WriteFile(tmpPath, data, 0o644); err != nil {
+	if err := fsutil.WriteFileAtomic(path, data, 0o600); err != nil {
 		return fmt.Errorf("write swarm inbox: %w", err)
-	}
-	if err := os.Rename(tmpPath, path); err != nil {
-		return fmt.Errorf("replace swarm inbox: %w", err)
 	}
 	return nil
 }

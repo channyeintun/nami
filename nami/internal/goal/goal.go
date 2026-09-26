@@ -13,6 +13,9 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/channyeintun/nami/internal/debuglog"
+	"github.com/channyeintun/nami/internal/fsutil"
 )
 
 const (
@@ -167,17 +170,21 @@ func (s *Store) now() time.Time {
 }
 
 // Load restores a goal persisted by an earlier run of this session. A missing
-// or unreadable file simply means no goal.
+// or unreadable file means no goal; an unreadable one is logged.
 func (s *Store) Load() {
 	if s == nil || s.sessionDir == "" {
 		return
 	}
 	data, err := os.ReadFile(s.path())
 	if err != nil {
+		if !errors.Is(err, os.ErrNotExist) {
+			debuglog.Log("goal", "load_failed", map[string]any{"error": err.Error()})
+		}
 		return
 	}
 	var state State
 	if err := json.Unmarshal(data, &state); err != nil {
+		debuglog.Log("goal", "load_failed", map[string]any{"error": err.Error()})
 		return
 	}
 	if strings.TrimSpace(state.Condition) == "" {
@@ -192,42 +199,35 @@ func (s *Store) path() string {
 	return filepath.Join(s.sessionDir, stateFilename)
 }
 
-// persist mirrors the state to disk. Failures are silent: losing the mirror
-// costs the goal its survival across a reconnect, and refusing to run the loop
-// over that would be a worse trade.
+// persist mirrors the state to disk. A failure is logged, not returned:
+// losing the mirror costs the goal its survival across a reconnect, and
+// refusing to run the loop over that would be a worse trade.
 func (s *Store) persist(state *State) {
 	if s.sessionDir == "" {
 		return
 	}
+	if err := s.writeState(state); err != nil {
+		debuglog.Log("goal", "persist_failed", map[string]any{"error": err.Error()})
+	}
+}
+
+func (s *Store) writeState(state *State) error {
 	path := s.path()
 	if state == nil {
-		_ = os.Remove(path)
-		return
+		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+		return nil
 	}
-	if err := os.MkdirAll(s.sessionDir, 0o755); err != nil {
-		return
+	// Session data is private: 0700 directories and 0600 files.
+	if err := os.MkdirAll(s.sessionDir, 0o700); err != nil {
+		return err
 	}
 	data, err := json.MarshalIndent(state, "", "  ")
 	if err != nil {
-		return
+		return err
 	}
-	// Write through a temporary file so a crash mid-write cannot leave a
-	// half-written goal that reads back as a different condition.
-	temp, err := os.CreateTemp(s.sessionDir, stateFilename+".*")
-	if err != nil {
-		return
-	}
-	tempPath := temp.Name()
-	if _, err := temp.Write(append(data, '\n')); err != nil {
-		_ = temp.Close()
-		_ = os.Remove(tempPath)
-		return
-	}
-	if err := temp.Close(); err != nil {
-		_ = os.Remove(tempPath)
-		return
-	}
-	if err := os.Rename(tempPath, path); err != nil {
-		_ = os.Remove(tempPath)
-	}
+	// Replace the file whole, so a crash mid-write cannot leave a half-written
+	// goal that reads back as a different condition.
+	return fsutil.WriteFileAtomic(path, append(data, '\n'), 0o600)
 }

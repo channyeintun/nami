@@ -24,6 +24,11 @@ type LocalStore struct {
 }
 
 // NewLocalStore creates a local filesystem artifact store.
+const (
+	artifactDirMode  os.FileMode = 0o700
+	artifactFileMode os.FileMode = 0o600
+)
+
 func NewLocalStore(baseDir string) *LocalStore {
 	return &LocalStore{baseDir: baseDir}
 }
@@ -96,12 +101,14 @@ func (s *LocalStore) Save(_ context.Context, req SaveRequest) (ArtifactVersion, 
 		artDir = filepath.Join(s.baseDir, string(req.Kind), id)
 	}
 
-	if err := os.MkdirAll(artDir, 0o755); err != nil {
+	// Artifacts hold plans, diffs and fetched pages from the conversation, so
+	// they are private like the session data they come from.
+	if err := os.MkdirAll(artDir, artifactDirMode); err != nil {
 		return ArtifactVersion{}, fmt.Errorf("create artifact dir: %w", err)
 	}
 
 	contentPath := filepath.Join(artDir, fmt.Sprintf("v%d.md", version))
-	if err := fsutil.WriteFileAtomic(contentPath, req.Content, 0o644); err != nil {
+	if err := fsutil.WriteFileAtomic(contentPath, req.Content, artifactFileMode); err != nil {
 		return ArtifactVersion{}, fmt.Errorf("write content: %w", err)
 	}
 
@@ -122,7 +129,7 @@ func (s *LocalStore) Save(_ context.Context, req SaveRequest) (ArtifactVersion, 
 	if err != nil {
 		return ArtifactVersion{}, fmt.Errorf("marshal metadata: %w", err)
 	}
-	if err := fsutil.WriteFileAtomic(filepath.Join(artDir, "meta.json"), metaData, 0o644); err != nil {
+	if err := fsutil.WriteFileAtomic(filepath.Join(artDir, "meta.json"), metaData, artifactFileMode); err != nil {
 		return ArtifactVersion{}, fmt.Errorf("write metadata: %w", err)
 	}
 

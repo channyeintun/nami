@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -353,5 +354,35 @@ func TestSessionOwnerID(t *testing.T) {
 				t.Fatalf("sessionOwnerID = %q, want %q", got, tc.want)
 			}
 		})
+	}
+}
+
+// Artifacts hold conversation content: plans, diffs, fetched pages.
+func TestSavedArtifactsAreOwnerOnly(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix permission bits")
+	}
+	store := NewLocalStore(t.TempDir())
+	version, err := store.Save(context.Background(), SaveRequest{
+		Kind:    KindImplementationPlan,
+		Scope:   ScopeSession,
+		Title:   "Plan",
+		Content: []byte("# Plan"),
+	})
+	if err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	for path, want := range map[string]os.FileMode{
+		version.ContentPath: artifactFileMode,
+		filepath.Join(filepath.Dir(version.ContentPath), "meta.json"): artifactFileMode,
+		filepath.Dir(version.ContentPath):                             artifactDirMode,
+	} {
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := info.Mode().Perm(); got != want {
+			t.Errorf("%s mode = %v, want %v", filepath.Base(path), got, want)
+		}
 	}
 }

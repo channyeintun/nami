@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -218,5 +219,26 @@ func TestStoreWithoutASessionDirStaysInMemory(t *testing.T) {
 	store.Load()
 	if state, _ := store.Snapshot(); state.Condition != "x" {
 		t.Fatalf("Load clobbered the in-memory goal: %+v", state)
+	}
+}
+
+// The goal is session data, which is owner-only.
+func TestPersistedGoalIsOwnerOnly(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix permission bits")
+	}
+	dir := filepath.Join(t.TempDir(), "session")
+	store := NewStore(dir)
+	if _, err := store.Set("tests pass"); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	for p, want := range map[string]os.FileMode{filepath.Join(dir, stateFilename): 0o600, dir: 0o700} {
+		info, err := os.Stat(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := info.Mode().Perm(); got != want {
+			t.Errorf("%s mode = %v, want %v", p, got, want)
+		}
 	}
 }
