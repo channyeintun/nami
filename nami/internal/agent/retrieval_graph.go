@@ -84,6 +84,7 @@ type RetrievalGraph struct {
 	Nodes     map[string]*GraphNode
 	Adj       map[string][]GraphEdge // key → outgoing edges
 	cwd       string
+	root      string // the project directory candidates must lie under
 	goMod     string // cached go module path
 	goModRoot string // cached go.mod directory
 
@@ -101,6 +102,7 @@ func NewRetrievalGraph(cwd string) *RetrievalGraph {
 		Nodes:        make(map[string]*GraphNode),
 		Adj:          make(map[string][]GraphEdge),
 		cwd:          cwd,
+		root:         retrievalRoot(cwd),
 		goMod:        goMod,
 		goModRoot:    goModRoot,
 		fileModTimes: make(map[string]time.Time),
@@ -228,7 +230,7 @@ func (g *RetrievalGraph) InvalidateGitOverlay(gitStatusText string) {
 	}
 
 	// Add fresh diff edges.
-	for _, path := range gitStatusPaths(gitStatusText, g.cwd) {
+	for _, path := range gitStatusPaths(gitStatusText, g.cwd, g.root) {
 		g.EnsureFile(path)
 		g.addEdge(path, path, EdgeDiffActive, edgeWeightDiff)
 	}
@@ -245,7 +247,7 @@ func (g *RetrievalGraph) Seed(anchors []RetrievalAnchor, sessionTouched []string
 	}
 	for _, anchor := range anchors {
 		if anchor.FilePath != "" {
-			for _, resolved := range resolveFilePath(anchor.FilePath, g.cwd) {
+			for _, resolved := range resolveFilePath(anchor.FilePath, g.cwd, g.root) {
 				g.EnsureFile(resolved)
 			}
 		}
@@ -254,7 +256,7 @@ func (g *RetrievalGraph) Seed(anchors []RetrievalAnchor, sessionTouched []string
 		}
 	}
 	for _, path := range sessionTouched {
-		for _, resolved := range resolveFilePath(path, g.cwd) {
+		for _, resolved := range resolveFilePath(path, g.cwd, g.root) {
 			g.EnsureFile(resolved)
 			g.addEdge(resolved, resolved, EdgeSessionTouched, edgeWeightTouched)
 		}
@@ -304,20 +306,20 @@ func (g *RetrievalGraph) Score(anchors []RetrievalAnchor, gitStatusText string, 
 	// Direct anchor scores.
 	for _, anchor := range anchors {
 		if anchor.FilePath != "" {
-			for _, resolved := range resolveFilePath(anchor.FilePath, g.cwd) {
+			for _, resolved := range resolveFilePath(anchor.FilePath, g.cwd, g.root) {
 				addCandidateScore(scores, reasons, resolved, 3, "exact anchor")
 			}
 		}
 	}
 
 	// Git status scores.
-	for _, path := range gitStatusPaths(gitStatusText, g.cwd) {
+	for _, path := range gitStatusPaths(gitStatusText, g.cwd, g.root) {
 		addCandidateScore(scores, reasons, path, 4, "staged or modified")
 	}
 
 	// Session touched.
 	for _, path := range sessionTouched {
-		for _, resolved := range resolveFilePath(path, g.cwd) {
+		for _, resolved := range resolveFilePath(path, g.cwd, g.root) {
 			addCandidateScore(scores, reasons, resolved, 2, "recently touched")
 		}
 	}
@@ -359,7 +361,10 @@ func (g *RetrievalGraph) Score(anchors []RetrievalAnchor, gitStatusText string, 
 		if n, ok := g.Nodes[path]; ok && n.Kind != NodeFile {
 			continue
 		}
-		if !fileExists(path) {
+		// Files reached through edges were never resolved against the root:
+		// a relative import can climb out of the project, a test pair can be
+		// a link that points out of it.
+		if !fileExists(path) || !withinRetrievalRoot(path, g.root) {
 			continue
 		}
 		candidates = append(candidates, RetrievalCandidate{

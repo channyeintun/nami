@@ -64,12 +64,13 @@ func collectTouchedFiles(state *QueryState, calls []api.ToolCall, results []api.
 		return
 	}
 	cwd := state.TurnContext.CurrentDir
+	root := retrievalRoot(cwd)
 	seen := make(map[string]struct{}, len(state.RetrievalTouched))
 	for _, path := range state.RetrievalTouched {
 		seen[path] = struct{}{}
 	}
 	addTouchedPath := func(path string) {
-		for _, resolved := range resolveFilePath(path, cwd) {
+		for _, resolved := range resolveFilePath(path, cwd, root) {
 			if _, ok := seen[resolved]; ok {
 				continue
 			}
@@ -101,7 +102,7 @@ func invalidateGraphFiles(state *QueryState, calls []api.ToolCall, results []api
 	cwd := state.TurnContext.CurrentDir
 	invalidated := make(map[string]struct{})
 	invalidate := func(path string) {
-		for _, resolved := range resolveFilePath(path, cwd) {
+		for _, resolved := range resolveFilePath(path, cwd, state.Graph.root) {
 			if _, done := invalidated[resolved]; done {
 				continue
 			}

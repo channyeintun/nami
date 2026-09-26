@@ -130,29 +130,30 @@ func ScoreCandidates(anchors []RetrievalAnchor, cwd string, gitStatusText string
 		return nil, 0
 	}
 
+	root := retrievalRoot(cwd)
 	scores := make(map[string]int)
 	reasons := make(map[string]string)
-	seedFallbackCandidates(anchors, cwd, gitStatusText, sessionTouched, scores, reasons)
+	seedFallbackCandidates(anchors, cwd, root, gitStatusText, sessionTouched, scores, reasons)
 	edgesExpanded := expandFallbackCandidates(cwd, scores, reasons)
-	return rankFallbackCandidates(scores, reasons), edgesExpanded
+	return rankFallbackCandidates(scores, reasons, root), edgesExpanded
 }
 
-func seedFallbackCandidates(anchors []RetrievalAnchor, cwd string, gitStatusText string, sessionTouched []string, scores map[string]int, reasons map[string]string) {
+func seedFallbackCandidates(anchors []RetrievalAnchor, cwd string, root string, gitStatusText string, sessionTouched []string, scores map[string]int, reasons map[string]string) {
 	for _, anchor := range anchors {
 		if anchor.FilePath == "" {
 			continue
 		}
-		for _, candidate := range resolveFilePath(anchor.FilePath, cwd) {
+		for _, candidate := range resolveFilePath(anchor.FilePath, cwd, root) {
 			addCandidateScore(scores, reasons, candidate, 3, "exact anchor")
 		}
 	}
 
-	for _, path := range gitStatusPaths(gitStatusText, cwd) {
+	for _, path := range gitStatusPaths(gitStatusText, cwd, root) {
 		addCandidateScore(scores, reasons, path, 4, "staged or modified")
 	}
 
 	for _, path := range sessionTouched {
-		for _, resolved := range resolveFilePath(path, cwd) {
+		for _, resolved := range resolveFilePath(path, cwd, root) {
 			addCandidateScore(scores, reasons, resolved, 2, "recently touched")
 		}
 	}
@@ -171,9 +172,15 @@ func expandFallbackCandidates(cwd string, scores map[string]int, reasons map[str
 	return len(scores) - beforeExpand
 }
 
-func rankFallbackCandidates(scores map[string]int, reasons map[string]string) []RetrievalCandidate {
+func rankFallbackCandidates(scores map[string]int, reasons map[string]string, root string) []RetrievalCandidate {
 	candidates := make([]RetrievalCandidate, 0, len(scores))
 	for path, score := range scores {
+		// Expansion adds files that were never resolved against the root:
+		// the go.mod imports resolve against can sit above the project, and
+		// a test pair can be a link that points out of it.
+		if !withinRetrievalRoot(path, root) {
+			continue
+		}
 		candidates = append(candidates, RetrievalCandidate{
 			FilePath: path,
 			Score:    score,
@@ -288,7 +295,7 @@ func isFilePathBoundary(text string, index int, allowed string) bool {
 	return strings.IndexByte(allowed, text[index]) >= 0
 }
 
-func gitStatusPaths(gitStatusText, cwd string) []string {
+func gitStatusPaths(gitStatusText, cwd, root string) []string {
 	var paths []string
 	for line := range strings.SplitSeq(gitStatusText, "\n") {
 		line = strings.TrimSpace(line)
@@ -300,7 +307,7 @@ func gitStatusPaths(gitStatusText, cwd string) []string {
 			continue
 		}
 		path := parseGitStatusPath(line)
-		paths = append(paths, resolveFilePath(path, cwd)...)
+		paths = append(paths, resolveFilePath(path, cwd, root)...)
 	}
 	return paths
 }
@@ -398,28 +405,52 @@ func mergeCandidateReason(current, next string) string {
 }
 
 // resolveFilePath attempts to find an absolute path for a potentially relative
-// file reference. Returns all plausible resolved paths.
-func resolveFilePath(ref, cwd string) []string {
+// file reference. It returns the resolved path when it names a regular file
+// inside root, and nothing otherwise.
+func resolveFilePath(ref, cwd, root string) []string {
 	ref = strings.TrimSpace(ref)
 	if ref == "" {
 		return nil
 	}
 	ref = strings.TrimPrefix(ref, "file://")
 
-	var results []string
-	if filepath.IsAbs(ref) {
-		cleaned := filepath.Clean(ref)
-		if fileExists(cleaned) {
-			results = append(results, cleaned)
-		}
-		return results
+	path := filepath.Clean(ref)
+	if !filepath.IsAbs(path) {
+		path = filepath.Clean(filepath.Join(cwd, ref))
 	}
+	if !fileExists(path) || !withinRetrievalRoot(path, root) {
+		return nil
+	}
+	return []string{path}
+}
 
-	joined := filepath.Clean(filepath.Join(cwd, ref))
-	if fileExists(joined) {
-		results = append(results, joined)
+// retrievalRoot is the directory live retrieval may read under: the git root
+// above cwd, or cwd itself outside a repository. Symlinks are resolved so the
+// root compares against candidate paths with theirs resolved.
+func retrievalRoot(cwd string) string {
+	root := findProjectScopeRoot(cwd)
+	if resolved, err := filepath.EvalSymlinks(root); err == nil {
+		return resolved
 	}
-	return results
+	return root
+}
+
+// withinRetrievalRoot reports whether path, with symlinks resolved, lies
+// under root. Retrieval takes paths from untrusted text: a fetched page or a
+// command's output can name /home/me/.docker/config.json, or reach it with
+// ../, and what retrieval reads goes into the prompt without the permission
+// checks a read_file call gets. So it reads nothing outside the project,
+// including through a link inside the project that points out of it.
+func withinRetrievalRoot(path, root string) bool {
+	resolved, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return false
+	}
+	rel, err := filepath.Rel(root, resolved)
+	if err != nil {
+		return false
+	}
+	return filepath.IsLocal(rel)
 }
 
 // fileExists reports whether path names a regular file. FIFOs and devices do

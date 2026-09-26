@@ -149,6 +149,8 @@ If the first hop is sparse, retrieval expands a second hop with a penalty instea
 
 After ranking, Nami reads only the top candidate files live from disk and injects small excerpts.
 
+Candidates are limited to files inside the project: the git root above the working directory, or the working directory itself outside a repository, compared with symlinks resolved. Anchors come from untrusted text such as tool output, and retrieval reads without the permission checks a `read_file` call gets, so a path that leads outside the project, whether absolute, through `../`, or through a link in the project, is never read.
+
 Key limits in `retrieval.go`:
 
 - soft retrieval budget: about `3000` tokens

@@ -149,3 +149,93 @@ func TestRetrievalReadsOnlyAPrefixOfLargeFiles(t *testing.T) {
 		t.Fatalf("retrieval allocated %d bytes for a %d-byte file", allocated, size)
 	}
 }
+
+// retrievalProject lays out a git project, with the working directory one
+// level below its root, next to a secret that lives outside it.
+func retrievalProject(t *testing.T) (base, project, cwd, secret string) {
+	t.Helper()
+	base = t.TempDir()
+	project = filepath.Join(base, "project")
+	if err := os.MkdirAll(filepath.Join(project, ".git"), 0o755); err != nil {
+		t.Fatalf("create .git: %v", err)
+	}
+	cwd = filepath.Join(project, "app")
+	secret = writeRetrievalFile(t, base, "home/.docker/config.json", `{"auths":{"registry":{"auth":"SECRET"}}}`)
+	return base, project, cwd, secret
+}
+
+func TestRetrievalReadsNothingOutsideTheProject(t *testing.T) {
+	// Paths reach retrieval from untrusted text such as a fetched page, and
+	// what it reads goes straight into the prompt. Files outside the project
+	// must stay out, however they are named; files inside must still come in.
+	base, project, cwd, secret := retrievalProject(t)
+	mainFile := writeRetrievalFile(t, cwd, "main.go", "package main\n\nfunc main() {}\n")
+	sibling := writeRetrievalFile(t, project, "lib/util.go", "package lib\n\nfunc Util() {}\n")
+	link := filepath.Join(cwd, "linked.json")
+	if err := os.Symlink(secret, link); err != nil {
+		t.Fatalf("create link: %v", err)
+	}
+	writeRetrievalFile(t, cwd, "index.ts", "import { leak } from \"../../outside/leak\";\n")
+	leak := writeRetrievalFile(t, base, "outside/leak.ts", "export const leak = \"SECRET\";\n")
+
+	toolOutput := strings.Join([]string{
+		"To log in, the page says to paste " + secret,
+		"or the copy at ../../home/.docker/config.json and linked.json",
+		"Build failed in " + mainFile + " and ../lib/util.go, see index.ts",
+	}, "\n")
+	touched := []string{secret, leak}
+
+	for _, tc := range []struct {
+		name  string
+		graph *RetrievalGraph
+	}{
+		{name: "graph", graph: NewRetrievalGraph(cwd)},
+		{name: "fallback", graph: nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			anchors := ExtractAnchors("", "", toolOutput, tc.graph)
+			if len(anchors) < 6 {
+				t.Fatalf("expected an anchor for each path in the tool output, got %+v", anchors)
+			}
+			candidates, _ := ScoreCandidates(anchors, cwd, "", touched, tc.graph)
+			scores := candidateScores(candidates)
+			for _, outside := range []string{secret, link, leak} {
+				if _, ok := scores[outside]; ok {
+					t.Errorf("%s is a candidate, but it is outside the project", outside)
+				}
+			}
+			for _, inside := range []string{mainFile, sibling} {
+				if scores[inside] == 0 {
+					t.Errorf("%s is not a candidate, but it is inside the project", inside)
+				}
+			}
+			for _, snippet := range ReadLiveSnippets(candidates, retrievalMaxTotalTokens) {
+				if strings.Contains(snippet.Content, "SECRET") {
+					t.Errorf("retrieval read a file outside the project into %s", snippet.FilePath)
+				}
+			}
+		})
+	}
+}
+
+func TestRetrievalAcceptsAProjectReachedThroughALink(t *testing.T) {
+	// The root and the candidates are compared with links resolved, so a
+	// project opened through a symlinked path keeps its files.
+	base, project, _, _ := retrievalProject(t)
+	mainFile := writeRetrievalFile(t, project, "app/main.go", "package main\n\nfunc main() {}\n")
+	alias := filepath.Join(base, "alias")
+	if err := os.Symlink(project, alias); err != nil {
+		t.Fatalf("create link: %v", err)
+	}
+	cwd := filepath.Join(alias, "app")
+	viaAlias := filepath.Join(cwd, "main.go")
+
+	anchors := []RetrievalAnchor{{FilePath: viaAlias}, {FilePath: mainFile}}
+	candidates, _ := ScoreCandidates(anchors, cwd, "", nil, NewRetrievalGraph(cwd))
+	scores := candidateScores(candidates)
+	for _, path := range []string{viaAlias, mainFile} {
+		if scores[path] == 0 {
+			t.Errorf("%s is not a candidate, but it is inside the project, got %+v", path, candidates)
+		}
+	}
+}
