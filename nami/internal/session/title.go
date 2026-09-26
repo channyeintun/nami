@@ -46,7 +46,7 @@ func generateTitleWithLocal(router *localmodel.Router, prompt string) string {
 		return ""
 	}
 
-	response, used, err := router.TryLocal(localmodel.TaskTitleGen, prompt, 64)
+	response, used, err := router.TryLocal(context.Background(), localmodel.TaskTitleGen, prompt, 64)
 	if !used || err != nil {
 		return ""
 	}

@@ -309,7 +309,7 @@ func (s *compactionSummarizer) Summarize(ctx context.Context, messages []api.Mes
 }
 
 func (s *compactionSummarizer) SummarizeWithPrompt(ctx context.Context, messages []api.Message, prompt string) (string, error) {
-	if summary, usedLocal, err := s.summarizeWithLocal(prompt, messages); usedLocal {
+	if summary, usedLocal, err := s.summarizeWithLocal(ctx, prompt, messages); usedLocal {
 		if err == nil && strings.TrimSpace(summary) != "" {
 			s.lastSummaryMode = compact.SummaryModeFresh
 			return compact.NormalizeSummary(summary), nil
@@ -412,7 +412,7 @@ func (s *compactionSummarizer) collectSummaryStream(stream iter.Seq2[api.ModelEv
 	return compact.NormalizeSummary(builder.String()), nil
 }
 
-func (s *compactionSummarizer) summarizeWithLocal(prompt string, messages []api.Message) (string, bool, error) {
+func (s *compactionSummarizer) summarizeWithLocal(ctx context.Context, prompt string, messages []api.Message) (string, bool, error) {
 	if s.router == nil {
 		return "", false, nil
 	}
@@ -422,7 +422,7 @@ func (s *compactionSummarizer) summarizeWithLocal(prompt string, messages []api.
 		return "", false, nil
 	}
 
-	return s.router.TryLocal(localmodel.TaskCompaction, prompt, 2048)
+	return s.router.TryLocal(ctx, localmodel.TaskCompaction, prompt, 2048)
 }
 
 func renderCompactionPrompt(promptTemplate string, messages []api.Message) string {

@@ -1,12 +1,15 @@
 package localmodel
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 func generateServer(t *testing.T, handler func(w http.ResponseWriter, body map[string]any)) *LocalModel {
@@ -47,7 +50,7 @@ func TestQueryReturnsResponse(t *testing.T) {
 		_, _ = w.Write([]byte(`{"response":"  hello from ollama  "}`))
 	})
 
-	got, err := model.Query("summarize this", 64)
+	got, err := model.Query(context.Background(), "summarize this", 64)
 	if err != nil {
 		t.Fatalf("Query: %v", err)
 	}
@@ -63,13 +66,13 @@ func TestQueryOmitsOptionsWithoutTokenLimit(t *testing.T) {
 		}
 		_, _ = w.Write([]byte(`{"response":"ok"}`))
 	})
-	if _, err := model.Query("prompt", 0); err != nil {
+	if _, err := model.Query(context.Background(), "prompt", 0); err != nil {
 		t.Fatalf("Query: %v", err)
 	}
 }
 
 func TestQueryRejectsEmptyPrompt(t *testing.T) {
-	if _, err := NewLocalModel(DefaultOllamaURL, "m").Query("   ", 10); err == nil {
+	if _, err := NewLocalModel(DefaultOllamaURL, "m").Query(context.Background(), "   ", 10); err == nil {
 		t.Fatal("Query accepted a blank prompt")
 	}
 }
@@ -91,7 +94,7 @@ func TestQueryReportsServerErrors(t *testing.T) {
 	}
 	for name, handler := range cases {
 		t.Run(name, func(t *testing.T) {
-			if _, err := generateServer(t, handler).Query("prompt", 10); err == nil {
+			if _, err := generateServer(t, handler).Query(context.Background(), "prompt", 10); err == nil {
 				t.Fatal("Query returned no error")
 			}
 		})
@@ -100,8 +103,37 @@ func TestQueryReportsServerErrors(t *testing.T) {
 
 func TestQueryReportsTransportFailure(t *testing.T) {
 	model := NewLocalModel("http://127.0.0.1:1", "m")
-	if _, err := model.Query("prompt", 10); err == nil {
+	if _, err := model.Query(context.Background(), "prompt", 10); err == nil {
 		t.Fatal("Query succeeded against a closed port")
+	}
+}
+
+// A local generation can run for minutes. Cancelling the turn that asked for
+// it — a compaction the user interrupts — must stop the wait, not sit out the
+// client's two-minute timeout.
+func TestQueryStopsWhenContextIsCancelled(t *testing.T) {
+	release := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-r.Context().Done():
+		case <-release:
+		}
+	}))
+	t.Cleanup(func() {
+		close(release)
+		server.Close()
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	time.AfterFunc(50*time.Millisecond, cancel)
+
+	started := time.Now()
+	_, err := NewLocalModel(server.URL, "m").Query(ctx, "prompt", 10)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Query error = %v, want context.Canceled", err)
+	}
+	if elapsed := time.Since(started); elapsed > 5*time.Second {
+		t.Fatalf("Query took %v to notice the cancellation", elapsed)
 	}
 }
 
@@ -110,7 +142,7 @@ func TestQueryNormalizesBaseURL(t *testing.T) {
 		_, _ = w.Write([]byte(`{"response":"ok"}`))
 	})
 	model.BaseURL += "/"
-	if _, err := model.Query("prompt", 0); err != nil {
+	if _, err := model.Query(context.Background(), "prompt", 0); err != nil {
 		t.Fatalf("Query with a trailing slash: %v", err)
 	}
 }
@@ -145,7 +177,7 @@ func TestRouterWithoutLocalModel(t *testing.T) {
 			t.Errorf("ShouldUseLocal(%v) = true with no local model", task)
 		}
 	}
-	response, attempted, err := router.TryLocal(TaskCompaction, "prompt", 10)
+	response, attempted, err := router.TryLocal(context.Background(), TaskCompaction, "prompt", 10)
 	if err != nil || attempted || response != "" {
 		t.Fatalf("TryLocal = %q, %v, %v; want no attempt", response, attempted, err)
 	}
@@ -170,7 +202,7 @@ func TestRouterRoutesHelperTasksLocally(t *testing.T) {
 		t.Errorf("LocalModelName = %q", router.LocalModelName())
 	}
 
-	response, attempted, err := router.TryLocal(TaskTitleGen, "prompt", 10)
+	response, attempted, err := router.TryLocal(context.Background(), TaskTitleGen, "prompt", 10)
 	if err != nil {
 		t.Fatalf("TryLocal: %v", err)
 	}
@@ -178,7 +210,7 @@ func TestRouterRoutesHelperTasksLocally(t *testing.T) {
 		t.Fatalf("TryLocal = %q, attempted=%v", response, attempted)
 	}
 
-	if _, attempted, _ := router.TryLocal(TaskMainReasoning, "prompt", 10); attempted {
+	if _, attempted, _ := router.TryLocal(context.Background(), TaskMainReasoning, "prompt", 10); attempted {
 		t.Error("TryLocal attempted a local call for main reasoning")
 	}
 }
@@ -189,7 +221,7 @@ func TestTryLocalReportsAttemptOnFailure(t *testing.T) {
 	})
 	router := &Router{local: model, localAvail: true}
 
-	response, attempted, err := router.TryLocal(TaskCompaction, "prompt", 10)
+	response, attempted, err := router.TryLocal(context.Background(), TaskCompaction, "prompt", 10)
 	if err == nil {
 		t.Fatal("TryLocal returned no error for a failing local model")
 	}

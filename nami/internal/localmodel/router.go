@@ -1,6 +1,7 @@
 package localmodel
 
 import (
+	"context"
 	"os"
 	"strings"
 
@@ -74,12 +75,12 @@ func (r *Router) ShouldUseLocal(task TaskType) bool {
 
 // TryLocal runs a task on the local model when routing allows it.
 // The returned bool reports whether a local attempt was made.
-func (r *Router) TryLocal(task TaskType, prompt string, maxTokens int) (string, bool, error) {
+func (r *Router) TryLocal(ctx context.Context, task TaskType, prompt string, maxTokens int) (string, bool, error) {
 	if !r.ShouldUseLocal(task) || r.local == nil {
 		return "", false, nil
 	}
 
-	response, err := r.local.Query(prompt, maxTokens)
+	response, err := r.local.Query(ctx, prompt, maxTokens)
 	if err != nil {
 		return "", true, err
 	}

@@ -2,6 +2,7 @@ package localmodel
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -77,8 +78,9 @@ func DetectLocalModel() (*LocalModel, bool) {
 	return nil, false
 }
 
-// Query sends a prompt to the local model and returns the response.
-func (m *LocalModel) Query(prompt string, maxTokens int) (string, error) {
+// Query sends a prompt to the local model and returns the response. The
+// request is abandoned as soon as ctx is done.
+func (m *LocalModel) Query(ctx context.Context, prompt string, maxTokens int) (string, error) {
 	prompt = strings.TrimSpace(prompt)
 	if prompt == "" {
 		return "", fmt.Errorf("local model prompt is empty")
@@ -104,7 +106,7 @@ func (m *LocalModel) Query(prompt string, maxTokens int) (string, error) {
 	}
 
 	endpoint := strings.TrimRight(m.BaseURL, "/") + "/api/generate"
-	req, err := http.NewRequest(http.MethodPost, endpoint, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 	if err != nil {
 		return "", fmt.Errorf("create ollama request: %w", err)
 	}
