@@ -30,6 +30,9 @@ type WorkflowRunResult struct {
 	DurationMillis int64                  `json:"duration_ms,omitempty"`
 	Nodes          []WorkflowNodeSnapshot `json:"nodes,omitempty"`
 	Error          string                 `json:"error,omitempty"`
+	// Warnings are problems that did not stop the run, such as a journal
+	// that could not be read or written.
+	Warnings []string `json:"warnings,omitempty"`
 }
 
 // WorkflowNodeSnapshot is one node's outcome, trimmed for the transcript.

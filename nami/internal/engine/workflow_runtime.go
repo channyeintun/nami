@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -39,6 +40,8 @@ type workflowRun struct {
 	nodeIndex   map[string]int
 	result      *workflowpkg.Result
 	err         string
+	// warnings are problems that did not stop the run, for the run result.
+	warnings []string
 	// updated is closed and replaced on every node transition so a waiting
 	// workflow_status call wakes on real progress rather than polling.
 	updated chan struct{}
@@ -136,21 +139,17 @@ func launchWorkflow(
 			DependsOn:   node.DependsOn,
 		})
 	}
-	registerWorkflowRun(run)
-	scheduleWorkflowRunCleanup(run)
-
 	var journal *workflowpkg.Journal
 	if run.journalPath != "" {
-		resumeFrom := ""
+		resumePath := ""
 		if previous := strings.TrimSpace(req.ResumeFromRunID); previous != "" {
-			resumeFrom = journalPathForRun(sessionDir, previous)
+			resumePath = journalPathForRun(sessionDir, previous)
 			run.resumedFrom = previous
 		}
-		// A journal that cannot be opened costs the run its resumability, not
-		// its results, so the run continues without one.
-		journal, _ = workflowpkg.OpenJournal(run.journalPath, resumeFrom)
-		defer func() { _ = journal.Close() }()
+		journal = openRunJournal(run, resumePath)
 	}
+	registerWorkflowRun(run)
+	scheduleWorkflowRunCleanup(run)
 
 	result, err := resolved.Run(ctx, workflowpkg.Options{
 		RunID:      runID,
@@ -158,6 +157,10 @@ func launchWorkflow(
 		Run:        workflowNodeRunner(runner),
 		OnProgress: workflowProgressReporter(run, bridge),
 	})
+	// Closed before the run finishes, so a failure reaches its result.
+	if closeErr := journal.Close(); closeErr != nil {
+		run.addWarning(fmt.Sprintf("The journal may be missing results, and resuming this run would run those nodes again: %v", closeErr))
+	}
 	if err != nil {
 		run.finish(nil, err)
 		return toolpkg.WorkflowRunResult{}, err
@@ -165,6 +168,32 @@ func launchWorkflow(
 
 	run.finish(&result, nil)
 	return run.snapshot(), nil
+}
+
+// openRunJournal opens run's journal, seeded with the records of the journal at
+// resumePath. The run's results need neither, so a failure is recorded as a
+// warning on the run instead of stopping it. A resume journal that cannot be
+// read must not cost the run its own journal as well: the journal is then
+// opened unseeded, and this run stays resumable itself.
+func openRunJournal(run *workflowRun, resumePath string) *workflowpkg.Journal {
+	journal, err := workflowpkg.OpenJournal(run.journalPath, resumePath)
+	if err == nil {
+		return journal
+	}
+	if resumePath == "" {
+		run.addWarning(fmt.Sprintf("The run has no journal and cannot be resumed: %v", err))
+		return nil
+	}
+	// OpenJournal fails as a whole when the resume journal cannot be read.
+	// Opening without it tells that apart from a journal that cannot be
+	// written.
+	unseeded, unseededErr := workflowpkg.OpenJournal(run.journalPath, "")
+	if unseededErr != nil {
+		run.addWarning(fmt.Sprintf("The run has no journal, so nothing was replayed from run %s and this run cannot be resumed: %v", run.resumedFrom, unseededErr))
+		return nil
+	}
+	run.addWarning(fmt.Sprintf("Could not read the journal of run %s, so nothing was replayed and every node ran again: %v", run.resumedFrom, err))
+	return unseeded
 }
 
 // workflowNodeRunner turns each graph node into one child-agent invocation and
@@ -240,6 +269,12 @@ func (r *workflowRun) applyProgress(progress workflowpkg.Progress) {
 	close(waiters)
 }
 
+func (r *workflowRun) addWarning(warning string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.warnings = append(r.warnings, warning)
+}
+
 func (r *workflowRun) finish(result *workflowpkg.Result, err error) {
 	r.mu.Lock()
 	r.result = result
@@ -265,6 +300,7 @@ func (r *workflowRun) snapshot() toolpkg.WorkflowRunResult {
 		NodeCount:   len(r.nodes),
 		Nodes:       append([]toolpkg.WorkflowNodeSnapshot(nil), r.nodes...),
 		Error:       r.err,
+		Warnings:    slices.Clone(r.warnings),
 	}
 	for _, node := range r.nodes {
 		switch workflowpkg.Status(node.Status) {

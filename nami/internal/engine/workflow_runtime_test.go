@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -478,4 +479,70 @@ func firstWorkflowRunIDOfANewProcess(t *testing.T) string {
 	}
 	t.Fatalf("the new process printed no run id:\n%s", output)
 	return ""
+}
+
+// A resume journal that cannot be read must not cost the new run its own
+// journal: the run still has to be resumable itself.
+func TestLaunchWorkflowKeepsItsJournalWhenTheResumeJournalCannotBeRead(t *testing.T) {
+	sessionDir := t.TempDir()
+	// A directory where the journal should be fails the read.
+	if err := os.MkdirAll(journalPathForRun(sessionDir, "wf_unreadable"), 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	var executed []string
+	runner := func(_ context.Context, req toolpkg.AgentRunRequest) (toolpkg.AgentRunResult, error) {
+		executed = append(executed, req.Description)
+		return toolpkg.AgentRunResult{Status: "completed", Summary: "out:" + req.Description}, nil
+	}
+	spec := workflowpkg.Spec{MaxParallel: 1, Description: "resume from a broken journal", Nodes: []workflowpkg.NodeSpec{workflowNode("a")}}
+
+	result, err := launchWorkflow(t.Context(), runner, nil, sessionDir, toolpkg.WorkflowLaunchRequest{Spec: spec, ResumeFromRunID: "wf_unreadable"})
+	if err != nil {
+		t.Fatalf("launchWorkflow: %v", err)
+	}
+	if result.Status != "completed" || len(executed) != 1 {
+		t.Fatalf("result = %+v after executing %v, want the node run", result, executed)
+	}
+	// The model asked to resume, so it has to hear that nothing was replayed.
+	if len(result.Warnings) != 1 || !strings.Contains(result.Warnings[0], "wf_unreadable") {
+		t.Fatalf("warnings = %q, want one naming the unreadable journal of wf_unreadable", result.Warnings)
+	}
+
+	executed = nil
+	resumed, err := launchWorkflow(t.Context(), runner, nil, sessionDir, toolpkg.WorkflowLaunchRequest{Spec: spec, ResumeFromRunID: result.RunID})
+	if err != nil {
+		t.Fatalf("launchWorkflow: %v", err)
+	}
+	if len(executed) != 0 || resumed.Cached != 1 {
+		t.Fatalf("resuming the run re-executed %v (cached %d); it kept no journal", executed, resumed.Cached)
+	}
+	if len(resumed.Warnings) != 0 {
+		t.Fatalf("a clean resume reported warnings %q", resumed.Warnings)
+	}
+}
+
+// A run whose journal cannot be written still runs, but the model has to learn
+// that it cannot be resumed rather than find out when a resume replays nothing.
+func TestLaunchWorkflowReportsARunWithoutAJournal(t *testing.T) {
+	sessionDir := t.TempDir()
+	// A file where the workflows directory belongs makes the journal fail.
+	if err := os.WriteFile(filepath.Join(sessionDir, "workflows"), nil, 0o600); err != nil {
+		t.Fatalf("write blocker: %v", err)
+	}
+	runner := func(context.Context, toolpkg.AgentRunRequest) (toolpkg.AgentRunResult, error) {
+		return toolpkg.AgentRunResult{Status: "completed", Summary: "done"}, nil
+	}
+
+	result, err := launchWorkflow(t.Context(), runner, nil, sessionDir, toolpkg.WorkflowLaunchRequest{
+		Spec: workflowpkg.Spec{Description: "no journal", Nodes: []workflowpkg.NodeSpec{workflowNode("a")}},
+	})
+	if err != nil {
+		t.Fatalf("launchWorkflow: %v", err)
+	}
+	if result.Status != "completed" {
+		t.Fatalf("status = %q; a journal failure must not fail the run", result.Status)
+	}
+	if len(result.Warnings) != 1 || !strings.Contains(result.Warnings[0], "cannot be resumed") {
+		t.Fatalf("warnings = %q, want one saying the run cannot be resumed", result.Warnings)
+	}
 }
