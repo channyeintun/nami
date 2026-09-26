@@ -376,26 +376,53 @@ func (m *Manager) startServer(ctx context.Context, definition ServerDefinition) 
 		warnings = append(warnings, fmt.Sprintf("list resource templates: %v", templateErr))
 	}
 
+	status, published := m.publishRuntime(runtime, session.ID(), warnings)
+	if !published {
+		// The manager was closed while this server was still connecting. Close
+		// snapshotted the runtimes before this one was published, so nothing
+		// else will ever close it — release the session here (and, for stdio,
+		// terminate its child process) instead of leaking it.
+		if err := session.Close(); err != nil {
+			status.Warnings = append(status.Warnings, fmt.Sprintf("close session after shutdown: %v", err))
+		}
+	}
+	return status
+}
+
+// publishRuntime records a freshly connected server, unless the manager has
+// already been closed. It reports whether the runtime was published; when it
+// was not, the caller owns the session and must close it, because Close has
+// already taken its snapshot and will never see this runtime.
+func (m *Manager) publishRuntime(runtime *serverRuntime, sessionID string, warnings []string) (ServerStatus, bool) {
+	definition := runtime.definition
+
 	m.mu.Lock()
-	m.runtimes[definition.Name] = runtime
+	defer m.mu.Unlock()
+
 	status := m.statuses[definition.Name]
+	if m.closed {
+		status.ToolNames = append([]string(nil), status.ToolNames...)
+		status.Warnings = append([]string(nil), status.Warnings...)
+		return status, false
+	}
+
+	m.runtimes[definition.Name] = runtime
 	status.Name = definition.Name
 	status.Transport = string(definition.Transport)
 	status.Enabled = definition.Enabled
 	status.Connected = true
 	status.Trusted = definition.Trusted
-	status.SessionID = session.ID()
+	status.SessionID = sessionID
 	status.Server = runtime.server
 	status.ToolCount = len(runtime.toolNames)
-	status.PromptCount = len(prompts)
-	status.ResourceCount = len(resources)
-	status.ResourceTemplateCount = len(templates)
+	status.PromptCount = len(runtime.prompts)
+	status.ResourceCount = len(runtime.resources)
+	status.ResourceTemplateCount = len(runtime.resourceTemplates)
 	status.ToolNames = append([]string(nil), runtime.toolNames...)
 	status.Warnings = warnings
 	status.Error = ""
 	m.statuses[definition.Name] = status
-	m.mu.Unlock()
-	return status
+	return status, true
 }
 
 func (m *Manager) status(name string) ServerStatus {
