@@ -630,16 +630,34 @@ export function useEvents(initialModel: string, initialMode: string) {
         // The goal outlives a turn — that is the whole point of the loop — so
         // unlike goalProgress this is only cleared when the engine says the
         // goal is gone, never on turn boundaries.
-        setUIState((s) => ({
-          ...s,
-          goalCondition: p.active
+        setUIState((s) => {
+          const goalCondition = p.active
             ? {
                 condition: stringOrEmpty(p.condition),
                 reason: stringOrEmpty(p.reason),
                 iterations: Math.max(0, Math.round(p.iterations ?? 0)),
               }
-            : null,
-        }));
+            : null;
+          const outcome = describeGoalOutcome(p, s.goalCondition);
+          if (!outcome) {
+            return { ...s, goalCondition };
+          }
+
+          const outcomeMessage = createSystemMessage(
+            outcome.text,
+            outcome.tone,
+            "Goal",
+          );
+          return {
+            ...s,
+            goalCondition,
+            messages: [...s.messages, outcomeMessage],
+            transcript: appendTranscriptEntry(s.transcript, {
+              id: outcomeMessage.id,
+              kind: "message",
+            }),
+          };
+        });
         break;
       }
       case "workflow_progress": {
@@ -2434,6 +2452,33 @@ function normalizeSlashCommands(
           : undefined,
       takesArguments: command.takes_arguments === true,
     }));
+}
+
+/**
+ * What to tell the user when the engine settles the goal, or null. Only met
+ * and failed are outcomes: an inactive state alone is the engine announcing
+ * the goal after a slash command, or answering /goal clear, whose reply
+ * already says "Goal cleared".
+ */
+function describeGoalOutcome(
+  payload: GoalStateChangedPayload,
+  previous: UIGoalCondition | null,
+): { text: string; tone: UISystemMessage["tone"] } | null {
+  if (payload.active || (!payload.met && !payload.failed)) {
+    return null;
+  }
+
+  const condition =
+    stringOrEmpty(payload.condition) || previous?.condition || "";
+  const reason = stringOrEmpty(payload.reason);
+  const reasonLine = reason ? `\n${reason}` : "";
+  if (payload.met) {
+    return { text: `Goal met: ${condition}${reasonLine}`, tone: "success" };
+  }
+  return {
+    text: `Goal cleared as unreachable: ${condition}${reasonLine}`,
+    tone: "warning",
+  };
 }
 
 function buildTurnCompleteStatusLine(stopReason: string): string {
