@@ -1,6 +1,55 @@
 package skills
 
-import "testing"
+import (
+	"strings"
+	"testing"
+	"unicode/utf8"
+)
+
+// A skill the user invokes by name is passed first. When it alone was over the
+// budget the whole section came back empty, so the model saw the bare slash
+// command and none of the instructions the user asked for.
+func TestFormatPromptSectionShortensAnOversizedFirstSkill(t *testing.T) {
+	big := Skill{
+		Name:    "release-checklist",
+		Content: "First step of the release.\n" + strings.Repeat("Step: check é carefully.\n", 1000),
+		Source:  "/home/me/.agents/release-checklist.md",
+	}
+	section := FormatPromptSection([]Skill{big, {Name: "extra", Content: "never reached"}})
+
+	for _, want := range []string{"Name: release-checklist", "First step of the release.", "truncated", big.Source, "</skill>", "</skills>"} {
+		if !strings.Contains(section, want) {
+			t.Errorf("section is missing %q", want)
+		}
+	}
+	if strings.Contains(section, "never reached") {
+		t.Error("a later skill was added after the budget ran out")
+	}
+	if len(section) > maxInjectedSkillChars {
+		t.Errorf("section is %d bytes, over the %d budget", len(section), maxInjectedSkillChars)
+	}
+	if !utf8.ValidString(section) {
+		t.Error("section cut a character in half")
+	}
+}
+
+func TestFormatPromptSectionKeepsSkillsThatFit(t *testing.T) {
+	section := FormatPromptSection([]Skill{
+		{Name: "first", Content: "first body"},
+		{Name: "second", Content: "second body"},
+	})
+	for _, want := range []string{"first body", "second body"} {
+		if !strings.Contains(section, want) {
+			t.Errorf("section is missing %q", want)
+		}
+	}
+	if strings.Contains(section, "truncated") {
+		t.Error("skills that fit were marked as truncated")
+	}
+	if got := FormatPromptSection(nil); got != "" {
+		t.Errorf("FormatPromptSection(nil) = %q, want empty", got)
+	}
+}
 
 // Keywords and skill names match whole words. Substring matching made the
 // built-in Go guide's "go" keyword fire on "Google", "good", "algorithm" and

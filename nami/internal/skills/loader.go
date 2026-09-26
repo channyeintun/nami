@@ -11,6 +11,7 @@ import (
 	"unicode"
 
 	"github.com/channyeintun/nami/internal/config"
+	"github.com/channyeintun/nami/internal/textutil"
 )
 
 // Skill represents a loaded skill with its frontmatter and content.
@@ -27,6 +28,9 @@ type Skill struct {
 const (
 	maxAutoSelectedSkills = 3
 	maxInjectedSkillChars = 12000
+
+	skillsSectionHeader = "<skills>\nAuto-selected skills. Apply when matching the user's request. Each skill body = additional instructions for this turn.\n\n"
+	skillsSectionFooter = "</skills>\n"
 )
 
 var ignoredPromptTokens = map[string]struct{}{
@@ -219,6 +223,10 @@ func SelectForPrompt(available []Skill, userPrompt string, explicit []Skill) []S
 }
 
 // FormatPromptSection renders selected skills as additional system instructions.
+// Skills are added in order while they fit the budget. The first one is never
+// dropped, because it is the skill the user invoked when there is one: if it
+// alone is over budget, its body is cut short with a note saying where the
+// full text lives.
 func FormatPromptSection(selected []Skill) string {
 	if len(selected) == 0 {
 		return ""
@@ -226,22 +234,33 @@ func FormatPromptSection(selected []Skill) string {
 
 	var builder strings.Builder
 	builder.Grow(1024)
-	builder.WriteString("<skills>\n")
-	builder.WriteString("Auto-selected skills. Apply when matching the user's request. Each skill body = additional instructions for this turn.\n\n")
+	builder.WriteString(skillsSectionHeader)
 
-	for _, skill := range selected {
+	for index, skill := range selected {
+		remaining := maxInjectedSkillChars - builder.Len() - len(skillsSectionFooter)
 		entry := formatSkillEntry(skill)
-		if builder.Len()+len(entry)+len("</skills>\n") > maxInjectedSkillChars {
-			break
+		if len(entry) > remaining {
+			if index > 0 {
+				break
+			}
+			entry = formatTruncatedSkillEntry(skill, remaining)
 		}
 		builder.WriteString(entry)
 	}
 
-	if builder.Len() == len("<skills>\n")+len("Auto-selected skills. Apply when matching the user's request. Each skill body = additional instructions for this turn.\n\n") {
-		return ""
-	}
-	builder.WriteString("</skills>\n")
+	builder.WriteString(skillsSectionFooter)
 	return builder.String()
+}
+
+// formatTruncatedSkillEntry renders skill in at most limit bytes by shortening
+// its body, cutting on a character boundary.
+func formatTruncatedSkillEntry(skill Skill, limit int) string {
+	note := fmt.Sprintf("\n[Skill truncated to fit the prompt; the full text is in %s.]", skill.Source)
+	shortened := skill
+	shortened.Content = ""
+	budget := max(limit-len(formatSkillEntry(shortened))-len(note), 0)
+	shortened.Content = textutil.TruncateHead(strings.TrimSpace(skill.Content), budget) + note
+	return formatSkillEntry(shortened)
 }
 
 func formatSkillEntry(skill Skill) string {
