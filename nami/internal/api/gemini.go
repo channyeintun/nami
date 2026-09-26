@@ -225,10 +225,14 @@ func (c *GeminiClient) handleEvent(data string, state *geminiStreamState, yield 
 				if err != nil {
 					return fmt.Errorf("encode Gemini function call args: %w", err)
 				}
+				id := part.FunctionCall.ID
+				if id == "" {
+					id = newToolCallID()
+				}
 				if !yield(ModelEvent{
 					Type: ModelEventToolCall,
 					ToolCall: &ToolCall{
-						ID:               firstNonEmpty(part.FunctionCall.ID, part.FunctionCall.Name),
+						ID:               id,
 						Name:             part.FunctionCall.Name,
 						Input:            string(input),
 						ThoughtSignature: part.ThoughtSignature,

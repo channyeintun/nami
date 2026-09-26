@@ -225,7 +225,7 @@ func (c *OllamaClient) handleChunk(
 		if !yield(ModelEvent{
 			Type: ModelEventToolCall,
 			ToolCall: &ToolCall{
-				ID:    firstNonEmpty(toolCall.Function.Name, "tool_call"),
+				ID:    newToolCallID(),
 				Name:  toolCall.Function.Name,
 				Input: string(input),
 			},

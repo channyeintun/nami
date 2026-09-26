@@ -127,7 +127,7 @@ func (s *openAICompatStreamState) toolCallState(index int, id string) *openAICom
 func (s *openAICompatStreamState) emitToolCalls(yield func(ModelEvent, error) bool) error {
 	for _, toolCall := range s.toolCalls {
 		if toolCall.ID == "" {
-			toolCall.ID = fmt.Sprintf("call_%d", toolCall.Index)
+			toolCall.ID = newToolCallID()
 		}
 		arguments := toolCall.Arguments.String()
 		if strings.TrimSpace(arguments) == "" {

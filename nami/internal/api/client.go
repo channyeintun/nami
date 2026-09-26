@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"strings"
 	"time"
+	"uuid"
 )
 
 // requestHTTPTimeout bounds a whole request/response exchange, from
@@ -109,6 +110,13 @@ type ToolCall struct {
 	Name             string `json:"name"`
 	Input            string `json:"input"` // JSON string
 	ThoughtSignature string `json:"thought_signature,omitempty"`
+}
+
+// newToolCallID names a tool call its provider left unnamed. The engine and
+// the UI track calls by id for the whole session, so the id has to be unique
+// beyond the response it came in.
+func newToolCallID() string {
+	return "call_" + uuid.New().String()
 }
 
 // ToolResult is the outcome of a tool execution.

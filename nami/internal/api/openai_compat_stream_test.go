@@ -3,6 +3,7 @@ package api
 import (
 	"errors"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -155,8 +156,10 @@ func TestEmitToolCallsSynthesizesMissingIDAndEmptyArguments(t *testing.T) {
 		t.Fatalf("events = %+v, want 1", events)
 	}
 	call := events[0].ToolCall
-	if call.ID != "call_3" {
-		t.Fatalf("id = %q, want a synthesized call_3", call.ID)
+	// An id built from the index would come back on every turn; calls are
+	// tracked by id for the whole session.
+	if !strings.HasPrefix(call.ID, "call_") || call.ID == "call_3" {
+		t.Fatalf("id = %q, want a synthesized, session-unique id", call.ID)
 	}
 	if call.Input != "{}" {
 		t.Fatalf("input = %q, want {}", call.Input)
