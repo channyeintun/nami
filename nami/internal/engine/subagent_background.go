@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -327,7 +328,10 @@ func launchBackgroundAgent(
 		defer scheduleBackgroundAgentCleanup(bg)
 		bg.running = false
 		if err != nil {
-			if err == context.Canceled {
+			// Once the run's context is cancelled, whatever error the child
+			// unwinds with - often wrapped by the model client or compaction -
+			// is the cancellation, not a failure.
+			if errors.Is(err, context.Canceled) || ctx.Err() != nil {
 				bg.result.Status = "cancelled"
 				bg.result.Error = "background child agent cancelled"
 				bg.result = withChildMetadata(bg.result, bg.description, bg.role)
