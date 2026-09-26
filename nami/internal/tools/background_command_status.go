@@ -257,6 +257,7 @@ func (bg *backgroundCommand) asyncUpdate() BackgroundCommandUpdate {
 	command := bg.command
 	cwd := bg.cwd
 	commandID := bg.id
+	sessionID := bg.sessionID
 	var exitCode *int
 	if bg.exitCode != nil {
 		copied := *bg.exitCode
@@ -267,6 +268,7 @@ func (bg *backgroundCommand) asyncUpdate() BackgroundCommandUpdate {
 	unread := bg.output.unreadSummary(backgroundCommandNotificationPreviewBytes)
 
 	return BackgroundCommandUpdate{
+		SessionID:       sessionID,
 		CommandID:       commandID,
 		Command:         command,
 		Cwd:             cwd,

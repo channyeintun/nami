@@ -63,6 +63,15 @@ func setActiveSession(sessionID string) {
 	activeSession.id = sessionID
 }
 
+// belongsToActiveSession reports whether a background command's update is for
+// the session the engine serves. A command keeps running when the user moves
+// to another session with /clear or /resume, but the conversation it was
+// started for is gone: the TUI would hand its completion to the new
+// conversation's model as input about a command it never ran.
+func belongsToActiveSession(update toolpkg.BackgroundCommandUpdate) bool {
+	return update.SessionID == "" || update.SessionID == activeSessionID()
+}
+
 func activeSessionID() string {
 	activeSession.mu.RLock()
 	defer activeSession.mu.RUnlock()

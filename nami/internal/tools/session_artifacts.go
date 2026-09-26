@@ -40,6 +40,14 @@ func SetGlobalSessionArtifacts(sessionID string, manager *artifactspkg.Manager) 
 	globalSessionArtifactRuntime.manager = manager
 }
 
+// currentSessionID returns the session the tools are serving, or "" before
+// one is installed.
+func currentSessionID() string {
+	globalSessionArtifactRuntime.mu.RLock()
+	defer globalSessionArtifactRuntime.mu.RUnlock()
+	return globalSessionArtifactRuntime.sessionID
+}
+
 func getSessionArtifactRuntime() (string, *artifactspkg.Manager, error) {
 	globalSessionArtifactRuntime.mu.RLock()
 	defer globalSessionArtifactRuntime.mu.RUnlock()

@@ -127,6 +127,9 @@ func RunStdioEngine(ctx context.Context, cfg config.Config) error {
 	defer toolpkg.ClearSessionRuntime()
 	interactionRuntime := toolpkg.InteractionRuntimeConfig{
 		BackgroundCommandNotifier: func(update toolpkg.BackgroundCommandUpdate) {
+			if !belongsToActiveSession(update) {
+				return
+			}
 			_ = bridge.Emit(ipc.EventBackgroundCommandUpdated, ipc.BackgroundCommandUpdatedPayload{
 				CommandID:       update.CommandID,
 				Command:         update.Command,

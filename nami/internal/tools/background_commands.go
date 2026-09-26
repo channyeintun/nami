@@ -46,6 +46,10 @@ type backgroundCommand struct {
 	done                      chan struct{}
 	startedAt                 time.Time
 	updatedAt                 time.Time
+	// sessionID is the session whose conversation started the command. The
+	// command outlives a switch to another session; its updates belong to
+	// this one.
+	sessionID string
 }
 
 type BackgroundCommandResult struct {
@@ -78,6 +82,8 @@ type BackgroundCommandDetail struct {
 // BackgroundCommandUpdate is emitted when a retained background command changes
 // state asynchronously outside the active tool turn.
 type BackgroundCommandUpdate struct {
+	// SessionID is the session that started the command.
+	SessionID       string
 	CommandID       string
 	Command         string
 	Cwd             string
@@ -170,6 +176,7 @@ func startBackgroundPTYCommand(streamCtx context.Context, cancel context.CancelF
 		done:      make(chan struct{}),
 		startedAt: time.Now(),
 		updatedAt: time.Now(),
+		sessionID: currentSessionID(),
 	}
 
 	backgroundCommandsMu.Lock()
@@ -229,6 +236,7 @@ func startBackgroundPipeCommand(streamCtx context.Context, cancel context.Cancel
 		done:      make(chan struct{}),
 		startedAt: time.Now(),
 		updatedAt: time.Now(),
+		sessionID: currentSessionID(),
 	}
 
 	backgroundCommandsMu.Lock()

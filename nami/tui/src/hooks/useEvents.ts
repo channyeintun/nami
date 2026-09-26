@@ -1497,6 +1497,10 @@ export function useEvents(initialModel: string, initialMode: string) {
           pendingAskUserQuestion: null,
           submittingArtifactReviewRequestId: null,
           pendingPermission: null,
+          // Background work of the session left behind keeps running, but
+          // the engine reports it only to that session.
+          backgroundAgents: [],
+          backgroundCommands: [],
           isStreaming: false,
           error: null,
           statusLine: `Resumed session ${p.session_id}`,

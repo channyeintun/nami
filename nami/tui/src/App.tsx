@@ -253,6 +253,20 @@ const App: FC<AppProps> = ({ enginePath, model, mode, autoMode }) => {
     }
   }, [dismissAll, uiState.isStreaming]);
 
+  // Task notifications still queued when the user moves to another session
+  // (/clear, /resume) are about work that session started; handing them to
+  // the new conversation's model would ask it about commands it never ran.
+  const notifiedSessionIdRef = useRef(uiState.sessionId);
+  useEffect(() => {
+    if (
+      notifiedSessionIdRef.current !== null &&
+      notifiedSessionIdRef.current !== uiState.sessionId
+    ) {
+      setPendingTaskNotifications([]);
+    }
+    notifiedSessionIdRef.current = uiState.sessionId;
+  }, [uiState.sessionId]);
+
   // A dead engine sends no turn_complete, so without this the turn would
   // look busy forever. The Tasks dialog goes too: it would sit over the
   // engine error, polling an engine that is gone.

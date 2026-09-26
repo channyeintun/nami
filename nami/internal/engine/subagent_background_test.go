@@ -245,3 +245,21 @@ func TestChildCostGoesToTheSessionThatLaunchedIt(t *testing.T) {
 		t.Fatalf("session-a's saved cost = %v, want 1.00 plus the child's 0.40", meta.TotalCostUSD)
 	}
 }
+
+// A command started in one session keeps running after /clear or /resume, but
+// its completion must not reach the conversation the user moved to.
+func TestBackgroundCommandUpdatesStayWithTheirSession(t *testing.T) {
+	previous := activeSessionID()
+	t.Cleanup(func() { setActiveSession(previous) })
+	setActiveSession("session-b")
+
+	if belongsToActiveSession(toolpkg.BackgroundCommandUpdate{SessionID: "session-a"}) {
+		t.Error("an update for the session the user left reached the active one")
+	}
+	if !belongsToActiveSession(toolpkg.BackgroundCommandUpdate{SessionID: "session-b"}) {
+		t.Error("an update for the active session was dropped")
+	}
+	if !belongsToActiveSession(toolpkg.BackgroundCommandUpdate{}) {
+		t.Error("an update from before any session was installed was dropped")
+	}
+}

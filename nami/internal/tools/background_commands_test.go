@@ -312,3 +312,23 @@ func lastBytes(text string, n int) string {
 	}
 	return text[len(text)-n:]
 }
+
+// A background command belongs to the session whose conversation started it,
+// so its updates can be kept out of another session the user moves to.
+func TestBackgroundCommandUpdatesNameTheSessionThatStartedThem(t *testing.T) {
+	skipWithoutPOSIXShell(t)
+	SetGlobalSessionArtifacts("session-a", nil)
+	t.Cleanup(func() { SetGlobalSessionArtifacts("", nil) })
+
+	bg := startTestBackgroundCommand(t, "echo done")
+	SetGlobalSessionArtifacts("session-b", nil)
+	waitForBackgroundExit(t, bg, 5*time.Second)
+
+	update, err := BackgroundCommandUpdateSnapshot(bg.id)
+	if err != nil {
+		t.Fatalf("BackgroundCommandUpdateSnapshot: %v", err)
+	}
+	if update.SessionID != "session-a" {
+		t.Fatalf("update session = %q, want the session that started the command", update.SessionID)
+	}
+}
