@@ -2,6 +2,7 @@ import path from "node:path";
 import React, { type FC, useMemo, useState } from "react";
 import { Box, Text, useInput } from "silvery";
 import type { PermissionResponseDecision } from "../protocol/types.js";
+import { truncateEnd } from "../utils/text.js";
 
 type PermissionDecision = PermissionResponseDecision;
 
@@ -458,22 +459,6 @@ function firstStringField(
   }
 
   return "";
-}
-
-function truncateEnd(value: string, limit: number): string {
-  if (limit <= 0) {
-    return "";
-  }
-
-  if (value.length <= limit) {
-    return value;
-  }
-
-  if (limit <= 3) {
-    return ".".repeat(limit);
-  }
-
-  return `${value.slice(0, limit - 3)}...`;
 }
 
 function formatDetailPreviewHint(hiddenLineCount: number): string {

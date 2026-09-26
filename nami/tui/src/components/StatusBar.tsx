@@ -6,6 +6,7 @@ import {
   inferContextWindow,
 } from "../utils/modelContext.js";
 import { stripProviderPrefix } from "../utils/formatModel.js";
+import { truncateEnd } from "../utils/text.js";
 import type {
   UIArtifact,
   UIArtifactReview,
@@ -258,10 +259,7 @@ function summarizeGoal(goal: UIGoalCondition | null | undefined): string {
   if (!condition) {
     return "";
   }
-  const text =
-    condition.length > MAX_GOAL_LABEL_CHARS
-      ? `${condition.slice(0, MAX_GOAL_LABEL_CHARS - 1)}…`
-      : condition;
+  const text = truncateEnd(condition, MAX_GOAL_LABEL_CHARS, "…");
   const checks = goal?.iterations ?? 0;
   return checks > 0 ? `goal: ${text} (${checks})` : `goal: ${text}`;
 }
@@ -448,9 +446,5 @@ function summarizeArtifacts(
 
 function artifactSummaryLabel(artifact: UIArtifact): string {
   const label = artifact.title.trim() || artifact.kind;
-  const compact = label.replace(/\s+/g, " ").trim();
-  if (compact.length <= 28) {
-    return compact;
-  }
-  return `${compact.slice(0, 25)}...`;
+  return truncateEnd(label.replace(/\s+/g, " ").trim(), 28);
 }

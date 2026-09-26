@@ -17,7 +17,7 @@ import type {
   SwarmDashboardSnapshotPayload,
 } from "../protocol/types.js";
 import { formatTokenCount } from "../utils/modelContext.js";
-import { expandTabs } from "../utils/text.js";
+import { expandTabs, truncateEnd } from "../utils/text.js";
 
 type TaskKind = "command" | "agent";
 
@@ -988,11 +988,7 @@ function formatRuntime(
 }
 
 function truncate(value: string, limit: number): string {
-  const flattened = value.replace(/\s+/g, " ").trim();
-  if (flattened.length <= limit) {
-    return flattened;
-  }
-  return `${flattened.slice(0, limit - 3)}...`;
+  return truncateEnd(value.replace(/\s+/g, " ").trim(), limit);
 }
 
 function basename(value: string): string {

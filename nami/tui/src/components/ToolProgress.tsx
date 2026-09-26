@@ -2,7 +2,7 @@ import React, { type FC } from "react";
 import { Box, Spinner, Text } from "silvery";
 import type { UIToolCall } from "../hooks/useEvents.js";
 import { formatSubagentType } from "../utils/subagentLabels.js";
-import { expandTabs } from "../utils/text.js";
+import { expandTabs, truncateEnd } from "../utils/text.js";
 import FileDiffPreview from "./FileDiffPreview.js";
 import MarkdownText from "./MarkdownText.js";
 import MessageRow from "./MessageRow.js";
@@ -28,7 +28,7 @@ function summarizeInput(name: string, raw: string): string {
   } catch {
     // Not JSON: show the raw input below.
   }
-  return raw.length > 60 ? raw.slice(0, 57) + "..." : raw;
+  return truncateEnd(raw, 60);
 }
 
 // Tool input is model output, so a field can hold any JSON type. Only
@@ -607,10 +607,7 @@ function summarizeOutput(raw: string, truncated?: boolean): string {
   const lines = trimmed.split("\n");
   const clippedLines = lines.slice(0, MAX_SUMMARIZED_OUTPUT_LINES);
   const clipped = clippedLines.join("\n");
-  const shortened =
-    clipped.length > MAX_SUMMARIZED_OUTPUT_CHARS
-      ? `${clipped.slice(0, MAX_SUMMARIZED_OUTPUT_CHARS - 3)}...`
-      : clipped;
+  const shortened = truncateEnd(clipped, MAX_SUMMARIZED_OUTPUT_CHARS);
 
   if (
     lines.length > clippedLines.length ||

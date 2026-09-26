@@ -29,6 +29,29 @@ export function withoutLastCharacter(value: string): string {
   return value.slice(0, previousGraphemeOffset(value, value.length));
 }
 
+// Shortens text to at most maxLength UTF-16 units, ellipsis included,
+// cutting only between characters so no surrogate pair or cluster is split.
+export function truncateEnd(
+  value: string,
+  maxLength: number,
+  ellipsis = "...",
+): string {
+  if (value.length <= maxLength) {
+    return value;
+  }
+
+  const budget = Math.max(0, maxLength - ellipsis.length);
+  let cut = 0;
+  for (const { index, segment } of graphemeSegmenter.segment(value)) {
+    const end = index + segment.length;
+    if (end > budget) {
+      break;
+    }
+    cut = end;
+  }
+  return `${value.slice(0, cut)}${ellipsis}`;
+}
+
 const TAB_STOP_COLUMNS = 4;
 
 // Columns a tab takes when it starts at `column`.
