@@ -57,7 +57,7 @@ func handleModelSlashCommand(cmd *slashCommandContext) error {
 	}
 
 	if strings.EqualFold(selected.Model, "default") {
-		configuredChoice, err := configuredModelChoice(cmd.cfg.Model)
+		configuredChoice, err := configuredModelChoice(cmd.cfg)
 		if err != nil {
 			return emitTextResponse(cmd.bridge, err.Error())
 		}
@@ -224,24 +224,31 @@ func normalizeModelSlashInput(input string) (string, error) {
 	return compact, nil
 }
 
-func configuredModelChoice(raw string) (modelSelectionChoice, error) {
-	provider, model := config.ParseModel(strings.TrimSpace(raw))
-	provider = normalizeProvider(provider)
-	if strings.TrimSpace(model) == "" {
-		model = strings.TrimSpace(provider)
-		provider = ""
-	}
-	if strings.TrimSpace(model) == "" {
+// configuredModelChoice is the model the configuration selects. The config
+// keeps the provider in its own field, so a bare model takes that provider
+// rather than whichever default a missing prefix would otherwise imply.
+func configuredModelChoice(cfg config.Config) (modelSelectionChoice, error) {
+	selection := config.ParseModelSelection(cfg.Model, "")
+	if selection.ModelID == "" {
 		return modelSelectionChoice{}, fmt.Errorf("default model is not configured")
 	}
-	return modelSelectionChoice{Model: model, Provider: provider}, nil
+	provider := selection.ProviderID
+	if provider == "" {
+		provider = strings.TrimSpace(cfg.Provider)
+	}
+	return modelSelectionChoice{Model: selection.ModelID, Provider: provider}, nil
 }
 
+// resolveSelectedModelChoice picks the provider for a model the user chose: an
+// explicit provider/model prefix wins, then the provider the picker attached,
+// and only then the provider inferred from the model name or the session's
+// current one. The hint is tested before normalizeProvider, which turns an
+// empty provider into anthropic and would otherwise hide the fallback.
 func resolveSelectedModelChoice(selectedModel string, providerHint string, currentProvider string) (string, string) {
 	if provider, model := config.ParseModel(strings.TrimSpace(selectedModel)); strings.TrimSpace(provider) != "" {
 		return normalizeProvider(provider), strings.TrimSpace(model)
 	}
-	if provider := normalizeProvider(strings.TrimSpace(providerHint)); provider != "" {
+	if provider := strings.TrimSpace(providerHint); provider != "" {
 		return provider, strings.TrimSpace(selectedModel)
 	}
 	return resolveModelSelection(selectedModel, currentProvider)
