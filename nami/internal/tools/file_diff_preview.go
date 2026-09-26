@@ -150,11 +150,15 @@ func buildFileDiffPreview(oldContent, newContent string) (string, int, int) {
 	changedNew := newLines[prefix : len(newLines)-suffix]
 	insertions := len(changedNew)
 	deletions := len(changedOld)
+	if insertions+deletions == 0 {
+		return "", 0, 0
+	}
 
 	previewLines := make([]string, 0, min(maxDiffPreviewLines, insertions+deletions+1))
 	if prefix > 0 {
 		previewLines = append(previewLines, "@@")
 	}
+	markerLines := len(previewLines)
 	for _, line := range changedOld {
 		if len(previewLines) >= maxDiffPreviewLines {
 			break
@@ -167,7 +171,7 @@ func buildFileDiffPreview(oldContent, newContent string) (string, int, int) {
 		}
 		previewLines = append(previewLines, "+"+line)
 	}
-	if insertions+deletions > len(previewLines) {
+	if shown := len(previewLines) - markerLines; insertions+deletions > shown {
 		previewLines = append(previewLines[:maxDiffPreviewLines-1], "...")
 	}
 
