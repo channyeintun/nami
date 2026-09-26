@@ -100,6 +100,7 @@ func (t *MultiReplaceStringInFileTool) Execute(ctx context.Context, input ToolIn
 	delegate := NewFileEditTool()
 	results := make([]string, 0, len(replacements))
 	changedFiles := make([]string, 0, len(replacements))
+	editedFiles := make([]string, 0, len(replacements))
 	encounteredError := false
 
 	for index, raw := range replacements {
@@ -114,7 +115,9 @@ func (t *MultiReplaceStringInFileTool) Execute(ctx context.Context, input ToolIn
 			return ToolOutput{}, fmt.Errorf("multi_replace_string_in_file replacement %d must be an object", index)
 		}
 
-		result, err := delegate.Execute(ctx, ToolInput{
+		// Diagnostics run once below for every edited file: each run is a
+		// whole-module build.
+		result, err := delegate.replace(ctx, ToolInput{
 			Name:   delegate.Name(),
 			Params: params,
 		})
@@ -129,6 +132,8 @@ func (t *MultiReplaceStringInFileTool) Execute(ctx context.Context, input ToolIn
 		}
 		if result.IsError {
 			encounteredError = true
+		} else {
+			editedFiles = append(editedFiles, result.FilePath)
 		}
 	}
 
@@ -149,5 +154,6 @@ func (t *MultiReplaceStringInFileTool) Execute(ctx context.Context, input ToolIn
 			}
 			return ""
 		}(),
+		Diagnostics: runPostEditDiagnostics(ctx, editedFiles),
 	}, nil
 }

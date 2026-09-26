@@ -123,6 +123,17 @@ func (t *FileEditTool) Validate(input ToolInput) error {
 }
 
 func (t *FileEditTool) Execute(ctx context.Context, input ToolInput) (ToolOutput, error) {
+	output, err := t.replace(ctx, input)
+	if err != nil || output.IsError {
+		return output, err
+	}
+	output.Diagnostics = runPostEditDiagnostics(ctx, []string{output.FilePath})
+	return output, nil
+}
+
+// replace makes the edit without running post-edit diagnostics, so a caller
+// that makes several edits can run them once for all of them.
+func (t *FileEditTool) replace(ctx context.Context, input ToolInput) (ToolOutput, error) {
 	select {
 	case <-ctx.Done():
 		return ToolOutput{}, ctx.Err()
@@ -197,15 +208,13 @@ func (t *FileEditTool) Execute(ctx context.Context, input ToolInput) (ToolOutput
 	invalidateFileReadState(filePath)
 
 	preview, insertions, deletions := buildFileDiffPreview(content, strings.ReplaceAll(updatedContent, "\r\n", "\n"))
-	diagnostics := runPostEditDiagnostics(ctx, []string{filePath})
 
 	return ToolOutput{
-		Output:      fmt.Sprintf("Edited file successfully: %s (%d replacement%s)", filePath, replacements, pluralSuffix(replacements)),
-		FilePath:    filePath,
-		Preview:     preview,
-		Insertions:  insertions,
-		Deletions:   deletions,
-		Diagnostics: diagnostics,
+		Output:     fmt.Sprintf("Edited file successfully: %s (%d replacement%s)", filePath, replacements, pluralSuffix(replacements)),
+		FilePath:   filePath,
+		Preview:    preview,
+		Insertions: insertions,
+		Deletions:  deletions,
 	}, nil
 }
 
