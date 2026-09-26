@@ -194,21 +194,37 @@
     function Add-ToUserPath {
         param([string]$PathEntry)
 
-        $currentPath = [Environment]::GetEnvironmentVariable("Path", "User")
-        $normalizedEntry = $PathEntry.TrimEnd('\')
-        if ([string]::IsNullOrWhiteSpace($currentPath)) {
-            [Environment]::SetEnvironmentVariable("Path", $PathEntry, "User")
-            return
+        # Work on the raw registry value. GetEnvironmentVariable expands %VAR%
+        # references and SetEnvironmentVariable stores the result as REG_SZ,
+        # which would turn entries such as
+        # %USERPROFILE%\AppData\Local\Microsoft\WindowsApps into fixed paths.
+        $environmentKey = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Environment', $true)
+        if (-not $environmentKey) {
+            throw "Could not open HKEY_CURRENT_USER\Environment to add $PathEntry to your PATH"
         }
-
-        $entries = $currentPath.Split(';', [System.StringSplitOptions]::RemoveEmptyEntries)
-        foreach ($entry in $entries) {
-            if ($entry.TrimEnd('\') -ieq $normalizedEntry) {
-                return
+        try {
+            $currentPath = $environmentKey.GetValue('Path', '', [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
+            $normalizedEntry = $PathEntry.TrimEnd('\')
+            $entries = $currentPath.Split(';', [System.StringSplitOptions]::RemoveEmptyEntries)
+            foreach ($entry in $entries) {
+                if ([Environment]::ExpandEnvironmentVariables($entry).TrimEnd('\') -ieq $normalizedEntry) {
+                    return
+                }
             }
+
+            $newPath = if ([string]::IsNullOrWhiteSpace($currentPath)) { $PathEntry } else { "$PathEntry;$currentPath" }
+            $environmentKey.SetValue('Path', $newPath, [Microsoft.Win32.RegistryValueKind]::ExpandString)
+        } finally {
+            $environmentKey.Close()
         }
 
-        [Environment]::SetEnvironmentVariable("Path", "$PathEntry;$currentPath", "User")
+        # Explorer and other running programs reread the environment only when
+        # a WM_SETTINGCHANGE message says it changed, and a registry write
+        # sends none. [Environment]::SetEnvironmentVariable sends one after
+        # every call, even one that removes a variable that does not exist and
+        # so changes nothing else.
+        $unusedName = "NAMI_INSTALL_" + [System.Guid]::NewGuid().ToString("N")
+        [Environment]::SetEnvironmentVariable($unusedName, $null, "User")
     }
 
     function Add-ToCurrentProcessPath {
