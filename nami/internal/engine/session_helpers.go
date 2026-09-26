@@ -317,6 +317,13 @@ func (s *compactionSummarizer) SummarizeWithPrompt(ctx context.Context, messages
 			s.lastSummaryMode = compact.SummaryModeFresh
 			return compact.NormalizeSummary(summary), nil
 		}
+		if err != nil {
+			// The user chose the local model, and falling back to the main one
+			// is billed, so say why it happened.
+			if emitErr := s.bridge.EmitNotice(fmt.Sprintf("Local model compaction failed, using the main model instead: %v", err)); emitErr != nil {
+				return "", emitErr
+			}
+		}
 	}
 
 	if summary, err := s.summarizeWithCacheSafeRequest(ctx, messages, prompt); err == nil {
