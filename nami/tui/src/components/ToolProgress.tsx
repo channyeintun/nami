@@ -2,6 +2,7 @@ import React, { type FC } from "react";
 import { Box, Spinner, Text } from "silvery";
 import type { UIToolCall } from "../hooks/useEvents.js";
 import { formatSubagentType } from "../utils/subagentLabels.js";
+import { expandTabs } from "../utils/text.js";
 import FileDiffPreview from "./FileDiffPreview.js";
 import MarkdownText from "./MarkdownText.js";
 import MessageRow from "./MessageRow.js";
@@ -362,7 +363,7 @@ function renderError(toolCall: UIToolCall) {
 
   return (
     <Text color="$error">
-      {summarizeOutput(toolCall.error ?? "Tool failed")}
+      {expandTabs(summarizeOutput(toolCall.error ?? "Tool failed"))}
     </Text>
   );
 }
@@ -434,7 +435,7 @@ function renderSuccess(toolCall: UIToolCall) {
 }
 
 function renderFileMutationError(toolCall: UIToolCall) {
-  const summary = summarizeOutput(toolCall.error ?? "Tool failed");
+  const summary = expandTabs(summarizeOutput(toolCall.error ?? "Tool failed"));
   const kindLabel = toolCall.errorKind
     ? toolCall.errorKind.replaceAll("_", " ")
     : null;

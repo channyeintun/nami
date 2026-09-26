@@ -1,5 +1,6 @@
 import React, { type ComponentProps, type FC } from "react";
 import { Box, Text } from "silvery";
+import { expandTabs } from "../utils/text.js";
 
 interface PreservedTextProps {
   text: string;
@@ -12,7 +13,7 @@ const PreservedText: FC<PreservedTextProps> = ({
   color,
   bold,
 }) => {
-  const lines = text.replace(/\r\n/g, "\n").split("\n");
+  const lines = expandTabs(text.replace(/\r\n/g, "\n")).split("\n");
 
   return (
     <Box flexDirection="column" width="100%" minWidth={0}>

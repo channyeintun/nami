@@ -17,6 +17,7 @@ import type {
   SwarmDashboardSnapshotPayload,
 } from "../protocol/types.js";
 import { formatTokenCount } from "../utils/modelContext.js";
+import { expandTabs } from "../utils/text.js";
 
 type TaskKind = "command" | "agent";
 
@@ -534,7 +535,9 @@ const CommandDetail: FC<{
           paddingX={1}
           overflow="scroll"
         >
-          <Text wrap="wrap">{detail.output?.trim() || "No retained output available."}</Text>
+          <Text wrap="wrap">
+            {expandTabs(detail.output?.trim() || "No retained output available.")}
+          </Text>
         </Box>
       </Box>
     </Box>
@@ -650,7 +653,9 @@ const AgentDetail: FC<{
           paddingX={1}
           overflow="scroll"
         >
-          <Text wrap="wrap">{detail.summary?.trim() || "No summary available."}</Text>
+          <Text wrap="wrap">
+            {expandTabs(detail.summary?.trim() || "No summary available.")}
+          </Text>
         </Box>
       </Box>
     </Box>
