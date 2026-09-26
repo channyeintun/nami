@@ -866,6 +866,29 @@ func trackModelStream(
 	}, nil
 }
 
+// accountedClient charges every call it streams to the session's cost
+// tracker. Side calls such as the goal check and title generation read their
+// stream without recording usage, so their cost would otherwise never reach
+// the total the user sees.
+type accountedClient struct {
+	api.LLMClient
+	bridge  *ipc.Bridge
+	tracker *costpkg.Tracker
+}
+
+// newAccountedClient wraps client, keeping a nil client nil so callers that
+// read nil as "no model" still do.
+func newAccountedClient(client api.LLMClient, bridge *ipc.Bridge, tracker *costpkg.Tracker) api.LLMClient {
+	if api.IsNilLLMClient(client) {
+		return nil
+	}
+	return accountedClient{LLMClient: client, bridge: bridge, tracker: tracker}
+}
+
+func (c accountedClient) Stream(ctx context.Context, req api.ModelRequest) (iter.Seq2[api.ModelEvent, error], error) {
+	return trackModelStream(ctx, c.bridge, c.tracker, c.LLMClient, req)
+}
+
 func mergeUsage(current api.Usage, next api.Usage) api.Usage {
 	current.InputTokens += next.InputTokens
 	current.OutputTokens += next.OutputTokens

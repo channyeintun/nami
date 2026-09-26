@@ -27,13 +27,15 @@ type scriptedTurn struct {
 }
 
 // scriptedClient plays back main-loop turns in order. Requests without tools
-// are side calls (compaction, session memory, goal checks) and get a fixed
-// summary, so they never consume the script.
+// are side calls (compaction, goal checks, titles) and get a fixed summary,
+// so they never consume the script.
 type scriptedClient struct {
-	mu       sync.Mutex
-	turns    []scriptedTurn
-	caps     api.ModelCapabilities
-	requests []api.ModelRequest
+	mu    sync.Mutex
+	turns []scriptedTurn
+	caps  api.ModelCapabilities
+	// sideUsage is the usage every side call reports.
+	sideUsage api.Usage
+	requests  []api.ModelRequest
 }
 
 func (c *scriptedClient) ModelID() string                     { return "scripted-model" }
@@ -42,6 +44,7 @@ func (c *scriptedClient) Capabilities() api.ModelCapabilities { return c.caps }
 func (c *scriptedClient) Stream(_ context.Context, req api.ModelRequest) (iter.Seq2[api.ModelEvent, error], error) {
 	c.mu.Lock()
 	turn := scriptedTurn{text: "summary of earlier work"}
+	usage := c.sideUsage
 	if len(req.Tools) > 0 {
 		c.requests = append(c.requests, req)
 		if len(c.turns) == 0 {
@@ -50,6 +53,7 @@ func (c *scriptedClient) Stream(_ context.Context, req api.ModelRequest) (iter.S
 		}
 		turn = c.turns[0]
 		c.turns = c.turns[1:]
+		usage = api.Usage{}
 	}
 	c.mu.Unlock()
 
@@ -61,6 +65,9 @@ func (c *scriptedClient) Stream(_ context.Context, req api.ModelRequest) (iter.S
 			if !yield(api.ModelEvent{Type: api.ModelEventToolCall, ToolCall: &call}, nil) {
 				return
 			}
+		}
+		if usage != (api.Usage{}) && !yield(api.ModelEvent{Type: api.ModelEventUsage, Usage: &usage}, nil) {
+			return
 		}
 		stopReason := "end_turn"
 		if len(turn.toolCalls) > 0 {

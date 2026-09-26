@@ -451,7 +451,7 @@ func (t *userTurnContext) maybeGenerateSessionTitle() {
 	titleMessages := api.DeepCopyMessages(t.state.messages)
 	go func() {
 		modelRouter := localmodel.NewRouter(titleClient)
-		title := session.GenerateTitle(modelRouter, titleClient, titleMessages)
+		title := session.GenerateTitle(modelRouter, newAccountedClient(titleClient, t.deps.bridge, t.deps.tracker), titleMessages)
 		if title != "" {
 			_ = t.deps.sessionStore.UpdateMetadata(titleSessionID, func(existing session.Metadata) session.Metadata {
 				existing.Title = title
@@ -515,7 +515,8 @@ func (t *userTurnContext) newQueryDeps(planner *agent.Planner) agent.QueryDeps {
 			if err != nil || decision.Continue {
 				return decision, err
 			}
-			return evaluateSessionGoal(callCtx, t.deps.bridge, goalStoreFor(t.state.sessionDir), t.state.client, stopReq)
+			judge := newAccountedClient(t.state.client, t.deps.bridge, t.deps.tracker)
+			return evaluateSessionGoal(callCtx, t.deps.bridge, goalStoreFor(t.state.sessionDir), judge, stopReq)
 		},
 		ApplyResultBudget: func(current []api.Message) []api.Message {
 			return current

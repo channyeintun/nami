@@ -103,3 +103,57 @@ func TestModelCallsRecordTheLatestUsageReport(t *testing.T) {
 		})
 	}
 }
+
+// The goal check and the session title are model calls like any other; their
+// usage has to reach the session's cost.
+func TestSideCallsAreCharged(t *testing.T) {
+	sideUsage := api.Usage{InputTokens: 700, OutputTokens: 30}
+	newClient := func() *scriptedClient {
+		return &scriptedClient{
+			caps:      api.ModelCapabilities{SupportsToolUse: true, MaxContextWindow: 200_000, MaxOutputTokens: 8_000},
+			turns:     []scriptedTurn{{text: "All done."}},
+			sideUsage: sideUsage,
+		}
+	}
+	charged := func(tracker *costpkg.Tracker) bool {
+		got := tracker.Snapshot()
+		return got.TotalInputTokens == sideUsage.InputTokens && got.TotalOutputTokens == sideUsage.OutputTokens
+	}
+
+	t.Run("goal check", func(t *testing.T) {
+		h := newTurnHarness(t, newClient(), echoTool{})
+		if _, err := goalStoreFor(h.state.sessionDir).Set("the tests pass"); err != nil {
+			t.Fatalf("Set: %v", err)
+		}
+		if err := handleUserInputMessage(t.Context(), ipc.UserInputPayload{Text: "finish up"}, h.deps, h.state); err != nil {
+			t.Fatalf("handleUserInputMessage: %v", err)
+		}
+		if !charged(h.deps.tracker) {
+			t.Fatalf("tracker = %+v, want the goal check's %+v", h.deps.tracker.Snapshot(), sideUsage)
+		}
+	})
+
+	t.Run("session title", func(t *testing.T) {
+		h := newTurnHarness(t, newClient(), echoTool{})
+		h.state.titleGenerated = false
+		if err := handleUserInputMessage(t.Context(), ipc.UserInputPayload{Text: "fix the login bug"}, h.deps, h.state); err != nil {
+			t.Fatalf("handleUserInputMessage: %v", err)
+		}
+		// The title is generated in the background; its metadata write is the
+		// last thing it does before reporting.
+		deadline := time.Now().Add(5 * time.Second)
+		for {
+			meta, err := h.deps.sessionStore.LoadMetadata(h.state.sessionID)
+			if err == nil && meta.Title != "" {
+				break
+			}
+			if time.Now().After(deadline) {
+				t.Fatal("the session title was never generated")
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+		if !charged(h.deps.tracker) {
+			t.Fatalf("tracker = %+v, want the title call's %+v", h.deps.tracker.Snapshot(), sideUsage)
+		}
+	})
+}
