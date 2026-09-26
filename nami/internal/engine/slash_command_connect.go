@@ -153,11 +153,17 @@ func promptConnectProviderSelection(cmd *slashCommandContext, snapshot commandsp
 	if err != nil {
 		return "", err
 	}
-	providerID := normalizeProvider(strings.TrimSpace(selected.Provider))
-	if providerID == "" {
-		providerID = normalizeProvider(strings.TrimSpace(selected.Model))
+	return connectProviderFromChoice(selected), nil
+}
+
+// connectProviderFromChoice names the provider a picker choice selects, or ""
+// when the picker was cancelled. It must not use normalizeProvider, which
+// turns the empty choice of a cancelled picker into "anthropic".
+func connectProviderFromChoice(choice modelSelectionChoice) string {
+	if provider := strings.TrimSpace(choice.Provider); provider != "" {
+		return provider
 	}
-	return providerID, nil
+	return strings.TrimSpace(choice.Model)
 }
 
 func buildConnectProviderSelectionOptions(snapshot commandspkg.ProviderSnapshot, currentProvider string) []ipc.ModelSelectionOptionPayload {
