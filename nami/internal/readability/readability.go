@@ -429,8 +429,8 @@ func webFetchInitializeReadabilityScore(node *xhtml.Node) float64 {
 }
 
 func webFetchClassWeight(node *xhtml.Node) float64 {
-	marker := strings.TrimSpace(webFetchAttr(node, "class"))
-	id := strings.TrimSpace(webFetchAttr(node, "id"))
+	marker := strings.ToLower(strings.TrimSpace(webFetchAttr(node, "class")))
+	id := strings.ToLower(strings.TrimSpace(webFetchAttr(node, "id")))
 	weight := 0.0
 	if marker != "" {
 		if webFetchReadabilityNegativePattern.MatchString(marker) {

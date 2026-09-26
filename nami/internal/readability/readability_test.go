@@ -3,6 +3,8 @@ package readability
 import (
 	"strings"
 	"testing"
+
+	xhtml "golang.org/x/net/html"
 )
 
 func TestExtractHTMLForMarkdownKeepsArticleAndDropsChrome(t *testing.T) {
@@ -97,6 +99,32 @@ func TestExtractHTMLForMarkdownCollapsesSingleCellTables(t *testing.T) {
 				t.Fatalf("cell content %q was lost: %q", tc.want, got)
 			}
 		})
+	}
+}
+
+// Class and id hints are matched without regard to case, like every other
+// hint in this package. Matching them as written gave ASP.NET-style markup
+// such as id="MainContent" or class="Sidebar" no weight at all.
+func TestClassWeightIgnoresCase(t *testing.T) {
+	cases := []struct {
+		attrs string
+		want  float64
+	}{
+		{`class="MainContent"`, 25},
+		{`id="ArticleBody"`, 25},
+		{`class="Sidebar-Widget"`, -25},
+		{`id="FOOTER"`, -25},
+		{`class="plain"`, 0},
+	}
+	for _, tc := range cases {
+		document, err := xhtml.Parse(strings.NewReader(`<html><body><div ` + tc.attrs + `>x</div></body></html>`))
+		if err != nil {
+			t.Fatalf("parse: %v", err)
+		}
+		div := findFirstWebFetchElement(document, "div")
+		if got := webFetchClassWeight(div); got != tc.want {
+			t.Errorf("webFetchClassWeight(%s) = %v, want %v", tc.attrs, got, tc.want)
+		}
 	}
 }
 
