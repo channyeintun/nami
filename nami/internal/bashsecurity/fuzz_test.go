@@ -130,7 +130,7 @@ func FuzzValidateBashSecurity(f *testing.F) {
 		mustBlock := strings.Contains(command, "`") ||
 			strings.Contains(command, "<(") ||
 			strings.Contains(command, ">(") ||
-			strings.Contains(command, "IFS=")
+			assignsIFS(command)
 		if mustBlock && !blocked {
 			t.Fatalf("command with an injection construct was allowed: %q", command)
 		}
@@ -139,4 +139,27 @@ func FuzzValidateBashSecurity(f *testing.F) {
 			t.Fatalf("command is both blocked and read-only: %q", command)
 		}
 	})
+}
+
+// assignsIFS reports whether the command assigns the IFS variable as its own
+// word. A "IFS=" glued to the end of another word, such as "0IFS=", is not an
+// assignment — a shell variable name cannot begin with a digit or continue an
+// existing word — so it does not corrupt word splitting and is not blocked. The
+// oracle must not demand blocking for it, or it would over-claim the contract.
+func assignsIFS(command string) bool {
+	for offset := 0; ; {
+		index := strings.Index(command[offset:], "IFS=")
+		if index < 0 {
+			return false
+		}
+		absolute := offset + index
+		if absolute == 0 || !isWordByte(command[absolute-1]) {
+			return true
+		}
+		offset = absolute + 1
+	}
+}
+
+func isWordByte(b byte) bool {
+	return b == '_' || b >= '0' && b <= '9' || b >= 'A' && b <= 'Z' || b >= 'a' && b <= 'z'
 }
