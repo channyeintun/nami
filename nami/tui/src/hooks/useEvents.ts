@@ -50,7 +50,9 @@ import type {
   ToolProgressPayload,
   ToolResultPayload,
   ToolStartPayload,
-  WorkflowProgressPayload,
+  WorkflowAgentPayload,
+  WorkflowPhasePayload,
+  WorkflowUpdatedPayload,
 } from "../protocol/types.js";
 
 const BEL = "\u0007";
@@ -323,20 +325,61 @@ export interface UIGoalCondition {
   iterations: number;
 }
 
-export interface UIWorkflowNode {
-  id: string;
-  label: string;
-  status: string;
+export interface UIWorkflowPhase {
+  title: string;
+  detail: string;
+  /** The nested workflow this phase belongs to, "" for the top-level script. */
+  workflow: string;
 }
 
-/** Live state of the workflow graph run in the current turn. */
+export interface UIWorkflowAgent {
+  index: number;
+  label: string;
+  phase: string;
+  workflow: string;
+  status: string;
+  error: string;
+  durationMs: number;
+  agentId: string;
+  transcriptPath: string;
+  outputPreview: string;
+}
+
+/** The latest snapshot the engine sent of one background workflow run. */
 export interface UIWorkflowRun {
   runId: string;
+  name: string;
   description: string;
-  completed: number;
-  total: number;
-  /** In first-seen order, which is the graph's own topological order. */
-  nodes: UIWorkflowNode[];
+  /** running | completed | failed | stopped */
+  status: string;
+  currentPhase: string;
+  /** In first-seen order, starting from the phases the script's meta lists. */
+  phases: UIWorkflowPhase[];
+  /** At most 200: the running ones, then the failed ones, then the latest. */
+  agents: UIWorkflowAgent[];
+  agentCount: number;
+  running: number;
+  queued: number;
+  succeeded: number;
+  cached: number;
+  failed: number;
+  stopped: number;
+  /** The last 20 lines the script logged. */
+  logs: string[];
+  resultPreview: string;
+  error: string;
+  warnings: string[];
+  scriptPath: string;
+  journalPath: string;
+  resultPath: string;
+  startedAt?: string;
+  completedAt?: string;
+  durationMs: number;
+  totalCostUsd: number;
+  inputTokens: number;
+  outputTokens: number;
+  /** When this client last heard about the run; orders the finished ones. */
+  updatedAt: string;
 }
 
 export interface EngineUIState {
@@ -346,7 +389,18 @@ export interface EngineUIState {
   progressEntries: UIProgressEntry[];
   goalProgress: UIGoalProgress | null;
   goalCondition: UIGoalCondition | null;
-  workflowRun: UIWorkflowRun | null;
+  /**
+   * Workflow runs of this session, running first, then the latest. A run
+   * goes on in the background across turns, so unlike goalProgress this is
+   * never reset when a turn ends; only a change of session clears it.
+   */
+  workflowRuns: UIWorkflowRun[];
+  /**
+   * Runs whose end already has a transcript notice. Loading a conversation
+   * clears workflowRuns and the engine re-announces the session's runs, so
+   * a run's notice is tracked here, never cleared, to keep it to one.
+   */
+  workflowNoticeRunIds: string[];
   transcript: UITranscriptEntry[];
   liveAssistantMessageId: string | null;
   liveAssistantBlocks: UIAssistantBlock[];
@@ -404,6 +458,8 @@ export interface EngineUIState {
 }
 
 const MAX_RETAINED_BACKGROUND_AGENTS = 24;
+const MAX_RETAINED_WORKFLOW_RUNS = 24;
+const WORKFLOW_NOTICE_LABEL = "Workflow";
 
 function emptyCostState(): EngineUIState["cost"] {
   return {
@@ -426,7 +482,8 @@ const initialState = (model: string, mode: string): EngineUIState => ({
   progressEntries: [],
   goalProgress: null,
   goalCondition: null,
-  workflowRun: null,
+  workflowRuns: [],
+  workflowNoticeRunIds: [],
   transcript: [],
   liveAssistantMessageId: null,
   liveAssistantBlocks: [],
@@ -676,41 +733,57 @@ export function useEvents(initialModel: string, initialMode: string) {
         });
         break;
       }
-      case "workflow_progress": {
-        const p = event.payload as WorkflowProgressPayload;
-        const nodeId = stringOrEmpty(p.node_id);
+      case "workflow_updated": {
+        const nextRun = workflowRunFromPayload(
+          event.payload as WorkflowUpdatedPayload | undefined,
+          new Date().toISOString(),
+        );
+        if (!nextRun) {
+          break;
+        }
+
         setUIState((s) => {
-          // A new run replaces the previous one outright. Two graphs never run
-          // at once — the workflow tool is serial — so merging them would only
-          // ever interleave nodes from a finished run into a live one.
-          const previous =
-            s.workflowRun && s.workflowRun.runId === p.run_id
-              ? s.workflowRun.nodes
-              : [];
-          const seen = previous.some((node) => node.id === nodeId);
-          const nodes = seen
-            ? previous.map((node) =>
-                node.id === nodeId
-                  ? { ...node, status: stringOrEmpty(p.status) }
-                  : node,
+          const previousRun = s.workflowRuns.find(
+            (run) => run.runId === nextRun.runId,
+          );
+          // A settled run never changes again. A late running snapshot
+          // arriving after the terminal one would otherwise bring back a
+          // progress line for a run that is over.
+          if (previousRun && isTerminalWorkflowStatus(previousRun.status)) {
+            return s;
+          }
+
+          // The prompt that tells the model about a finished run is never
+          // shown, so this notice is what marks the end of the run in the
+          // transcript. It reads like the one a replay builds from that
+          // prompt, so a resumed session shows the same line.
+          const settled = isTerminalWorkflowStatus(nextRun.status);
+          const noticeMessage =
+            settled && !s.workflowNoticeRunIds.includes(nextRun.runId)
+            ? createSystemMessage(
+                describeWorkflowOutcome(nextRun),
+                taskNotificationTone(nextRun.status),
+                WORKFLOW_NOTICE_LABEL,
               )
-            : [
-                ...previous,
-                {
-                  id: nodeId,
-                  label: stringOrEmpty(p.node_label),
-                  status: stringOrEmpty(p.status),
-                },
-              ];
+            : null;
+
           return {
             ...s,
-            workflowRun: {
-              runId: stringOrEmpty(p.run_id),
-              description: stringOrEmpty(p.description),
-              completed: Math.max(0, Math.round(p.completed ?? 0)),
-              total: Math.max(0, Math.round(p.total ?? 0)),
-              nodes,
-            },
+            workflowRuns: upsertWorkflowRun(s.workflowRuns, nextRun),
+            workflowNoticeRunIds: noticeMessage
+              ? [...s.workflowNoticeRunIds, nextRun.runId].slice(
+                  -MAX_WORKFLOW_NOTICE_RUN_IDS,
+                )
+              : s.workflowNoticeRunIds,
+            messages: noticeMessage
+              ? [...s.messages, noticeMessage]
+              : s.messages,
+            transcript: noticeMessage
+              ? appendTranscriptEntry(s.transcript, {
+                  id: noticeMessage.id,
+                  kind: "message",
+                })
+              : s.transcript,
           };
         });
         break;
@@ -741,7 +814,6 @@ export function useEvents(initialModel: string, initialMode: string) {
               toolCalls: settleUnfinishedToolCalls(s.toolCalls, "Cancelled"),
               activeTurnStatus: "idle",
               goalProgress: null,
-              workflowRun: null,
               pendingPermission: null,
               submittingArtifactReviewRequestId: null,
               isStreaming: false,
@@ -784,7 +856,6 @@ export function useEvents(initialModel: string, initialMode: string) {
             liveAssistantBlocks: [],
             activeTurnStatus: "idle",
             goalProgress: null,
-            workflowRun: null,
             submittingArtifactReviewRequestId: null,
             isStreaming: false,
             toolCallsBeforeModelTurn: null,
@@ -1192,7 +1263,7 @@ export function useEvents(initialModel: string, initialMode: string) {
           messages: normalizeHydratedMessages(p.messages),
           progressEntries: normalizeHydratedProgressEntries(p.progress),
           goalProgress: null,
-          workflowRun: null,
+          workflowRuns: [],
           goalCondition: null,
           toolCalls: normalizeHydratedToolCalls(p.tool_calls),
           transcript: normalizeHydratedTranscriptEntries(p.transcript),
@@ -1514,7 +1585,7 @@ export function useEvents(initialModel: string, initialMode: string) {
           messages: [],
           progressEntries: [],
           goalProgress: null,
-          workflowRun: null,
+          workflowRuns: [],
           goalCondition: null,
           transcript: [],
           liveAssistantMessageId: null,
@@ -1560,6 +1631,7 @@ export function useEvents(initialModel: string, initialMode: string) {
             s.transcript.some((entry) => !noticeIds.has(entry.id)) ||
             s.liveAssistantBlocks.length > 0 ||
             s.toolCalls.length > 0 ||
+            s.workflowRuns.length > 0 ||
             s.artifacts.length > 0 ||
             s.pendingArtifactReview !== null ||
             s.pendingAskUserQuestion !== null ||
@@ -1585,7 +1657,7 @@ export function useEvents(initialModel: string, initialMode: string) {
               messages: [],
               progressEntries: [],
               goalProgress: null,
-              workflowRun: null,
+              workflowRuns: [],
               goalCondition: null,
               transcript: [],
               liveAssistantMessageId: null,
@@ -1717,7 +1789,6 @@ export function useEvents(initialModel: string, initialMode: string) {
       liveAssistantBlocks: [],
       activeTurnStatus: "idle",
       goalProgress: null,
-      workflowRun: null,
       isStreaming: false,
       toolCallsBeforeModelTurn: null,
       compact: null,
@@ -1763,7 +1834,7 @@ export function useEvents(initialModel: string, initialMode: string) {
       isStreaming: false,
       compact: null,
       goalProgress: null,
-      workflowRun: null,
+      workflowRuns: settleRunningWorkflowRuns(s.workflowRuns, "Engine stopped"),
       pendingPermission: null,
       pendingAskUserQuestion: null,
       pendingArtifactReview: null,
@@ -1835,7 +1906,6 @@ export function useEvents(initialModel: string, initialMode: string) {
       error: null,
       statusLine: null,
       goalProgress: null,
-      workflowRun: null,
       isStreaming: true,
       toolCallsBeforeModelTurn: s.toolCalls.length,
     }));
@@ -3571,6 +3641,196 @@ function summarizeNoticeWithDetail(prefix: string, detail: string): string {
   return `${prefix} ${truncated}`;
 }
 
+/**
+ * Reads a workflow_updated payload. Each one is a full snapshot of the run,
+ * so it replaces what was known rather than merging into it. Returns null
+ * for a payload with no run id, which could not be matched to a run.
+ */
+export function workflowRunFromPayload(
+  payload: WorkflowUpdatedPayload | undefined,
+  receivedAt: string,
+): UIWorkflowRun | null {
+  const runId = stringOrEmpty(payload?.run_id);
+  if (!payload || !runId) {
+    return null;
+  }
+
+  return {
+    runId,
+    name: stringOrEmpty(payload.name),
+    description: stringOrEmpty(payload.description),
+    status: stringOrEmpty(payload.status).toLowerCase() || "running",
+    currentPhase: stringOrEmpty(payload.current_phase),
+    phases: Array.isArray(payload.phases)
+      ? payload.phases.flatMap(workflowPhaseFromPayload)
+      : [],
+    agents: Array.isArray(payload.agents)
+      ? payload.agents.flatMap(workflowAgentFromPayload)
+      : [],
+    agentCount: countOrZero(payload.agent_count),
+    running: countOrZero(payload.running),
+    queued: countOrZero(payload.queued),
+    succeeded: countOrZero(payload.succeeded),
+    cached: countOrZero(payload.cached),
+    failed: countOrZero(payload.failed),
+    stopped: countOrZero(payload.stopped),
+    logs: stringList(payload.logs),
+    resultPreview: stringOrEmpty(payload.result_preview),
+    error: stringOrEmpty(payload.error),
+    warnings: stringList(payload.warnings),
+    scriptPath: stringOrEmpty(payload.script_path),
+    journalPath: stringOrEmpty(payload.journal_path),
+    resultPath: stringOrEmpty(payload.result_path),
+    startedAt: stringOrUndefined(payload.started_at),
+    completedAt: stringOrUndefined(payload.completed_at),
+    durationMs: countOrZero(payload.duration_ms),
+    totalCostUsd: numberOrZero(payload.total_cost_usd),
+    inputTokens: countOrZero(payload.input_tokens),
+    outputTokens: countOrZero(payload.output_tokens),
+    updatedAt: receivedAt,
+  };
+}
+
+function workflowPhaseFromPayload(
+  phase: WorkflowPhasePayload | undefined,
+): UIWorkflowPhase[] {
+  const title = stringOrEmpty(phase?.title);
+  if (!title) {
+    return [];
+  }
+  return [
+    {
+      title,
+      detail: stringOrEmpty(phase?.detail),
+      workflow: stringOrEmpty(phase?.workflow),
+    },
+  ];
+}
+
+function workflowAgentFromPayload(
+  agent: WorkflowAgentPayload | undefined,
+): UIWorkflowAgent[] {
+  if (!agent || typeof agent !== "object") {
+    return [];
+  }
+  return [
+    {
+      index: countOrZero(agent.index),
+      label: stringOrEmpty(agent.label),
+      phase: stringOrEmpty(agent.phase),
+      workflow: stringOrEmpty(agent.workflow),
+      status: stringOrEmpty(agent.status).toLowerCase() || "queued",
+      error: stringOrEmpty(agent.error),
+      durationMs: countOrZero(agent.duration_ms),
+      agentId: stringOrEmpty(agent.agent_id),
+      transcriptPath: stringOrEmpty(agent.transcript_path),
+      outputPreview: stringOrEmpty(agent.output_preview),
+    },
+  ];
+}
+
+/** Whether a run has settled: it will send no further updates. */
+function isTerminalWorkflowStatus(status: string): boolean {
+  return status === "completed" || status === "failed" || status === "stopped";
+}
+
+/**
+ * One sentence on how a run ended. It is both the summary of the
+ * task-notification the model receives and the transcript notice, so a
+ * replayed session shows what the live one did.
+ */
+export function describeWorkflowOutcome(
+  run: Pick<
+    UIWorkflowRun,
+    "runId" | "name" | "status" | "agentCount" | "failed" | "error"
+  >,
+): string {
+  const subject = `Workflow "${run.name || run.runId}"`;
+  switch (run.status) {
+    case "completed": {
+      const agents = `${run.agentCount} agent${run.agentCount === 1 ? "" : "s"}`;
+      return `${subject} completed: ${agents} (${run.failed} failed).`;
+    }
+    case "failed": {
+      const reason = firstLine(run.error);
+      return reason ? `${subject} failed: ${reason}` : `${subject} failed.`;
+    }
+    case "stopped":
+      return `${subject} stopped.`;
+    default:
+      return `${subject} is ${run.status}.`;
+  }
+}
+
+function upsertWorkflowRun(
+  runs: UIWorkflowRun[],
+  nextRun: UIWorkflowRun,
+): UIWorkflowRun[] {
+  const remaining = runs.filter((run) => run.runId !== nextRun.runId);
+  return [nextRun, ...remaining]
+    .sort(compareWorkflowRuns)
+    .slice(0, MAX_RETAINED_WORKFLOW_RUNS);
+}
+
+/** Running first, then the run heard from most recently. */
+// The notice record only has to outlast a run being re-announced; old ids
+// can go once there are this many.
+const MAX_WORKFLOW_NOTICE_RUN_IDS = 500;
+
+// Running runs come first, newest first by when they started; finished
+// ones follow, newest first by when they finished. Neither key changes while
+// a run reports progress, so the progress lines and the /workflows cursor do
+// not jump between runs on every update.
+function compareWorkflowRuns(
+  left: UIWorkflowRun,
+  right: UIWorkflowRun,
+): number {
+  const leftRunning = left.status === "running" ? 0 : 1;
+  const rightRunning = right.status === "running" ? 0 : 1;
+  if (leftRunning !== rightRunning) {
+    return leftRunning - rightRunning;
+  }
+  const leftKey =
+    leftRunning === 0
+      ? (left.startedAt ?? "")
+      : (left.completedAt ?? left.updatedAt);
+  const rightKey =
+    rightRunning === 0
+      ? (right.startedAt ?? "")
+      : (right.completedAt ?? right.updatedAt);
+  return (
+    rightKey.localeCompare(leftKey) || left.runId.localeCompare(right.runId)
+  );
+}
+
+// A dead engine sends no terminal snapshot, so its runs would otherwise stay
+// "running" on screen for good.
+function settleRunningWorkflowRuns(
+  runs: UIWorkflowRun[],
+  reason: string,
+): UIWorkflowRun[] {
+  return runs.map((run) =>
+    isTerminalWorkflowStatus(run.status)
+      ? run
+      : { ...run, status: "stopped", error: run.error || reason },
+  );
+}
+
+function firstLine(value: string): string {
+  return value.split("\n", 1)[0]?.trim() ?? "";
+}
+
+function stringList(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.map(stringOrEmpty).filter((entry) => entry.length > 0);
+}
+
+function countOrZero(value: unknown): number {
+  return Math.max(0, Math.round(numberOrZero(value)));
+}
+
 interface ParsedTaskNotification {
   summary: string;
   tone: UISystemMessage["tone"];
@@ -3587,12 +3847,15 @@ function parseTaskNotificationMessage(
 
   const status = extractTaskNotificationTag(normalized, "status");
   const summary = extractTaskNotificationTag(normalized, "summary");
+  // Only a workflow notification carries a run id; the others report a
+  // background command.
+  const isWorkflow = extractTaskNotificationTag(normalized, "run-id") !== null;
   return {
     summary:
       decodeTaskNotificationText(summary?.trim() || "") ||
       fallbackTaskNotificationSummary(status?.trim() || "updated"),
     tone: taskNotificationTone(status?.trim() || "updated"),
-    label: "Background Command",
+    label: isWorkflow ? WORKFLOW_NOTICE_LABEL : "Background Command",
   };
 }
 

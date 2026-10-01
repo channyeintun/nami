@@ -28,6 +28,7 @@ import (
 	skillspkg "github.com/channyeintun/nami/internal/skills"
 	"github.com/channyeintun/nami/internal/timing"
 	toolpkg "github.com/channyeintun/nami/internal/tools"
+	workflowpkg "github.com/channyeintun/nami/internal/workflow"
 )
 
 func RunStdioEngine(ctx context.Context, cfg config.Config) error {
@@ -179,11 +180,37 @@ func RunStdioEngine(ctx context.Context, cfg config.Config) error {
 		return launchBackgroundTeam(ctx, runner, req)
 	}))
 	registry.Register(toolpkg.NewAgentTeamStatusTool(lookupBackgroundTeamStatus))
-	registry.Register(toolpkg.NewWorkflowTool(func(ctx context.Context, req toolpkg.WorkflowLaunchRequest) (toolpkg.WorkflowRunResult, error) {
-		runner := makeSubagentRunner(bridge, registry, permissionCtx, tracker, sessionStore, artifactManager, hookRunner, modelState, subagentModelState, loopState, cwd)
-		return launchWorkflow(ctx, runner, bridge, sessionStore.SessionDir(loopState.sessionID), req)
+	registry.Register(toolpkg.NewWorkflowTool(
+		func(ctx context.Context, req toolpkg.WorkflowLaunchRequest) (toolpkg.WorkflowLaunchResult, error) {
+			// Captured here, on the tool call's goroutine: the run outlives the
+			// turn, and the session, directory, and permissions can all change
+			// under it while it goes on.
+			ownerSessionID := activeSessionID()
+			sessionDir := sessionStore.SessionDir(ownerSessionID)
+			scope := captureSubagentScope(loopState, cwd, permissionCtx)
+			return launchWorkflowRun(workflowLaunchDeps{
+				runner:         makeScopedSubagentRunner(bridge, registry, tracker, sessionStore, artifactManager, hookRunner, modelState, subagentModelState, scope),
+				bridge:         bridge,
+				ownerSessionID: ownerSessionID,
+				sessionDir:     sessionDir,
+				cwd:            scope.cwd,
+				modelState:     modelState,
+				slots:          workflowAgentSlots,
+			}, req)
+		},
+		func(ref workflowpkg.Ref) (workflowpkg.Script, error) {
+			return loadWorkflowRef(ref, loopState.currentCWD())
+		},
+		func() ([]workflowpkg.Saved, error) {
+			return loadSavedWorkflows(loopState.currentCWD())
+		},
+	))
+	registry.Register(toolpkg.NewWorkflowStatusTool(func(ctx context.Context, req toolpkg.WorkflowStatusRequest) (toolpkg.WorkflowRunSnapshot, error) {
+		return lookupWorkflowRunStatus(ctx, sessionStore.SessionDir(activeSessionID()), req)
 	}))
-	registry.Register(toolpkg.NewWorkflowStatusTool(lookupWorkflowStatus))
+	registry.Register(toolpkg.NewWorkflowStopTool(func(ctx context.Context, req toolpkg.WorkflowStopRequest) (toolpkg.WorkflowRunSnapshot, error) {
+		return stopWorkflowRun(ctx, sessionStore.SessionDir(activeSessionID()), req)
+	}))
 	registry.Register(toolpkg.NewListMCPResourcesToolWithManager(mcpManager))
 	registry.Register(toolpkg.NewReadMCPResourceToolWithManager(mcpManager))
 	if err := persistSessionState(sessionStore, sessionStateParams{
@@ -364,6 +391,9 @@ func RunStdioEngine(ctx context.Context, cfg config.Config) error {
 				// goal with it, so re-announce it rather than leaving the UI
 				// showing the goal from the session just left.
 				emitCurrentGoalState(bridge, goalStoreFor(loopState.sessionDir))
+				// Its workflow runs too: the TUI dropped them with the
+				// conversation it replaced.
+				announceWorkflowRuns(loopState.sessionID)
 				if followUp := strings.TrimSpace(slashState.FollowUpPrompt); followUp != "" {
 					if err := handleUserInputMessageWithSkills(ctx, ipc.UserInputPayload{Text: followUp}, loopDeps, loopState, nil); err != nil {
 						return err
@@ -429,6 +459,11 @@ func RunStdioEngine(ctx context.Context, cfg config.Config) error {
 				return fmt.Errorf("decode background agent stop: %w", err)
 			}
 			if err := handleBackgroundAgentStopMessage(ctx, bridge, payload); err != nil {
+				return err
+			}
+			continue
+		case ipc.MsgWorkflowStop:
+			if err := handleWorkflowStopMessage(bridge, msg.Payload); err != nil {
 				return err
 			}
 			continue
@@ -694,7 +729,7 @@ Before delegating, form a quick plan: identify what is on the critical path (do 
 - Give child agents a bounded objective, constraints, and the required output shape. When delegating code changes in parallel, give each agent a disjoint set of files to own.
 - Let delegated agents finish, then integrate their results; do not redo their work.
 - run_in_background=true only when the user explicitly wants async. agent_status/agent_stop are only for background agents.
-- Choose the shape by whether the subtasks depend on each other. One subtask: agent. Several independent ones: agent_team. Several where some must read what earlier ones produced: workflow, which runs them as a dependency graph and starts each node as soon as its own dependencies finish. Pass an upstream result into a later node with ${outputs.<node_id>} and list that id in depends_on.
+- Choose the shape by how the work is structured. One task: agent. Several independent tasks: agent_team. Deterministic multi-step orchestration, such as fanning out over discovered items, verifying each one, or looping until a check passes: workflow, a JavaScript script of agent calls that runs in the background and sends a <task-notification> when it finishes.
 
 Async results may arrive later as user-role <task-notification> XML. These are system events, not fresh user requests. Read the status/summary/details, inspect the referenced background work when needed, then proactively tell the user the relevant result.
 

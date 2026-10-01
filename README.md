@@ -295,6 +295,7 @@ Notes:
 | `/status`             | Show current session and MCP server status     |
 | `/sessions`           | List recent sessions                           |
 | `/tasks`              | Open the background tasks dialog               |
+| `/workflows`          | Show workflow runs and saved workflows         |
 | `/debug [subcommand]` | Enable debug logging or inspect its path       |
 | `/goal [condition]`   | Keep working until a condition holds           |
 | `/help`               | Show slash-command help                        |
@@ -378,8 +379,9 @@ Nami exposes a broad local-tool runtime, including:
 | `agent`                          | Spawn bounded child agents                            |
 | `agent_status` / `agent_stop`    | Inspect or stop background child agents               |
 | `agent_team`                     | Launch a team of independent child agents             |
-| `workflow`                       | Run a dependency graph of child agents                |
-| `workflow_status`                | Inspect a running or finished workflow                |
+| `workflow`                       | Run a JavaScript workflow of child agents in the background |
+| `workflow_status`                | Inspect a workflow run, or wait for it to finish      |
+| `workflow_stop`                  | Stop a running workflow                               |
 | `bash`                           | Run shell commands                                    |
 | `think`                          | Scratchpad reasoning with no side effects             |
 | `read_file` / `file_write`       | Read or overwrite files                               |
@@ -410,48 +412,135 @@ The `agent` tool supports three bounded modes:
 
 ### Dynamic workflows
 
-`agent_team` is for tasks that are genuinely independent. When the work has
-structure — some tasks must read what earlier ones produced — the `workflow` tool
-runs it as a dependency graph instead.
+`agent` delegates one task and `agent_team` several independent ones. When the
+orchestration itself should be deterministic code — fan out over items a step
+discovered, verify each finding on its own, loop until a check passes — the
+`workflow` tool runs a JavaScript script that drives child agents:
 
-Each node is one delegated task, and `depends_on` names the nodes whose results it
-needs. A node starts the moment its own dependencies finish, so independent branches
-never wait on each other. That is the point: with fixed phases, every branch waits
-for the slowest member of the current phase, and one slow node stalls work that
-never needed its result.
-
-```json
-{
-  "description": "audit and fix the auth package",
-  "nodes": [
-    { "id": "map", "description": "map auth", "prompt": "List every entry point in internal/auth." },
-    { "id": "audit", "description": "audit auth", "depends_on": ["map"],
-      "prompt": "Audit these for missing authorization checks:\n${outputs.map}" },
-    { "id": "fix", "description": "fix findings", "depends_on": ["audit"],
-      "prompt": "Fix each confirmed finding:\n${outputs.audit}" },
-    { "id": "verify", "description": "verify", "depends_on": ["fix"],
-      "prompt": "Run the full test suite and report failures.",
-      "agent": { "subagent_type": "verification" } }
-  ]
+```js
+export const meta = {
+  name: 'verify-bugs',
+  description: 'Find likely bugs per package and verify each one',
+  phases: [{ title: 'Find' }, { title: 'Verify' }],
 }
+
+const BUGS = {
+  type: 'object',
+  properties: {
+    bugs: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: { file: { type: 'string' }, claim: { type: 'string' } },
+        required: ['file', 'claim'],
+      },
+    },
+  },
+  required: ['bugs'],
+}
+const VERDICT = {
+  type: 'object',
+  properties: { real: { type: 'boolean' }, reason: { type: 'string' } },
+  required: ['real', 'reason'],
+}
+
+const perPackage = await pipeline(args.packages,
+  pkg => agent(`List likely bugs in ${pkg}.`,
+    { label: `find ${pkg}`, phase: 'Find', schema: BUGS, agentType: 'Explore' }),
+  found => parallel((found?.bugs ?? []).map(bug => () =>
+    agent(`Try to refute: ${bug.claim} (${bug.file}). Answer real=false if unsure.`,
+      { label: `verify ${bug.file}`, phase: 'Verify', schema: VERDICT })
+      .then(verdict => (verdict?.real ? bug : null)))))
+
+return perPackage.flat().filter(Boolean)
 ```
 
-`${outputs.<node_id>}` interpolates a dependency's result into a later prompt. The
-graph is validated before anything runs: ids must be unique, dependencies must
-exist, there must be no cycle, and every `${outputs.x}` must name a declared
-dependency — so a malformed graph comes back as a message to fix rather than a run
-that starts and then falls over.
+Run with `args` set to `{"packages": ["internal/auth", "internal/api"]}`, this finds
+bugs in both packages at once and starts verifying each package's findings as soon as
+that package's search is done. You rarely write the call yourself: describe the
+orchestration and the agent writes the script, or save a script (below) and ask for
+it by name. The script comes inline (`script`), from a `.js` file (`script_path`), or
+from a saved workflow (`name`).
 
-A failed node skips only what depended on it, and other branches finish; set
-`"on_node_failure": "abort"` to stop the whole run instead. Progress appears live in
-the TUI as a per-node strip.
+A script begins with a pure-literal `meta` export (no variables, calls, or
+interpolation), and its body runs inside an async function, so it can `await` at top
+level and `return` a JSON value. Plain JavaScript only; TypeScript annotations fail
+to parse. The hooks:
 
-Every run writes a journal. Passing a previous run's id back as `resume_from_run_id`
-replays what has not changed and re-runs only what has. A node's journal key is
-derived from its dependencies' keys, so it commits to everything that node's result
-actually depended on: editing one branch re-runs that branch and leaves the rest
-cached, and a node that interpolates an upstream result re-runs when that result
-changes even though its own prompt is untouched.
+- `agent(prompt, opts?)` runs a child agent and resolves to its final text, or, with
+  `opts.schema`, to an object validated against that JSON Schema, whose root must be
+  `{type: 'object', properties: {...}}`. A failed agent resolves to `null`, so filter
+  results with `.filter(Boolean)`. Options: `label`, `phase`, `schema`, `model`
+  (`provider/model`; defaults to the `/subagent` model), `effort`, and `agentType`
+  (`general-purpose` by default, `Explore`, or `verification`).
+- `pipeline(items, ...stages)` runs each item through every stage on its own, with no
+  barrier between stages; a stage gets `(previous, item, index)`. Prefer it for
+  multi-stage work.
+- `parallel(tasks)` runs functions concurrently and waits for all of them. Use it when
+  the next step needs every result at once.
+- `phase(title)` and `log(message)` (or `console.log`) report progress.
+- `workflow(name | {scriptPath}, args)` runs a saved workflow or a script file inline
+  and returns its value, one level deep.
+- `args` is the tool's `args` input, verbatim.
+- `budget` is `{total, spent(), remaining()}` in output tokens, from the tool's
+  `token_budget`.
+
+A `parallel()` task or `pipeline()` stage that throws turns its item into `null`, and
+a throw anywhere else fails the run. A run whose script returns counts as completed
+even if some of its agents failed: the script decides what failure means.
+
+**Background runs.** The `workflow` call returns a `run_id` at once, and the run goes
+on in the background, across turns. A line above the input shows each running
+workflow: its current phase, finished and total agents, what is running, how many
+failed, and its latest log line. When a run completes or fails, the agent receives a
+`<task-notification>` with a preview of the result or the error as soon as the
+conversation is idle, and can call `workflow_status` for the full snapshot;
+`workflow_stop` stops a run. `/workflows` opens a dialog with the session's runs
+(phases, agents grouped by phase, logs, the result, and the files on disk) and the
+saved workflows; press `x` on a running run to stop it. Each run keeps its script, journal, and `result.json` under
+`sessions/<session-id>/workflows/<run_id>/` beside the config file.
+
+**Resume.** Every successful `agent()` result is journaled. Pass a previous `run_id`
+from the same session as `resume_from_run_id`, with the same script or an edited
+one: unchanged calls replay instantly and failed ones run again. A changed call runs
+live, and so does every call made after a re-run agent has returned, because that
+agent may have changed files the later steps check.
+
+**Sandbox and limits.**
+
+- Scripts have no filesystem, network, process, or timer access. Every side effect
+  goes through a child agent and Nami's permission rules.
+- Child agents cannot ask for approval, so in the default permission mode they cannot
+  edit files or run commands that are not read-only. Launching a workflow goes through
+  the same approval as other execute-level tools.
+- Children see the project instructions but nothing of the conversation: put
+  everything a step needs, earlier results included, in its prompt.
+- `Date.now()`, `Math.random()`, and `new Date()` without arguments throw, because
+  resume matches calls by their prompts. Pass timestamps or seeds in through `args`.
+- `isolation: 'worktree'` is not supported: worktree agents change the working
+  directory of the whole engine, which is unsafe while a run goes on beside the
+  conversation. For the same reason, while a workflow runs Nami refuses
+  `enter_worktree`, `exit_worktree`, worktree child agents, and a `/resume` into
+  a session in another directory.
+- A run makes at most 1000 `agent()` calls, and `parallel()` and `pipeline()` take at
+  most 4096 items. Agents beyond the concurrency limit (the CPU count minus two,
+  between 2 and 16) queue, and all runs share that one limit. With `token_budget`
+  set, once the run's agents have spent it `agent()` throws and agents still
+  queued resolve to `null` without starting; agents already running finish.
+
+#### Saved workflows
+
+Save a script as `.nami/workflows/<name>.js` at the root of the current git
+repository to share it with the project, or as `workflows/<name>.js` in Nami's
+config directory (see [Configuration](#configuration)) to keep it for yourself. The
+name is the file name without `.js`, matched without regard to case, and a project
+workflow overrides a user one with the same name. Saved workflows are listed in the
+`workflow` tool's description with their `whenToUse` (or `description`), so the
+agent knows when to reach for them. It runs one with the `name` input, and a script
+can call one with `workflow('<name>', args)`.
+
+The design and the reasoning behind it are in
+[Orchestration and Goal Loops](./docs/orchestration-and-goal-loops.md).
 
 ## Configuration
 
@@ -463,7 +552,7 @@ Config file, in your platform's user config directory:
 | macOS    | `~/Library/Application Support/nami/config.json`                      |
 | Windows  | `%APPDATA%\nami\config.json`                                          |
 
-Sessions, debug logs, and user-global skills live in the same `nami` directory.
+Sessions, debug logs, user-global skills, and user [saved workflows](#saved-workflows) (in `workflows/`) live in the same `nami` directory.
 
 Example:
 

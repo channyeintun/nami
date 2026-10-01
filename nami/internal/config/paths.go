@@ -40,6 +40,12 @@ func GlobalSkillDir() string {
 	return filepath.Join(ConfigDir(), "agents")
 }
 
+// GlobalWorkflowDir holds the user's saved workflow scripts, which every
+// project can run by name.
+func GlobalWorkflowDir() string {
+	return filepath.Join(ConfigDir(), "workflows")
+}
+
 func ArtifactsDir() string {
 	return filepath.Join(ConfigDir(), "artifacts")
 }

@@ -189,6 +189,15 @@ func slashCommandSpecs() []slashCommandSpec {
 			},
 			Handler: slashCommandHandlerFunc(handleTasksSlashCommand),
 		},
+		{
+			Descriptor: commandspkg.Descriptor{
+				Name:           "workflows",
+				Description:    "Show workflow runs and saved workflows",
+				Usage:          "/workflows",
+				TakesArguments: false,
+			},
+			Handler: slashCommandHandlerFunc(handleWorkflowsSlashCommand),
+		},
 	}
 }
 

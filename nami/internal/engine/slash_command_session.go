@@ -94,6 +94,10 @@ func handleResumeSlashCommand(cmd *slashCommandContext) error {
 		targetID = targetIDs
 	}
 
+	if reason := workflowsBlockDirectoryMove(cmd.store, targetID); reason != "" {
+		return emitTextResponse(cmd.bridge, reason)
+	}
+
 	// Saved before the restore reads the target, which may be this session.
 	if err := persistSessionBeingLeft(cmd); err != nil {
 		return err

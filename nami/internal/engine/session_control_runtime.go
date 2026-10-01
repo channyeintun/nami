@@ -52,6 +52,9 @@ func (r *sessionControlRuntime) SwitchMode(mode string) (string, error) {
 }
 
 func (r *sessionControlRuntime) EnterWorktree(ctx context.Context, req toolpkg.WorktreeControlRequest) (toolpkg.WorktreeControlResult, error) {
+	if hasRunningWorkflows() {
+		return toolpkg.WorktreeControlResult{}, errWorkflowsHoldTheDirectory
+	}
 	repoRoot, err := r.repoRoot(ctx)
 	if err != nil {
 		return toolpkg.WorktreeControlResult{}, err
@@ -75,6 +78,9 @@ func (r *sessionControlRuntime) EnterWorktree(ctx context.Context, req toolpkg.W
 }
 
 func (r *sessionControlRuntime) ExitWorktree(ctx context.Context) (toolpkg.WorktreeControlResult, error) {
+	if hasRunningWorkflows() {
+		return toolpkg.WorktreeControlResult{}, errWorkflowsHoldTheDirectory
+	}
 	repoRoot, err := r.repoRoot(ctx)
 	if err != nil {
 		return toolpkg.WorktreeControlResult{}, err

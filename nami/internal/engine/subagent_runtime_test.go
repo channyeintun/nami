@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -13,8 +14,10 @@ import (
 	"github.com/channyeintun/nami/internal/agent"
 	"github.com/channyeintun/nami/internal/api"
 	artifactspkg "github.com/channyeintun/nami/internal/artifacts"
+	costpkg "github.com/channyeintun/nami/internal/cost"
 	"github.com/channyeintun/nami/internal/hooks"
 	"github.com/channyeintun/nami/internal/permissions"
+	"github.com/channyeintun/nami/internal/session"
 	"github.com/channyeintun/nami/internal/swarm"
 	toolpkg "github.com/channyeintun/nami/internal/tools"
 )
@@ -299,5 +302,238 @@ func TestChildSummaryNotesAStopAtALimit(t *testing.T) {
 		if !strings.HasPrefix(got, "Looked at lexer.go so far.") || !strings.Contains(got, "stopped at a limit ("+reason+")") {
 			t.Errorf("summary after %s = %q, want the reply and a note about the limit", reason, got)
 		}
+	}
+}
+
+// A workflow step's prompt is built by a program and holds the data the step
+// works on. Archiving it behind a brief, as a long prompt from the parent
+// model is, would hand the child a summary of its input instead of the input.
+func TestChildTaskMessageDeliversAWorkflowPromptWhole(t *testing.T) {
+	longPrompt := strings.Repeat("Check finding 17 in /repo/internal/parser.go. ", 60)
+	if utf8.RuneCountInString(longPrompt) <= delegationPromptArchiveLimit {
+		t.Fatalf("the prompt has %d characters, too few to be archived", utf8.RuneCountInString(longPrompt))
+	}
+
+	workflowDir := filepath.Join(t.TempDir(), "workflow-child")
+	got := childTaskMessage(nil, workflowDir, toolpkg.AgentRunRequest{Description: "verify", Prompt: longPrompt, ForWorkflow: true}, exploreSubagentType)
+	if got != strings.TrimSpace(longPrompt) {
+		t.Fatalf("the workflow prompt reached the child as %d characters of %q..., want it whole", utf8.RuneCountInString(got), got[:80])
+	}
+	if _, err := os.Stat(filepath.Join(workflowDir, delegationPromptArchiveName)); !os.IsNotExist(err) {
+		t.Fatalf("the workflow prompt was archived (stat error %v)", err)
+	}
+
+	delegatedDir := filepath.Join(t.TempDir(), "delegated-child")
+	brief := childTaskMessage(nil, delegatedDir, toolpkg.AgentRunRequest{Description: "verify", Prompt: longPrompt}, exploreSubagentType)
+	if !strings.HasPrefix(brief, "Delegated task brief:") {
+		t.Fatalf("a long delegated prompt was not briefed: %q", brief)
+	}
+	if _, err := os.Stat(filepath.Join(delegatedDir, delegationPromptArchiveName)); err != nil {
+		t.Fatalf("a long delegated prompt was not archived: %v", err)
+	}
+}
+
+// findingsSchemaJSON is the kind of schema a workflow step returns its result
+// in. An empty findings list is a valid answer.
+const findingsSchemaJSON = `{"type": "object", "properties": {"findings": {"type": "array", "items": {"type": "string"}}}, "required": ["findings"]}`
+
+// structured_output is in no allowlist: an Explore child, or one whose swarm
+// role allows nothing, must still be able to deliver its result.
+func TestExecuteToolCallsForSubagentAdmitsStructuredOutputPastEveryAllowlist(t *testing.T) {
+	tool, err := toolpkg.NewStructuredOutputTool(json.RawMessage(findingsSchemaJSON), nil)
+	if err != nil {
+		t.Fatalf("NewStructuredOutputTool: %v", err)
+	}
+	registry := toolpkg.NewEmptyRegistry()
+	registry.Register(tool)
+	allowsNothing := &subagentRolePolicy{role: swarm.ResolvedRole{Name: "reader"}, allowedToolNames: map[string]struct{}{}}
+
+	results, err := executeToolCallsForSubagent(
+		t.Context(), exploreSubagentType, allowsNothing, registry, permissions.NewContext(), nil, nil,
+		"child-session", t.TempDir(), nil, 0,
+		[]api.ToolCall{{ID: "call-result", Name: toolpkg.StructuredOutputToolName, Input: `{"findings": []}`}},
+	)
+	if err != nil {
+		t.Fatalf("executeToolCallsForSubagent: %v", err)
+	}
+	if len(results) != 1 || results[0].IsError {
+		t.Fatalf("results = %+v, want the call to succeed", results)
+	}
+	if value, ok := tool.Value(); !ok || string(value) != `{"findings":[]}` {
+		t.Fatalf("recorded value = %s (recorded %v), want the empty findings list", value, ok)
+	}
+}
+
+// A schema child that tries to finish without calling structured_output is
+// sent back to call it, but only twice, and never against a cancel.
+func TestStructuredOutputNudgerIsBounded(t *testing.T) {
+	newTool := func() *toolpkg.StructuredOutputTool {
+		tool, err := toolpkg.NewStructuredOutputTool(json.RawMessage(findingsSchemaJSON), nil)
+		if err != nil {
+			t.Fatalf("NewStructuredOutputTool: %v", err)
+		}
+		return tool
+	}
+
+	nudger := &structuredOutputNudger{tool: newTool()}
+	for attempt := 1; attempt <= maxStructuredOutputNudges; attempt++ {
+		decision, nudge := nudger.beforeStop("end_turn")
+		if !nudge || !decision.Continue || !strings.Contains(decision.FollowUpMessage, "structured_output") {
+			t.Fatalf("stop %d: nudge = %v, decision = %+v; want a nudge to call structured_output", attempt, nudge, decision)
+		}
+	}
+	if _, nudge := nudger.beforeStop("end_turn"); nudge {
+		t.Fatal("the child was nudged past the limit")
+	}
+
+	if _, nudge := (&structuredOutputNudger{tool: newTool()}).beforeStop("cancelled"); nudge {
+		t.Fatal("a cancelled child was held open")
+	}
+
+	recorded := newTool()
+	if _, err := recorded.Execute(t.Context(), toolpkg.ToolInput{Params: map[string]any{"findings": []any{}}}); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if _, nudge := (&structuredOutputNudger{tool: recorded}).beforeStop("end_turn"); nudge {
+		t.Fatal("a child that delivered its result was nudged")
+	}
+
+	if _, nudge := (&structuredOutputNudger{}).beforeStop("end_turn"); nudge {
+		t.Fatal("a child without an output schema was nudged")
+	}
+}
+
+// A schema child's valid structured_output call is its answer. The child ends
+// there, with no further model turn, completed rather than cancelled, and
+// with the object as its result. The child is nudged once first, for trying
+// to answer in text.
+func TestSchemaChildEndsWithItsStructuredOutput(t *testing.T) {
+	useActiveSession(t, "session-a")
+	model := &childModel{turns: []scriptedTurn{
+		{text: "<final_answer>No findings.</final_answer>"},
+		{toolCalls: []api.ToolCall{{ID: "call-result", Name: toolpkg.StructuredOutputToolName, Input: `{"findings": []}`}}},
+	}}
+	deps := newTestSubagentDeps(t, model, session.NewStore(t.TempDir()), costpkg.NewTracker())
+	scope := subagentScope{ownerSessionID: "session-a", cwd: t.TempDir(), permissionCtx: permissions.NewContext()}
+
+	result, err := deps.scopedRunner(scope)(t.Context(), toolpkg.AgentRunRequest{
+		Description:  "find bugs",
+		Prompt:       "List the bugs in the parser.",
+		SubagentType: exploreSubagentType,
+		OutputSchema: json.RawMessage(findingsSchemaJSON),
+		ForWorkflow:  true,
+	})
+	if err != nil {
+		t.Fatalf("run child: %v", err)
+	}
+	if result.Status != "completed" {
+		t.Fatalf("status = %q (error %q), want completed", result.Status, result.Error)
+	}
+	if string(result.Structured) != `{"findings":[]}` {
+		t.Fatalf("structured result = %s, want the empty findings list", result.Structured)
+	}
+	requests := model.modelRequests()
+	if len(requests) != 2 {
+		t.Fatalf("the child made %d model calls, want 2: one nudged, one ending in structured_output", len(requests))
+	}
+	first := requests[0]
+	if !slices.ContainsFunc(first.Tools, func(def api.ToolDefinition) bool { return def.Name == toolpkg.StructuredOutputToolName }) {
+		t.Fatalf("the child was not offered structured_output: %v", toolDefinitionNames(first.Tools))
+	}
+	for _, want := range []string{"calling the structured_output tool exactly once", "one step of an automated workflow"} {
+		if !strings.Contains(first.SystemPrompt, want) {
+			t.Errorf("system prompt does not contain %q", want)
+		}
+	}
+}
+
+// A schema child that never calls structured_output has no result to give,
+// even when it answered in text; reporting that text as a success would hand
+// a program prose where it expects an object. The failure still carries the
+// run's transcript and spend, so a workflow can count them against its budget.
+func TestSchemaChildThatNeverCallsStructuredOutputFails(t *testing.T) {
+	useActiveSession(t, "session-a")
+	model := &childModel{turns: []scriptedTurn{
+		{text: "<final_answer>No findings.</final_answer>"},
+		{text: "<final_answer>Still none.</final_answer>"},
+		{text: "<final_answer>None at all.</final_answer>"},
+	}}
+	deps := newTestSubagentDeps(t, model, session.NewStore(t.TempDir()), costpkg.NewTracker())
+	scope := subagentScope{ownerSessionID: "session-a", cwd: t.TempDir(), permissionCtx: permissions.NewContext()}
+
+	result, err := deps.scopedRunner(scope)(t.Context(), toolpkg.AgentRunRequest{
+		Description:  "find bugs",
+		Prompt:       "List the bugs in the parser.",
+		OutputSchema: json.RawMessage(findingsSchemaJSON),
+	})
+	if err != nil {
+		t.Fatalf("run child: %v", err)
+	}
+	if result.Status != "failed" || result.Error != "agent finished without calling structured_output" {
+		t.Fatalf("result = status %q error %q, want the missing structured_output reported as a failure", result.Status, result.Error)
+	}
+	if result.Structured != nil {
+		t.Fatalf("a failed child returned structured output %s", result.Structured)
+	}
+	if result.TranscriptPath == "" || result.OutputTokens == 0 {
+		t.Fatalf("the failure lost its transcript (%q) or spend (%d output tokens)", result.TranscriptPath, result.OutputTokens)
+	}
+	if got := len(model.modelRequests()); got != 1+maxStructuredOutputNudges {
+		t.Fatalf("the child made %d model calls, want %d: the first answer and one per nudge", got, 1+maxStructuredOutputNudges)
+	}
+}
+
+// At a turn or continuation limit the query cannot go on whatever BeforeStop
+// decides. A nudge there would only keep the stop hooks from seeing the
+// child's real stop.
+func TestStructuredOutputNudgerLeavesALimitStopToTheStopHooks(t *testing.T) {
+	tool, err := toolpkg.NewStructuredOutputTool(json.RawMessage(findingsSchemaJSON), nil)
+	if err != nil {
+		t.Fatalf("NewStructuredOutputTool: %v", err)
+	}
+	for _, reason := range []string{agent.StopReasonMaxTurns, agent.ContinuationStopBudgetExhausted, agent.ContinuationStopDiminishingReturns} {
+		if _, nudge := (&structuredOutputNudger{tool: tool}).beforeStop(reason); nudge {
+			t.Fatalf("a child stopped at %s was nudged", reason)
+		}
+	}
+}
+
+// Tokens a child spent before it failed were spent all the same. They are
+// charged to the session that owns the child, and they come back with the
+// error so a workflow can count them against its budget.
+func TestAChildThatFailsPartwayIsChargedAndReportsItsSpend(t *testing.T) {
+	store := session.NewStore(t.TempDir())
+	if err := persistSessionState(store, sessionStateParams{SessionID: "session-a", CreatedAt: time.Now(), Mode: agent.ModeFast, Tracker: costpkg.NewTracker()}); err != nil {
+		t.Fatalf("persist session-a: %v", err)
+	}
+	// The owner is not the session shown, so its charge lands in its saved
+	// total, where the test can read it.
+	useActiveSession(t, "session-b")
+	model := &childModel{turns: []scriptedTurn{
+		// An invalid result: the child would retry, but the model fails next.
+		{toolCalls: []api.ToolCall{{ID: "call-result", Name: toolpkg.StructuredOutputToolName, Input: `{"wrong": 1}`}}},
+	}}
+	deps := newTestSubagentDeps(t, model, store, costpkg.NewTracker())
+	scope := subagentScope{ownerSessionID: "session-a", cwd: t.TempDir(), permissionCtx: permissions.NewContext()}
+
+	result, err := deps.scopedRunner(scope)(t.Context(), toolpkg.AgentRunRequest{
+		Description:  "find bugs",
+		Prompt:       "List the bugs in the parser.",
+		SubagentType: exploreSubagentType,
+		OutputSchema: json.RawMessage(findingsSchemaJSON),
+		ForWorkflow:  true,
+	})
+	if err == nil {
+		t.Fatalf("the child succeeded: %+v", result)
+	}
+	if result.OutputTokens != 100 || result.TotalCostUSD <= 0 {
+		t.Fatalf("result = %d output tokens, $%v; want the first turn's spend", result.OutputTokens, result.TotalCostUSD)
+	}
+	owner, loadErr := store.LoadMetadata("session-a")
+	if loadErr != nil {
+		t.Fatalf("LoadMetadata(session-a): %v", loadErr)
+	}
+	if owner.TotalCostUSD != result.TotalCostUSD {
+		t.Fatalf("session-a's saved cost = %v, want the failed child's %v", owner.TotalCostUSD, result.TotalCostUSD)
 	}
 }

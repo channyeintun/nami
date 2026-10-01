@@ -7,14 +7,26 @@ import (
 	"unicode/utf8"
 )
 
+// CompleteSchemaValidator is a tool whose Validate checks its input against
+// the whole of its JSON Schema. ValidateToolCall skips its own schema check
+// for such a tool: that check covers only part of JSON Schema, tuned for
+// nami's own tools, and it rejects input that a user's schema allows, such as
+// an empty required array or a blank required string.
+type CompleteSchemaValidator interface {
+	SemanticValidator
+	ValidatesCompleteSchema() bool
+}
+
 // ValidateToolCall performs schema-backed validation plus any optional
 // tool-specific semantic validation before permission resolution.
 func ValidateToolCall(tool Tool, input ToolInput) error {
 	if tool == nil {
 		return fmt.Errorf("tool is required")
 	}
-	if err := validateRequiredParams(tool.Name(), input.Params, tool.InputSchema()); err != nil {
-		return err
+	if !validatesCompleteSchema(tool) {
+		if err := validateRequiredParams(tool.Name(), input.Params, tool.InputSchema()); err != nil {
+			return err
+		}
 	}
 	if validator, ok := tool.(SemanticValidator); ok {
 		if err := validator.Validate(input); err != nil {
@@ -22,6 +34,11 @@ func ValidateToolCall(tool Tool, input ToolInput) error {
 		}
 	}
 	return nil
+}
+
+func validatesCompleteSchema(tool Tool) bool {
+	validator, ok := tool.(CompleteSchemaValidator)
+	return ok && validator.ValidatesCompleteSchema()
 }
 
 func validateRequiredParams(toolName string, params map[string]any, schema any) error {

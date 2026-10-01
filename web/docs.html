@@ -1149,6 +1149,15 @@ install -m 755 nami-engine "$HOME/.local/bin/nami-engine"</code><button type="bu
                   </tr>
                   <tr>
                     <td class="p-4 border-t border-[#1a1a1a]">
+                      <code>/workflows</code>
+                    </td>
+                    <td class="p-4 border-t border-[#1a1a1a]">
+                      Show workflow runs and saved workflows; press
+                      <code>x</code> on a running run to stop it
+                    </td>
+                  </tr>
+                  <tr>
+                    <td class="p-4 border-t border-[#1a1a1a]">
                       <code>/sessions</code>
                     </td>
                     <td class="p-4 border-t border-[#1a1a1a]">
@@ -1302,7 +1311,8 @@ install -m 755 nami-engine "$HOME/.local/bin/nami-engine"</code><button type="bu
                       workflow
                     </td>
                     <td class="p-4 border-t border-[#1a1a1a]">
-                      Run a dependency graph of child agents
+                      Run a JavaScript workflow of child agents in the
+                      background
                     </td>
                   </tr>
                   <tr>
@@ -1312,7 +1322,17 @@ install -m 755 nami-engine "$HOME/.local/bin/nami-engine"</code><button type="bu
                       workflow_status
                     </td>
                     <td class="p-4 border-t border-[#1a1a1a]">
-                      Inspect a running or finished workflow
+                      Inspect a workflow run, or wait for it to finish
+                    </td>
+                  </tr>
+                  <tr>
+                    <td
+                      class="p-4 border-t border-[#1a1a1a] font-bold text-brand"
+                    >
+                      workflow_stop
+                    </td>
+                    <td class="p-4 border-t border-[#1a1a1a]">
+                      Stop a running workflow
                     </td>
                   </tr>
                   <tr>
@@ -1625,49 +1645,131 @@ install -m 755 nami-engine "$HOME/.local/bin/nami-engine"</code><button type="bu
 
             <h3 class="text-xl font-bold mt-12 mb-4">Dynamic Workflows</h3>
             <p class="text-sm text-gray-400 mb-6 leading-relaxed">
-              <code>agent_team</code> is for tasks that are genuinely
-              independent. When the work has structure &mdash; some tasks must
-              read what earlier ones produced &mdash; the <code>workflow</code>
-              tool runs it as a dependency graph instead. Each node is one
-              delegated task, and <code>depends_on</code> names the nodes whose
-              results it needs.
+              <code>agent</code> delegates one task and <code>agent_team</code>
+              several independent ones. When the orchestration itself should
+              be deterministic code &mdash; fan out over items a step
+              discovered, verify each finding on its own, loop until a check
+              passes &mdash; the <code>workflow</code> tool runs a JavaScript
+              script that drives child agents. The script comes inline, from a
+              <code>.js</code> file, or from a saved workflow by name.
             </p>
+            <pre
+              class="bg-subtle p-6 border border-[#1a1a1a] rounded-md text-sm text-gray-300 overflow-x-auto mb-6"
+            ><code>export const meta = {
+  name: 'verify-bugs',
+  description: 'Find likely bugs per package and verify each one',
+  phases: [{ title: 'Find' }, { title: 'Verify' }],
+}
+
+const BUGS = {
+  type: 'object',
+  properties: {
+    bugs: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: { file: { type: 'string' }, claim: { type: 'string' } },
+        required: ['file', 'claim'],
+      },
+    },
+  },
+  required: ['bugs'],
+}
+const VERDICT = {
+  type: 'object',
+  properties: { real: { type: 'boolean' }, reason: { type: 'string' } },
+  required: ['real', 'reason'],
+}
+
+const perPackage = await pipeline(args.packages,
+  pkg =&gt; agent(`List likely bugs in ${pkg}.`,
+    { label: `find ${pkg}`, phase: 'Find', schema: BUGS, agentType: 'Explore' }),
+  found =&gt; parallel((found?.bugs ?? []).map(bug =&gt; () =&gt;
+    agent(`Try to refute: ${bug.claim} (${bug.file}). Answer real=false if unsure.`,
+      { label: `verify ${bug.file}`, phase: 'Verify', schema: VERDICT })
+      .then(verdict =&gt; (verdict?.real ? bug : null)))))
+
+return perPackage.flat().filter(Boolean)</code></pre>
             <p class="text-sm text-gray-400 mb-6 leading-relaxed">
-              A node starts the moment its own dependencies finish, so
-              independent branches never wait on each other. With fixed phases,
-              every branch waits for the slowest member of the current phase,
-              and one slow node stalls work that never needed its result.
+              A script begins with a pure-literal <code>meta</code> export (no
+              variables, calls, or interpolation), and its body runs inside an
+              async function, so it can <code>await</code> at top level and
+              <code>return</code> a JSON value. Plain JavaScript only;
+              TypeScript annotations fail to parse.
             </p>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
               <div class="p-6 border border-[#1a1a1a] rounded">
-                <strong>Interpolation:</strong>
-                <code>${outputs.&lt;node_id&gt;}</code> passes a dependency&rsquo;s
-                result into a later prompt. The reference must name a declared
-                dependency, so a prompt can never reach a node with an
-                unsubstituted placeholder in it.
+                <strong>agent(prompt, opts):</strong> runs a child agent and
+                resolves to its final text, or, with <code>schema</code>, to an
+                object validated against that JSON Schema. A failed agent
+                resolves to <code>null</code>. Options: <code>label</code>,
+                <code>phase</code>, <code>schema</code>, <code>model</code>,
+                <code>effort</code>, and <code>agentType</code>
+                (<code>general-purpose</code>, <code>Explore</code>, or
+                <code>verification</code>).
               </div>
               <div class="p-6 border border-[#1a1a1a] rounded">
-                <strong>Validation first:</strong> unique ids, dependencies that
-                exist, and no cycles are all checked before anything runs, so a
-                malformed graph returns a message to fix rather than a run that
-                starts and then falls over.
+                <strong>pipeline and parallel:</strong>
+                <code>pipeline(items, ...stages)</code> moves each item to its
+                next stage as soon as its previous stage finishes, so a slow
+                item delays only itself. <code>parallel(tasks)</code> is a
+                barrier, for steps that need every result at once. A task or
+                stage that throws turns its item into <code>null</code>.
               </div>
               <div class="p-6 border border-[#1a1a1a] rounded">
-                <strong>Failure containment:</strong> a failed node skips only
-                what depended on it and other branches finish. Set
-                <code>on_node_failure: "abort"</code> to stop the whole run.
+                <strong>Other hooks:</strong> <code>phase(title)</code> and
+                <code>log(message)</code> report progress;
+                <code>workflow(name, args)</code> runs a saved workflow (or
+                <code>{scriptPath}</code> a script file) inline, one level deep; <code>args</code> is the tool&rsquo;s input,
+                verbatim; <code>budget</code> reports output tokens spent
+                against <code>token_budget</code>.
               </div>
               <div class="p-6 border border-[#1a1a1a] rounded">
-                <strong>Resume:</strong> every run journals its results. Pass a
-                previous <code>run_id</code> as
-                <code>resume_from_run_id</code> to replay what has not changed.
-                A node&rsquo;s key is derived from its dependencies&rsquo; keys, so
-                editing one branch re-runs that branch and leaves the rest cached.
+                <strong>Background runs:</strong> the call returns a
+                <code>run_id</code> at once and the run goes on across turns,
+                with live progress above the input. When it completes or fails,
+                the agent receives a <code>&lt;task-notification&gt;</code>
+                with a preview. <code>workflow_status</code> shows the full
+                snapshot and <code>workflow_stop</code> stops a run.
+              </div>
+              <div class="p-6 border border-[#1a1a1a] rounded">
+                <strong>Resume:</strong> every successful agent result is
+                journaled. Pass a previous <code>run_id</code> from the same
+                session as <code>resume_from_run_id</code>: unchanged calls
+                replay, failed ones retry, and a changed call runs live, as
+                does every call made after a re-run agent has returned, since
+                it may have changed what later steps check.
+              </div>
+              <div class="p-6 border border-[#1a1a1a] rounded">
+                <strong>Sandbox:</strong> no filesystem, network, process, or
+                timer access; every side effect goes through a child agent and
+                Nami&rsquo;s permission rules. Children cannot ask for approval,
+                so in the default mode they cannot edit files.
+                <code>Date.now()</code>, <code>Math.random()</code>, and
+                <code>new Date()</code> without arguments throw, so resume can
+                match calls by their prompts.
+              </div>
+              <div class="p-6 border border-[#1a1a1a] rounded">
+                <strong>Limits:</strong> at most 1000 agent calls per run and
+                4096 items per <code>parallel()</code> or
+                <code>pipeline()</code>. Agents beyond the concurrency limit
+                queue, and all runs share that one limit.
+                <code>isolation: 'worktree'</code> is not supported, because
+                worktree agents move the whole engine&rsquo;s working directory.
+              </div>
+              <div class="p-6 border border-[#1a1a1a] rounded">
+                <strong>Saved workflows:</strong> put scripts in
+                <code>.nami/workflows/&lt;name&gt;.js</code> at the git root or
+                <code>workflows/&lt;name&gt;.js</code> in the config directory;
+                a project workflow overrides a user one with the same name. The
+                agent sees them listed in the tool&rsquo;s description and runs
+                one by <code>name</code>.
               </div>
             </div>
             <p class="text-sm text-gray-400 mt-6 leading-relaxed">
-              Use <code>workflow_status</code> to inspect a run by id. Live
-              per-node progress appears in the TUI while the graph runs.
+              Open <code>/workflows</code> to see the session&rsquo;s runs, with
+              phases, agents, logs, results, and files on disk, alongside the
+              saved workflows. Press <code>x</code> on a running run to stop it.
             </p>
           </section>
 
@@ -1710,7 +1812,8 @@ install -m 755 nami-engine "$HOME/.local/bin/nami-engine"</code><button type="bu
               (or <code>$XDG_CONFIG_HOME/nami/config.json</code>),
               <code>~/Library/Application Support/nami/config.json</code> on
               macOS, <code>%APPDATA%\nami\config.json</code> on Windows.
-              Sessions, debug logs, and user-global skills live in the same
+              Sessions, debug logs, user-global skills, and user saved
+              workflows (in <code>workflows/</code>) live in the same
               <code>nami</code> directory.
             </p>
             <div class="table-wrapper mb-8">

@@ -40,7 +40,8 @@ export type EventType =
   | "background_agent_detail"
   | "background_command_updated"
   | "background_agent_updated"
-  | "workflow_progress"
+  | "workflow_updated"
+  | "workflows_requested"
   | "goal_state_changed"
   | "ready"
   | "error"
@@ -72,7 +73,8 @@ export type ClientMessageType =
   | "background_command_stop"
   | "background_agent_inspect"
   | "background_agent_stop"
-  | "swarm_dashboard_inspect";
+  | "swarm_dashboard_inspect"
+  | "workflow_stop";
 
 export interface ClientMessage {
   type: ClientMessageType;
@@ -124,18 +126,74 @@ export interface GoalStateChangedPayload {
   iterations?: number;
 }
 
-// One node's state transition inside a workflow graph run. Mirrors
-// ipc.WorkflowProgressPayload.
-export interface WorkflowProgressPayload {
+// A full snapshot of one background workflow run, never a delta. Mirrors
+// ipc.WorkflowUpdatedPayload. Sent at most every 250ms while the run is
+// going, and once more, at once, when it settles.
+export interface WorkflowUpdatedPayload {
   run_id: string;
+  name: string;
   description?: string;
-  node_id: string;
-  node_label?: string;
-  status: string;
-  completed: number;
-  total: number;
-  depends_on?: string[];
-  message?: string;
+  status: string; // running | completed | failed | stopped
+  current_phase?: string;
+  phases?: WorkflowPhasePayload[];
+  agents?: WorkflowAgentPayload[]; // capped at 200: running, then failed, then most recent
+  agent_count: number;
+  running: number;
+  queued: number;
+  succeeded: number;
+  cached: number;
+  failed: number;
+  stopped: number;
+  logs?: string[]; // last 20
+  result_preview?: string; // <= 2000 runes
+  error?: string;
+  warnings?: string[];
+  script_path?: string;
+  journal_path?: string;
+  result_path?: string;
+  started_at?: string;
+  completed_at?: string;
+  duration_ms?: number;
+  total_cost_usd?: number;
+  input_tokens?: number;
+  output_tokens?: number;
+}
+
+export interface WorkflowPhasePayload {
+  title: string;
+  detail?: string;
+  workflow?: string; // nested workflow name, "" for top level
+}
+
+export interface WorkflowAgentPayload {
+  index: number;
+  label: string;
+  phase?: string;
+  workflow?: string;
+  status: string; // queued | running | succeeded | cached | failed | stopped
+  error?: string; // <= 300 runes
+  duration_ms?: number;
+  agent_id?: string;
+  transcript_path?: string;
+  output_preview?: string; // <= 300 runes
+}
+
+// The answer to /workflows. Mirrors ipc.WorkflowsRequestedPayload; the runs
+// themselves are already known from workflow_updated.
+export interface WorkflowsRequestedPayload {
+  saved?: SavedWorkflowPayload[];
+}
+
+export interface SavedWorkflowPayload {
+  name: string;
+  description?: string;
+  when_to_use?: string;
+  scope: string; // project | user
+  path: string;
+}
+
+export interface WorkflowStopPayload {
+  run_id: string;
 }
 
 export interface ToolStartPayload {

@@ -45,6 +45,11 @@ function summarizeParsedInput(name: string, input: unknown): string {
     case "agent_status":
     case "agent_stop":
       return field("agent_id");
+    case "workflow":
+      return field("name", "script_path") || scriptMetaName(field("script"));
+    case "workflow_status":
+    case "workflow_stop":
+      return field("run_id");
     case "create_file":
     case "file_read":
     case "read_file":
@@ -74,6 +79,16 @@ function summarizeParsedInput(name: string, input: unknown): string {
     default:
       return "";
   }
+}
+
+// An inline workflow script names itself in the meta export it starts with,
+// which reads better than the start of the script's JSON.
+function scriptMetaName(script: string): string {
+  if (!script) {
+    return "";
+  }
+  const match = script.match(/\bname\s*:\s*(['"`])([^'"`\n]+)\1/);
+  return match?.[2]?.trim() || "inline script";
 }
 
 function summarizeReplacementTargets(input: unknown): string {
@@ -253,6 +268,21 @@ function describeTool(toolCall: UIToolCall): ToolDescriptor {
         title: "Stop Agent",
         summary: summarizeInput(toolCall.name, toolCall.input),
       };
+    case "workflow":
+      return {
+        title: "Workflow",
+        summary: summarizeInput(toolCall.name, toolCall.input),
+      };
+    case "workflow_status":
+      return {
+        title: "Workflow Status",
+        summary: summarizeInput(toolCall.name, toolCall.input),
+      };
+    case "workflow_stop":
+      return {
+        title: "Stop Workflow",
+        summary: summarizeInput(toolCall.name, toolCall.input),
+      };
     case "web_search":
       return {
         title: "Web Search",
@@ -288,6 +318,8 @@ function permissionLabel(toolCall: UIToolCall): string {
       return "Waiting for permission to apply grouped replacements…";
     case "web_fetch":
       return "Waiting for permission to fetch URL…";
+    case "workflow":
+      return "Waiting for permission to run workflow…";
     default:
       return "Waiting for permission…";
   }
@@ -332,6 +364,12 @@ function runningLabel(toolCall: UIToolCall): string {
       return `Checking child agent status…${progressSuffix}`;
     case "agent_stop":
       return `Stopping child agent…${progressSuffix}`;
+    case "workflow":
+      return `Launching workflow…${progressSuffix}`;
+    case "workflow_status":
+      return `Checking workflow…${progressSuffix}`;
+    case "workflow_stop":
+      return `Stopping workflow…${progressSuffix}`;
     case "web_search":
       return `Searching the web…${progressSuffix}`;
     case "web_fetch":

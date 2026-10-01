@@ -38,6 +38,9 @@ func prepareDelegatedWorkspace(ctx context.Context, req toolpkg.AgentRunRequest,
 	if hasRunningBackgroundAgents() {
 		return delegatedWorkspace{}, fmt.Errorf("worktree-backed child agents require no active background agents because the runtime still uses a process-wide working directory")
 	}
+	if hasRunningWorkflows() {
+		return delegatedWorkspace{}, fmt.Errorf("worktree-backed child agents require no running workflows because the runtime still uses a process-wide working directory, which the workflow's agents resolve their paths against")
+	}
 	return createDelegatedWorktree(ctx, req, invocationID, cwd)
 }
 

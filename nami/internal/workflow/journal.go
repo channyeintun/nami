@@ -6,27 +6,28 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"sync"
 )
 
-// journalRecord is one line of a run journal.
+// journalRecord is one line of a run journal: an agent() call's key and the
+// result it produced.
 type journalRecord struct {
-	Key      string            `json:"key"`
-	NodeID   string            `json:"node_id"`
-	Output   string            `json:"output,omitempty"`
-	Metadata map[string]string `json:"metadata,omitempty"`
+	Key            string          `json:"key"`
+	Label          string          `json:"label,omitempty"`
+	Text           string          `json:"text,omitempty"`
+	Structured     json.RawMessage `json:"structured,omitempty"`
+	AgentID        string          `json:"agent_id,omitempty"`
+	SessionID      string          `json:"session_id,omitempty"`
+	TranscriptPath string          `json:"transcript_path,omitempty"`
 }
 
-// Journal makes a run resumable. Each node's result is recorded under a key
-// derived from its dependencies' keys, so a key transitively commits to
-// everything the node's result actually depended on. Replaying is therefore
-// sound without any global "chain broken" latch: a key can only match when the
-// whole ancestry that produced it matched, and a change re-runs exactly the
-// affected subgraph rather than everything downstream of it in some order.
+// Journal makes a run resumable. Every successful agent() call is recorded
+// under a key built from what the call asked for, and a later run seeded with
+// the journal replays a call whose key matches instead of running it again.
 //
 // A nil *Journal is usable and does nothing, so callers need no nil checks.
 type Journal struct {
@@ -37,15 +38,12 @@ type Journal struct {
 	writer *bufio.Writer
 }
 
-// OpenJournal opens the journal for a run, appending to any journal already at
-// path. When resumeFrom names a readable prior journal, its records seed the
-// replay cache.
+// OpenJournal opens the journal at path for appending. When resumeFrom names
+// an earlier run's journal, its records seed the replay cache; a missing one
+// is a cold start.
 //
-// A journal already at path is kept, never truncated: a run that landed on
-// an earlier run's journal, or on the very journal it resumes from, would
-// otherwise destroy records not yet replayed. Keeping them is safe, because a
-// record only replays for a node whose key it matches, and the key commits to
-// the node's whole ancestry.
+// A journal already at path is kept, never truncated, so a run can never
+// destroy records another run may still want to replay.
 func OpenJournal(path string, resumeFrom string) (*Journal, error) {
 	path = strings.TrimSpace(path)
 	if path == "" {
@@ -97,8 +95,6 @@ func terminateTornLine(file *os.File) error {
 func (j *Journal) load(path string) error {
 	file, err := os.Open(path)
 	if err != nil {
-		// A missing prior journal is a cold start, not a failure: the run
-		// proceeds with an empty cache and executes every node.
 		if errors.Is(err, os.ErrNotExist) {
 			return nil
 		}
@@ -120,65 +116,59 @@ func (j *Journal) load(path string) error {
 			// own, so skip the fragment and keep reading.
 			continue
 		}
+		if !strings.HasPrefix(record.Key, journalKeyVersion) {
+			continue
+		}
 		j.cached[record.Key] = record
 	}
 	return scanner.Err()
 }
 
+// maxJournalLineBytes bounds a record. load stops at a longer line, which
+// would fail every resume from the journal, so Record refuses to write one.
 const maxJournalLineBytes = 4 * 1024 * 1024
 
-// Replay returns a recorded result for the key, if the chain is still intact.
-func (j *Journal) Replay(key string) (NodeResult, bool) {
+// Replay returns the recorded result for a key.
+func (j *Journal) Replay(key string) (journalRecord, bool) {
 	if j == nil {
-		return NodeResult{}, false
+		return journalRecord{}, false
 	}
 	j.mu.Lock()
 	defer j.mu.Unlock()
 	record, ok := j.cached[key]
-	if !ok {
-		return NodeResult{}, false
-	}
-	// A replayed node is still journaled, so the resumed run's journal is a
-	// complete record on its own and can itself be resumed from.
-	j.append(record)
-	return NodeResult{Output: record.Output, Metadata: record.Metadata}, true
+	return record, ok
 }
 
-// Record appends a node result.
-func (j *Journal) Record(key string, nodeID string, result NodeResult) {
+// Record appends a result. A run replays results by appending them again, so
+// a resumed run's journal is complete on its own and can itself be resumed.
+func (j *Journal) Record(record journalRecord) error {
 	if j == nil {
-		return
-	}
-	j.mu.Lock()
-	defer j.mu.Unlock()
-	j.append(journalRecord{
-		Key:      key,
-		NodeID:   nodeID,
-		Output:   result.Output,
-		Metadata: result.Metadata,
-	})
-}
-
-// append writes one record. The caller holds the lock.
-func (j *Journal) append(record journalRecord) {
-	if j.writer == nil {
-		return
+		return nil
 	}
 	encoded, err := json.Marshal(record)
 	if err != nil {
-		return
+		return fmt.Errorf("encode journal record: %w", err)
 	}
-	// load stops at a line longer than it will read, which would fail every
-	// resume from this journal, so a result that large is left out and its
-	// node re-runs instead.
 	if len(encoded) >= maxJournalLineBytes {
-		return
+		return fmt.Errorf("result of %q is %d bytes, more than a journal line can hold", record.Label, len(encoded))
 	}
-	// Journaling is best-effort: a run that cannot record its progress should
-	// still produce its results, it just will not be resumable.
-	_, _ = j.writer.Write(encoded)
-	_ = j.writer.WriteByte('\n')
-	_ = j.writer.Flush()
+
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	if j.writer == nil {
+		return errors.New("journal is closed")
+	}
+	if _, err := j.writer.Write(encoded); err != nil {
+		return fmt.Errorf("write journal: %w", err)
+	}
+	if err := j.writer.WriteByte('\n'); err != nil {
+		return fmt.Errorf("write journal: %w", err)
+	}
+	// Flushed per record so a run that is killed keeps everything it finished.
+	if err := j.writer.Flush(); err != nil {
+		return fmt.Errorf("write journal: %w", err)
+	}
+	return nil
 }
 
 // Path is where the journal is written.
@@ -191,54 +181,41 @@ func (j *Journal) Path() string {
 
 // Close flushes and releases the journal file.
 func (j *Journal) Close() error {
-	if j == nil || j.file == nil {
+	if j == nil {
 		return nil
 	}
 	j.mu.Lock()
 	defer j.mu.Unlock()
-	if err := j.writer.Flush(); err != nil {
-		_ = j.file.Close()
-		j.file = nil
-		return err
+	if j.file == nil {
+		return nil
 	}
-	err := j.file.Close()
+	flushErr := j.writer.Flush()
+	closeErr := j.file.Close()
 	j.file = nil
 	j.writer = nil
-	return err
+	return errors.Join(flushErr, closeErr)
 }
 
-// nodeKey derives a node's journal key from its dependencies' keys plus its own
-// executable identity: the expanded prompt and the settings that change how it
-// runs. Description is deliberately excluded, so relabeling a node for a nicer
-// progress display does not invalidate its cached result.
+// journalKeyVersion prefixes every key, so a journal written by an older
+// keying scheme can never match.
+const journalKeyVersion = "v2:"
+
+// callDigest identifies what an agent() call asks for: its prompt and every
+// option that changes how the agent runs or what it returns. Label and phase
+// are left out, so relabelling a call for a nicer progress display keeps its
+// cached result.
 //
-// Keying on dependency keys rather than on a linear "everything before this"
-// chain is what makes resume work for a graph that runs in parallel. Launch
-// order varies between runs once more than one node is in flight, so a linear
-// chain would produce different keys for the same work and miss on every
-// resume. Dependency keys depend only on the graph and the data flowing
-// through it.
-//
-// The expanded prompt is what closes the loop on upstream results: if a
-// dependency re-ran and produced a different output, any node that interpolates
-// that output has a different prompt and so a different key. A node that does
-// not interpolate it was genuinely unaffected, and replaying it is correct.
-func nodeKey(dependencyKeys []string, node ResolvedNode, prompt string) string {
+// A run keys each call as its digest plus how many earlier calls in the run
+// had the same digest. Counting per digest, not by a global call index, is
+// what keeps keys stable when parallel work finishes in a different order: a
+// call's position in the run depends on timing, but its digest and how many
+// identical calls came before it do not, and identical calls can swap results
+// without anyone noticing.
+func callDigest(call AgentCall) string {
 	digest := sha256.New()
-	// Sorted so the key does not depend on the order dependencies were declared.
-	ordered := slices.Sorted(slices.Values(dependencyKeys))
-	for _, key := range ordered {
-		digest.Write([]byte(key))
+	for _, part := range []string{call.Prompt, string(call.Schema), call.Model, call.Effort, call.Isolation, call.AgentType} {
+		digest.Write([]byte(part))
 		digest.Write([]byte{0})
 	}
-	digest.Write([]byte(node.ID))
-	digest.Write([]byte{0})
-	digest.Write([]byte(prompt))
-	digest.Write([]byte{0})
-	digest.Write([]byte(node.Agent.SubagentType))
-	digest.Write([]byte{0})
-	digest.Write([]byte(node.Agent.Role))
-	digest.Write([]byte{0})
-	digest.Write([]byte(node.Agent.WorkspaceStrategy))
-	return "v1:" + hex.EncodeToString(digest.Sum(nil))
+	return journalKeyVersion + hex.EncodeToString(digest.Sum(nil))
 }

@@ -65,7 +65,8 @@ const (
 	EventBackgroundAgentUpdated   EventType = "background_agent_updated"
 
 	// Workflows
-	EventWorkflowProgress EventType = "workflow_progress"
+	EventWorkflowUpdated    EventType = "workflow_updated"
+	EventWorkflowsRequested EventType = "workflows_requested"
 
 	// Goals
 	EventGoalStateChanged EventType = "goal_state_changed"
@@ -108,6 +109,7 @@ const (
 	MsgBackgroundAgentInspect     ClientMessageType = "background_agent_inspect"
 	MsgBackgroundAgentStop        ClientMessageType = "background_agent_stop"
 	MsgSwarmDashboardInspect      ClientMessageType = "swarm_dashboard_inspect"
+	MsgWorkflowStop               ClientMessageType = "workflow_stop"
 )
 
 // ClientMessage is one NDJSON line from Ink frontend → Go engine.
@@ -151,19 +153,85 @@ type GoalStateChangedPayload struct {
 	Iterations int    `json:"iterations,omitempty"`
 }
 
-// WorkflowProgressPayload reports one node's state transition inside a
-// workflow graph run. One event per transition, never per output token, so a
-// wide graph cannot flood the UI stream.
-type WorkflowProgressPayload struct {
-	RunID       string   `json:"run_id"`
-	Description string   `json:"description,omitempty"`
-	NodeID      string   `json:"node_id"`
-	NodeLabel   string   `json:"node_label,omitempty"`
-	Status      string   `json:"status"`
-	Completed   int      `json:"completed"`
-	Total       int      `json:"total"`
-	DependsOn   []string `json:"depends_on,omitempty"`
-	Message     string   `json:"message,omitempty"`
+// WorkflowUpdatedPayload is a whole snapshot of one workflow run. The engine
+// sends it at most a few times a second while the run goes on and once more
+// when it ends, so the TUI replaces its copy instead of applying deltas, and a
+// wide run cannot flood the stream.
+type WorkflowUpdatedPayload struct {
+	RunID        string                 `json:"run_id"`
+	Name         string                 `json:"name"`
+	Description  string                 `json:"description,omitempty"`
+	Status       string                 `json:"status"` // running | completed | failed | stopped
+	CurrentPhase string                 `json:"current_phase,omitempty"`
+	Phases       []WorkflowPhasePayload `json:"phases,omitempty"`
+	// Agents is capped at 200: running first, then failed, then the most
+	// recent. AgentCount and the counts below cover every agent.
+	Agents     []WorkflowAgentPayload `json:"agents,omitempty"`
+	AgentCount int                    `json:"agent_count"`
+	Running    int                    `json:"running"`
+	Queued     int                    `json:"queued"`
+	Succeeded  int                    `json:"succeeded"`
+	Cached     int                    `json:"cached"`
+	Failed     int                    `json:"failed"`
+	Stopped    int                    `json:"stopped"`
+	// Logs holds the last 20 log lines.
+	Logs []string `json:"logs,omitempty"`
+	// ResultPreview is the start of the script's return value as JSON, at
+	// most 2000 runes.
+	ResultPreview string    `json:"result_preview,omitempty"`
+	Error         string    `json:"error,omitempty"`
+	Warnings      []string  `json:"warnings,omitempty"`
+	ScriptPath    string    `json:"script_path,omitempty"`
+	JournalPath   string    `json:"journal_path,omitempty"`
+	ResultPath    string    `json:"result_path,omitempty"`
+	StartedAt     time.Time `json:"started_at,omitzero"`
+	CompletedAt   time.Time `json:"completed_at,omitzero"`
+	DurationMs    int64     `json:"duration_ms,omitempty"`
+	TotalCostUSD  float64   `json:"total_cost_usd,omitempty"`
+	InputTokens   int       `json:"input_tokens,omitempty"`
+	OutputTokens  int       `json:"output_tokens,omitempty"`
+}
+
+// WorkflowPhasePayload is one phase of a run, in the order phases were first
+// seen.
+type WorkflowPhasePayload struct {
+	Title  string `json:"title"`
+	Detail string `json:"detail,omitempty"`
+	// Workflow names the nested workflow the phase belongs to, or is empty
+	// for the top-level script.
+	Workflow string `json:"workflow,omitempty"`
+}
+
+// WorkflowAgentPayload is one agent() call of a run.
+type WorkflowAgentPayload struct {
+	Index    int    `json:"index"`
+	Label    string `json:"label"`
+	Phase    string `json:"phase,omitempty"`
+	Workflow string `json:"workflow,omitempty"`
+	Status   string `json:"status"` // queued | running | succeeded | cached | failed | stopped
+	// Error is at most 300 runes.
+	Error          string `json:"error,omitempty"`
+	DurationMs     int64  `json:"duration_ms,omitempty"`
+	AgentID        string `json:"agent_id,omitempty"`
+	TranscriptPath string `json:"transcript_path,omitempty"`
+	// OutputPreview is at most 300 runes of the agent's text or structured
+	// output.
+	OutputPreview string `json:"output_preview,omitempty"`
+}
+
+// WorkflowsRequestedPayload opens the workflows dialog. The runs it lists
+// come from the workflow_updated events the TUI already holds.
+type WorkflowsRequestedPayload struct {
+	Saved []SavedWorkflowPayload `json:"saved,omitempty"`
+}
+
+// SavedWorkflowPayload is one saved workflow the user can run by name.
+type SavedWorkflowPayload struct {
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	WhenToUse   string `json:"when_to_use,omitempty"`
+	Scope       string `json:"scope"` // project | user
+	Path        string `json:"path"`
 }
 
 type ToolStartPayload struct {
@@ -532,6 +600,12 @@ type BackgroundAgentStopPayload struct {
 }
 
 type SwarmDashboardInspectPayload struct{}
+
+// WorkflowStopPayload asks the engine to stop a workflow run. The run's final
+// state arrives as a workflow_updated event once it settles.
+type WorkflowStopPayload struct {
+	RunID string `json:"run_id"`
+}
 
 type PermissionResponsePayload struct {
 	RequestID string `json:"request_id"`

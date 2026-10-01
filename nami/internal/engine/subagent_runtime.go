@@ -120,6 +120,61 @@ var generalPurposeSubagentTools = []string{
 	"swarm_update_handoff",
 }
 
+// subagentRunnerDeps is what every child agent shares, whichever runner
+// starts it.
+type subagentRunnerDeps struct {
+	bridge          *ipc.Bridge
+	registry        *toolpkg.Registry
+	parentTracker   *costpkg.Tracker
+	sessionStore    *session.Store
+	artifactManager *artifactspkg.Manager
+	hookRunner      *hooks.Runner
+	// chooseClient picks the model client a child runs on from its request's
+	// model override. It is a field so a test can run a child without the
+	// provider discovery the real choice does.
+	chooseClient func(modelOverride string) (api.LLMClient, string, error)
+}
+
+func newSubagentRunnerDeps(
+	bridge *ipc.Bridge,
+	registry *toolpkg.Registry,
+	parentTracker *costpkg.Tracker,
+	sessionStore *session.Store,
+	artifactManager *artifactspkg.Manager,
+	hookRunner *hooks.Runner,
+	modelState *ActiveModelState,
+	subagentModelState *ActiveSubagentModelState,
+) subagentRunnerDeps {
+	return subagentRunnerDeps{
+		bridge:          bridge,
+		registry:        registry,
+		parentTracker:   parentTracker,
+		sessionStore:    sessionStore,
+		artifactManager: artifactManager,
+		hookRunner:      hookRunner,
+		chooseClient: func(modelOverride string) (api.LLMClient, string, error) {
+			return chooseSubagentClient(modelState, subagentModelState, modelOverride, true)
+		},
+	}
+}
+
+// childRun is one child agent, prepared on the calling goroutine and executed
+// on whichever goroutine runs it.
+type childRun struct {
+	req          toolpkg.AgentRunRequest
+	subagentType string
+	invocationID string
+	client       api.LLMClient
+	modelID      string
+	// reasoningEffort is the request's normalized override, or "" to use the
+	// configured effort.
+	reasoningEffort string
+	scope           subagentScope
+	rolePolicy      *subagentRolePolicy
+	toolNames       []string
+	swarmSessionID  string
+}
+
 func makeSubagentRunner(
 	bridge *ipc.Bridge,
 	registry *toolpkg.Registry,
@@ -133,58 +188,77 @@ func makeSubagentRunner(
 	state *engineLoopState,
 	fallbackCWD string,
 ) toolpkg.AgentRunner {
+	deps := newSubagentRunnerDeps(bridge, registry, parentTracker, sessionStore, artifactManager, hookRunner, modelState, subagentModelState)
 	return func(ctx context.Context, req toolpkg.AgentRunRequest) (toolpkg.AgentRunResult, error) {
-		client, activeModelID := modelState.Get()
-		if client == nil {
-			return toolpkg.AgentRunResult{}, fmt.Errorf("agent tool is unavailable: model client is not initialized")
-		}
-
-		childClient, childActiveModelID, err := resolveSubagentClient(client, activeModelID, subagentModelState)
-		if err != nil {
-			return toolpkg.AgentRunResult{}, err
-		}
-
-		subagentType := toolpkg.NormalizeSubagentType(req.SubagentType)
-		if subagentType == "" {
-			subagentType = exploreSubagentType
-		}
-		if !toolpkg.IsSupportedSubagentType(subagentType) {
-			return toolpkg.AgentRunResult{}, fmt.Errorf("agent subagent_type %q is not supported yet", subagentType)
-		}
-
-		invocationID := newSessionID()
-
-		currentCWD := currentSubagentCWD(state, fallbackCWD)
-		rolePolicy, childToolNames, err := loadSubagentRolePolicy(currentCWD, req.Role, registry, subagentType)
-		if err != nil {
-			return toolpkg.AgentRunResult{}, err
-		}
-		swarmSessionID := toolpkg.CurrentSwarmRuntimeSessionID()
-		// The session the child reports to, which a background child can
-		// outlive.
-		ownerSessionID := activeSessionID()
-		// Snapshot the parent's permissions here, on the calling goroutine. A
-		// background child otherwise copied them from its own goroutine while
-		// the parent's later turns can be adding approval rules to them.
-		childPermissionCtx := permissions.CloneContext(permissionCtx)
-
-		execute := func(runCtx context.Context) (toolpkg.AgentRunResult, error) {
-			return executeSubagent(runCtx, req, subagentType, invocationID, bridge, registry, childPermissionCtx, parentTracker, sessionStore, artifactManager, hookRunner, childClient, childActiveModelID, currentCWD, rolePolicy, childToolNames, swarmSessionID, ownerSessionID, nil, nil)
-		}
-		if req.Background {
-			launch := launchBackgroundAgent(bridge, strings.TrimSpace(req.Description), strings.TrimSpace(req.Role), subagentType, invocationID, ownerSessionID, sessionStore, func(runCtx context.Context, stopControl *agent.StopController, reportStatus func(toolpkg.AgentRunResult)) (toolpkg.AgentRunResult, error) {
-				return executeSubagent(runCtx, req, subagentType, invocationID, bridge, registry, childPermissionCtx, parentTracker, sessionStore, artifactManager, hookRunner, childClient, childActiveModelID, currentCWD, rolePolicy, childToolNames, swarmSessionID, ownerSessionID, stopControl, reportStatus)
-			})
-			launch.SubagentType = subagentType
-			launch.Tools = append([]string(nil), childToolNames...)
-			return withChildMetadata(launch, strings.TrimSpace(req.Description), strings.TrimSpace(req.Role)), nil
-		}
-		result, err := execute(ctx)
-		if err != nil {
-			return toolpkg.AgentRunResult{}, err
-		}
-		return withChildMetadata(result, strings.TrimSpace(req.Description), strings.TrimSpace(req.Role)), nil
+		// The scope is read afresh on every call, here on the calling
+		// goroutine. The permission snapshot in particular: a background
+		// child otherwise copied it from its own goroutine while the parent's
+		// later turns can be adding approval rules to it.
+		return deps.run(ctx, req, captureSubagentScope(state, fallbackCWD, permissionCtx))
 	}
+}
+
+// run prepares a child from its request and runs it in the given scope: to
+// completion, or in the background when the request asks for that.
+func (d subagentRunnerDeps) run(ctx context.Context, req toolpkg.AgentRunRequest, scope subagentScope) (toolpkg.AgentRunResult, error) {
+	reasoningEffort := ""
+	if strings.TrimSpace(req.ReasoningEffort) != "" {
+		var err error
+		reasoningEffort, err = normalizeReasoningEffortOverride(req.ReasoningEffort)
+		if err != nil {
+			return toolpkg.AgentRunResult{}, err
+		}
+	}
+
+	childClient, childModelID, err := d.chooseClient(req.Model)
+	if err != nil {
+		return toolpkg.AgentRunResult{}, err
+	}
+
+	subagentType := toolpkg.NormalizeSubagentType(req.SubagentType)
+	if subagentType == "" {
+		subagentType = exploreSubagentType
+	}
+	if !toolpkg.IsSupportedSubagentType(subagentType) {
+		return toolpkg.AgentRunResult{}, fmt.Errorf("agent subagent_type %q is not supported yet", subagentType)
+	}
+
+	invocationID := newSessionID()
+
+	rolePolicy, childToolNames, err := loadSubagentRolePolicy(scope.cwd, req.Role, d.registry, subagentType)
+	if err != nil {
+		return toolpkg.AgentRunResult{}, err
+	}
+	child := childRun{
+		req:             req,
+		subagentType:    subagentType,
+		invocationID:    invocationID,
+		client:          childClient,
+		modelID:         childModelID,
+		reasoningEffort: reasoningEffort,
+		scope:           scope,
+		rolePolicy:      rolePolicy,
+		toolNames:       childToolNames,
+		swarmSessionID:  toolpkg.CurrentSwarmRuntimeSessionID(),
+	}
+	description := strings.TrimSpace(req.Description)
+	role := strings.TrimSpace(req.Role)
+
+	if req.Background {
+		// The child reports to scope.ownerSessionID, which it can outlive.
+		launch := launchBackgroundAgent(d.bridge, description, role, subagentType, invocationID, scope.ownerSessionID, d.sessionStore, func(runCtx context.Context, stopControl *agent.StopController, reportStatus func(toolpkg.AgentRunResult)) (toolpkg.AgentRunResult, error) {
+			return d.execute(runCtx, child, stopControl, reportStatus)
+		})
+		launch.SubagentType = subagentType
+		launch.Tools = append([]string(nil), childToolNames...)
+		return withChildMetadata(launch, description, role), nil
+	}
+	result, err := d.execute(ctx, child, nil, nil)
+	if err != nil {
+		// The partial result carries what the child spent before it failed.
+		return result, err
+	}
+	return withChildMetadata(result, description, role), nil
 }
 
 func currentSubagentCWD(state *engineLoopState, fallback string) string {
@@ -201,22 +275,53 @@ func currentSubagentCWD(state *engineLoopState, fallback string) string {
 	return strings.TrimSpace(fallback)
 }
 
-func resolveSubagentClient(parent api.LLMClient, activeModelID string, subagentModelState *ActiveSubagentModelState) (api.LLMClient, string, error) {
-	provider, activeModel := config.ParseModel(strings.TrimSpace(activeModelID))
-	provider = normalizeProvider(provider)
-	if strings.TrimSpace(activeModel) == "" {
-		activeModel = strings.TrimSpace(provider)
-		provider = ""
+// chooseSubagentClient picks the model client a child runs on: its request's
+// model override when it has one, and otherwise the session's subagent model.
+// saveSessionChoice says whether the session's choice, once coerced to a
+// usable model, is written back to subagentModelState. Only a child started
+// from the conversation's own turn may do that: a workflow's children run on
+// a background goroutine, where the write would race with a slash command
+// changing the subagent model between turns.
+func chooseSubagentClient(modelState *ActiveModelState, subagentModelState *ActiveSubagentModelState, modelOverride string, saveSessionChoice bool) (api.LLMClient, string, error) {
+	client, activeModelID := modelState.Get()
+	if client == nil {
+		return nil, "", fmt.Errorf("agent tool is unavailable: model client is not initialized")
 	}
+	if strings.TrimSpace(modelOverride) == "" {
+		return resolveSubagentClient(client, activeModelID, subagentModelState, saveSessionChoice)
+	}
+	cfg := config.Load()
+	selection, err := normalizeSubagentModelOverride(cfg, activeModelID, modelOverride)
+	if err != nil {
+		return nil, "", err
+	}
+	// Unlike the session's choice, an override is for this child only, so it
+	// is not saved as the session's subagent model.
+	return clientForSubagentSelection(client, activeModelID, selection, cfg)
+}
 
+func resolveSubagentClient(parent api.LLMClient, activeModelID string, subagentModelState *ActiveSubagentModelState, saveSessionChoice bool) (api.LLMClient, string, error) {
 	cfg := config.Load()
 	// Without a session choice, coerceSessionSubagentModel falls back to the
 	// configured subagent model together with its provider. Reading
 	// cfg.SubagentModel here instead dropped the provider the config keeps
 	// in its own field.
 	selection := coerceSessionSubagentModel(cfg, activeModelID, subagentModelState.Get())
-	if subagentModelState != nil {
+	if subagentModelState != nil && saveSessionChoice {
 		subagentModelState.Set(selection)
+	}
+	return clientForSubagentSelection(parent, activeModelID, selection, cfg)
+}
+
+// clientForSubagentSelection returns the client for a normalized subagent
+// model selection, reusing the parent's client when the selection is the
+// parent's own model.
+func clientForSubagentSelection(parent api.LLMClient, activeModelID string, selection string, cfg config.Config) (api.LLMClient, string, error) {
+	provider, activeModel := config.ParseModel(strings.TrimSpace(activeModelID))
+	provider = normalizeProvider(provider)
+	if strings.TrimSpace(activeModel) == "" {
+		activeModel = strings.TrimSpace(provider)
+		provider = ""
 	}
 
 	childProvider, childModel := resolveModelSelection(selection, provider)
@@ -231,29 +336,34 @@ func resolveSubagentClient(parent api.LLMClient, activeModelID string, subagentM
 	return childClient, modelRef(childProvider, childClient.ModelID()), nil
 }
 
-func executeSubagent(
+// execute runs a prepared child to the end. stopControl and reportStatus come
+// from the background launcher; a synchronous child has neither, and gets a
+// stop controller of its own when structured_output needs one.
+func (d subagentRunnerDeps) execute(
 	ctx context.Context,
-	req toolpkg.AgentRunRequest,
-	subagentType string,
-	invocationID string,
-	bridge *ipc.Bridge,
-	registry *toolpkg.Registry,
-	childPermissionCtx *permissions.Context,
-	parentTracker *costpkg.Tracker,
-	sessionStore *session.Store,
-	artifactManager *artifactspkg.Manager,
-	hookRunner *hooks.Runner,
-	client api.LLMClient,
-	childModelID string,
-	cwd string,
-	rolePolicy *subagentRolePolicy,
-	childToolNames []string,
-	swarmSessionID string,
-	ownerSessionID string,
+	child childRun,
 	stopControl *agent.StopController,
 	reportStatus func(toolpkg.AgentRunResult),
 ) (toolpkg.AgentRunResult, error) {
+	req := child.req
+	subagentType := child.subagentType
+	invocationID := child.invocationID
+	client := child.client
+	cwd := child.scope.cwd
 	childSessionID := invocationID
+
+	var structuredOutput *toolpkg.StructuredOutputTool
+	if len(req.OutputSchema) > 0 {
+		if stopControl == nil {
+			stopControl = agent.NewStopController()
+		}
+		var err error
+		structuredOutput, err = newChildStructuredOutput(req.OutputSchema, stopControl)
+		if err != nil {
+			return toolpkg.AgentRunResult{}, err
+		}
+	}
+
 	workspace, err := prepareDelegatedWorkspace(ctx, req, invocationID, cwd)
 	if err != nil {
 		return toolpkg.AgentRunResult{}, err
@@ -276,37 +386,40 @@ func executeSubagent(
 	childBranch := firstNonEmpty(strings.TrimSpace(workspace.Branch), currentGitBranch())
 	childStartedAt := time.Now()
 	childTracker := costpkg.NewTracker()
-	childRegistry := registry.CloneFiltered(childToolNames)
+	childRegistry := d.registry.CloneFiltered(child.toolNames)
+	if structuredOutput != nil {
+		childRegistry.Register(structuredOutput)
+	}
 	childBridge := ipc.NewBridge(strings.NewReader(""), io.Discard)
-	childTimingLogger := timing.NewSessionLogger(sessionStore.SessionDir(childSessionID))
-	childSkills, err := loadAvailableSkills(bridge, childCWD)
+	childTimingLogger := timing.NewSessionLogger(d.sessionStore.SessionDir(childSessionID))
+	childSkills, err := loadAvailableSkills(d.bridge, childCWD)
 	if err != nil {
 		return toolpkg.AgentRunResult{}, err
 	}
 	childMode := agent.ModeFast
-	startHookMessages := runChildStartHooks(ctx, hookRunner, childSessionID, invocationID, req, subagentType)
-	promptArchivePath, archiveErr := archiveDelegatedPrompt(sessionStore.SessionDir(childSessionID), req.Description, req.Prompt)
-	if archiveErr != nil && bridge != nil {
-		_ = bridge.EmitNotice(fmt.Sprintf("archive child prompt: %v", archiveErr))
-	}
-	childHandoff := buildDelegatedPromptBrief(req.Description, req.Prompt, req.Role, subagentType, promptArchivePath)
+	startHookMessages := runChildStartHooks(ctx, d.hookRunner, childSessionID, invocationID, req, subagentType)
+	childHandoff := childTaskMessage(d.bridge, d.sessionStore.SessionDir(childSessionID), req, subagentType)
 	childMessages := []api.Message{{Role: api.RoleUser, Content: injectChildHookContext(childHandoff, startHookMessages)}}
 	allowedDefs := childRegistry.Definitions()
 	childPrompt, err := withRolePromptSections(subagentSystemPrompt(subagentType, allowedDefs), cwd, req.Role)
 	if err != nil {
 		return toolpkg.AgentRunResult{}, err
 	}
+	if section := childOutputPromptSection(req.ForWorkflow, structuredOutput != nil); section != "" {
+		childPrompt = swarm.JoinPromptSections(childPrompt, section)
+	}
 	queryTools := allowedDefs
 	executionRegistry := childRegistry
-	transcriptPath := filepath.Join(sessionStore.SessionDir(childSessionID), "transcript.ndjson")
-	resultFile := filepath.Join(sessionStore.SessionDir(childSessionID), "agent-result.json")
+	transcriptPath := filepath.Join(d.sessionStore.SessionDir(childSessionID), "transcript.ndjson")
+	resultFile := filepath.Join(d.sessionStore.SessionDir(childSessionID), "agent-result.json")
 	lifecycle := &childLifecycleTracker{}
+	nudger := &structuredOutputNudger{tool: structuredOutput}
 
-	if err := persistSessionState(sessionStore, sessionStateParams{
+	if err := persistSessionState(d.sessionStore, sessionStateParams{
 		SessionID:     childSessionID,
 		CreatedAt:     childStartedAt,
 		Mode:          childMode,
-		Model:         childModelID,
+		Model:         child.modelID,
 		SubagentModel: "",
 		CWD:           childCWD,
 		Branch:        childBranch,
@@ -315,12 +428,12 @@ func executeSubagent(
 	}); err != nil {
 		return toolpkg.AgentRunResult{}, err
 	}
-	_ = sessionStore.SaveMetadata(session.Metadata{
+	_ = d.sessionStore.SaveMetadata(session.Metadata{
 		SessionID:     childSessionID,
 		CreatedAt:     childStartedAt,
 		UpdatedAt:     childStartedAt,
 		Mode:          string(childMode),
-		Model:         childModelID,
+		Model:         child.modelID,
 		SubagentModel: "",
 		CWD:           childCWD,
 		Branch:        childBranch,
@@ -336,10 +449,10 @@ func executeSubagent(
 		},
 		ExecuteToolBatch: func(callCtx context.Context, calls []api.ToolCall) ([]api.ToolResult, error) {
 			callCtx = toolpkg.WithFileReadState(callCtx, childReadState)
-			return executeToolCallsForSubagent(callCtx, subagentType, rolePolicy, executionRegistry, childPermissionCtx, hookRunner, artifactManager, childSessionID, sessionStore.SessionDir(childSessionID), childTracker, client.Capabilities().MaxOutputTokens, calls)
+			return executeToolCallsForSubagent(callCtx, subagentType, child.rolePolicy, executionRegistry, child.scope.permissionCtx, d.hookRunner, d.artifactManager, childSessionID, d.sessionStore.SessionDir(childSessionID), childTracker, client.Capabilities().MaxOutputTokens, calls)
 		},
 		CompactMessages: func(callCtx context.Context, current []api.Message, reason agent.CompactReason) (compact.CompactResult, error) {
-			sessionMemory, _ := loadSessionMemorySnapshot(callCtx, artifactManager, childSessionID)
+			sessionMemory, _ := loadSessionMemorySnapshot(callCtx, d.artifactManager, childSessionID)
 			result, err := compactWithMetrics(callCtx, childBridge, childTracker, client, childTimingLogger, childSessionID, 0, string(reason), sessionMemory, childPrompt, queryTools, current)
 			// The compacted conversation may no longer hold the reads the
 			// child's "unchanged" answers would point back to.
@@ -351,10 +464,13 @@ func executeSubagent(
 			return selector.Select(callCtx, files, userPrompt)
 		},
 		LoadSessionMemory: func(callCtx context.Context) (agent.SessionMemorySnapshot, error) {
-			return loadSessionMemorySnapshot(callCtx, artifactManager, childSessionID)
+			return loadSessionMemorySnapshot(callCtx, d.artifactManager, childSessionID)
 		},
 		BeforeStop: func(callCtx context.Context, stopReq agent.StopRequest) (agent.StopDecision, error) {
-			return evaluateChildStopHooks(callCtx, hookRunner, childSessionID, invocationID, req, subagentType, stopReq, lifecycle, transcriptPath, resultFile, reportStatus, rolePolicy, sessionStore, swarmSessionID, childStartedAt)
+			if decision, nudge := nudger.beforeStop(stopReq.StopReason); nudge {
+				return decision, nil
+			}
+			return evaluateChildStopHooks(callCtx, d.hookRunner, childSessionID, invocationID, req, subagentType, stopReq, lifecycle, transcriptPath, resultFile, reportStatus, child.rolePolicy, d.sessionStore, child.swarmSessionID, childStartedAt)
 		},
 		StopController: stopControl,
 		ApplyResultBudget: func(current []api.Message) []api.Message {
@@ -363,11 +479,11 @@ func executeSubagent(
 		EmitTelemetry: childBridge.EmitEvent,
 		PersistMessages: func(updated []api.Message) {
 			childMessages = updated
-			_ = persistSessionState(sessionStore, sessionStateParams{
+			_ = persistSessionState(d.sessionStore, sessionStateParams{
 				SessionID:     childSessionID,
 				CreatedAt:     childStartedAt,
 				Mode:          childMode,
-				Model:         childModelID,
+				Model:         child.modelID,
 				SubagentModel: "",
 				CWD:           childCWD,
 				Branch:        childBranch,
@@ -383,7 +499,7 @@ func executeSubagent(
 			Messages:        childMessages,
 			SystemPrompt:    childPrompt,
 			ModelID:         client.ModelID(),
-			ReasoningEffort: config.Load().ReasoningEffort,
+			ReasoningEffort: queryReasoningEffort(child.reasoningEffort),
 			Mode:            childMode,
 			SessionID:       childSessionID,
 			Skills:          childSkills,
@@ -395,7 +511,7 @@ func executeSubagent(
 		}, childDeps)
 		for event, streamErr := range stream {
 			if streamErr != nil {
-				runChildStopFailureHooks(ctx, hookRunner, childSessionID, invocationID, req, subagentType, childMessages, streamErr)
+				runChildStopFailureHooks(ctx, d.hookRunner, childSessionID, invocationID, req, subagentType, childMessages, streamErr)
 				return streamErr
 			}
 			if event.Type == ipc.EventTurnComplete {
@@ -408,23 +524,39 @@ func executeSubagent(
 		return nil
 	}
 	setupComplete = true
+	var queryErr error
 	if workspace.Strategy == swarm.WorkspaceWorktree {
-		if _, err := withDelegatedWorkspace(workspace, func(string) (toolpkg.AgentRunResult, error) {
+		_, queryErr = withDelegatedWorkspace(workspace, func(string) (toolpkg.AgentRunResult, error) {
 			return toolpkg.AgentRunResult{}, runQuery()
-		}); err != nil {
-			return toolpkg.AgentRunResult{}, err
-		}
+		})
 	} else {
-		if err := runQuery(); err != nil {
-			return toolpkg.AgentRunResult{}, err
-		}
+		queryErr = runQuery()
+	}
+	if queryErr != nil {
+		// The tokens a child spent before it failed or was cancelled were
+		// still spent. Charging them here keeps the session's cost honest,
+		// and the usage that comes back with the error lets a workflow count
+		// it against its budget.
+		snapshot := childTracker.Snapshot()
+		chargeChildCost(d.bridge, d.parentTracker, d.sessionStore, child.scope.ownerSessionID, snapshot)
+		return toolpkg.AgentRunResult{
+			Status:         "failed",
+			InvocationID:   invocationID,
+			SubagentType:   subagentType,
+			SessionID:      childSessionID,
+			TranscriptPath: transcriptPath,
+			Error:          queryErr.Error(),
+			TotalCostUSD:   snapshot.TotalCostUSD,
+			InputTokens:    snapshot.TotalInputTokens,
+			OutputTokens:   snapshot.TotalOutputTokens,
+		}, queryErr
 	}
 
-	if err := persistSessionState(sessionStore, sessionStateParams{
+	if err := persistSessionState(d.sessionStore, sessionStateParams{
 		SessionID:     childSessionID,
 		CreatedAt:     childStartedAt,
 		Mode:          childMode,
-		Model:         childModelID,
+		Model:         child.modelID,
 		SubagentModel: "",
 		CWD:           childCWD,
 		Branch:        childBranch,
@@ -434,6 +566,8 @@ func executeSubagent(
 		return toolpkg.AgentRunResult{}, err
 	}
 
+	// A structured_output call ends the child with its own stop reason, which
+	// is a completion like any other; only a cancel is not.
 	status := "completed"
 	errorMessage := ""
 	if turnStopReason == "cancelled" {
@@ -442,7 +576,28 @@ func executeSubagent(
 	}
 
 	childSnapshot := childTracker.Snapshot()
-	chargeChildCost(bridge, parentTracker, sessionStore, ownerSessionID, childSnapshot)
+	chargeChildCost(d.bridge, d.parentTracker, d.sessionStore, child.scope.ownerSessionID, childSnapshot)
+
+	summary := childSummary(childMessages, turnStopReason)
+	var structured json.RawMessage
+	if structuredOutput != nil && status == "completed" {
+		if value, recorded := structuredOutput.Value(); recorded {
+			structured = value
+			// The recorded object is the child's answer; text it wrote
+			// along the way is not.
+			summary = string(value)
+		} else {
+			// The caller expects an object. The child's text, reported as a
+			// success, would hand it prose instead. The run still comes back
+			// as a result rather than a bare error, so its caller keeps the
+			// transcript and the spend.
+			status = "failed"
+			errorMessage = "agent finished without calling structured_output"
+			if isChildLimitStopReason(turnStopReason) {
+				errorMessage = fmt.Sprintf("agent stopped at a limit (%s) before calling structured_output", turnStopReason)
+			}
+		}
+	}
 
 	result := toolpkg.AgentRunResult{
 		Status:         status,
@@ -451,19 +606,135 @@ func executeSubagent(
 		SessionID:      childSessionID,
 		TranscriptPath: transcriptPath,
 		OutputFile:     resultFile,
-		Summary:        childSummary(childMessages, turnStopReason),
+		Summary:        summary,
 		Error:          errorMessage,
 		TotalCostUSD:   childSnapshot.TotalCostUSD,
 		InputTokens:    childSnapshot.TotalInputTokens,
 		OutputTokens:   childSnapshot.TotalOutputTokens,
 		Tools:          toolDefinitionNames(childRegistry.Definitions()),
 		Metadata:       decorateChildWorkspaceMetadata(lifecycle.metadata(), workspace),
+		Structured:     structured,
 	}
 	if result.Metadata != nil {
 		result.Metadata.Role = strings.TrimSpace(req.Role)
 	}
-	saveAgentResultFile(bridge, result)
+	saveAgentResultFile(d.bridge, result)
 	return result, nil
+}
+
+// structuredOutputStopReason is the stop reason of a child that ended by
+// calling structured_output.
+const structuredOutputStopReason = "structured_output"
+
+// newChildStructuredOutput makes a child's structured_output tool. A valid
+// call ends the child's run at once: the result is in hand, and another model
+// turn would only spend tokens on prose nobody reads.
+func newChildStructuredOutput(schema json.RawMessage, stopControl *agent.StopController) (*toolpkg.StructuredOutputTool, error) {
+	tool, err := toolpkg.NewStructuredOutputTool(schema, func() {
+		stopControl.Request(structuredOutputStopReason)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("agent output schema: %w", err)
+	}
+	return tool, nil
+}
+
+// maxStructuredOutputNudges is how many times a child that tries to finish
+// without calling structured_output is sent back to call it.
+const maxStructuredOutputNudges = 2
+
+const structuredOutputNudgeMessage = "You have not called structured_output. Your result is only delivered through that tool: call structured_output now with an object that matches its schema. Do not answer in text."
+
+// structuredOutputNudger sends a child back to call structured_output when it
+// tries to finish without having called it, a bounded number of times. Only
+// the query loop calls it, so it needs no lock.
+type structuredOutputNudger struct {
+	tool *toolpkg.StructuredOutputTool
+	sent int
+}
+
+// beforeStop returns the decision that keeps the child going and true when
+// the child should be nudged, and false when the stop is for the stop hooks
+// to judge.
+func (n *structuredOutputNudger) beforeStop(stopReason string) (agent.StopDecision, bool) {
+	if n == nil || n.tool == nil {
+		return agent.StopDecision{}, false
+	}
+	// A cancel is the user overriding the child; nothing may hold it open.
+	// At a limit the query cannot go on whatever the decision, so a nudge
+	// would only keep the stop hooks from judging the child's real stop.
+	if isCancelledStopReason(stopReason) || isChildLimitStopReason(stopReason) || n.sent >= maxStructuredOutputNudges {
+		return agent.StopDecision{}, false
+	}
+	if _, recorded := n.tool.Value(); recorded {
+		return agent.StopDecision{}, false
+	}
+	n.sent++
+	return agent.StopDecision{
+		Continue:        true,
+		Reason:          "structured_output was not called",
+		FollowUpMessage: structuredOutputNudgeMessage,
+	}, true
+}
+
+// isChildLimitStopReason reports a stop the query loop forces at one of its
+// limits, which no stop decision can carry the child past.
+func isChildLimitStopReason(stopReason string) bool {
+	switch stopReason {
+	case agent.StopReasonMaxTurns, agent.ContinuationStopBudgetExhausted, agent.ContinuationStopDiminishingReturns:
+		return true
+	}
+	return false
+}
+
+// childTaskMessage is the child's first message. A long prompt written by the
+// parent model is archived and replaced by a brief. A workflow step's prompt
+// is built by a program for that one step and arrives whole: a brief would
+// drop exactly the data the step exists to process.
+func childTaskMessage(bridge *ipc.Bridge, sessionDir string, req toolpkg.AgentRunRequest, subagentType string) string {
+	if req.ForWorkflow {
+		return strings.TrimSpace(req.Prompt)
+	}
+	promptArchivePath, archiveErr := archiveDelegatedPrompt(sessionDir, req.Description, req.Prompt)
+	if archiveErr != nil && bridge != nil {
+		_ = bridge.EmitNotice(fmt.Sprintf("archive child prompt: %v", archiveErr))
+	}
+	return buildDelegatedPromptBrief(req.Description, req.Prompt, req.Role, subagentType, promptArchivePath)
+}
+
+// childOutputPromptSection tells a child how its answer is read when that is
+// not the default, a <final_answer> report to the parent agent.
+func childOutputPromptSection(forWorkflow bool, hasOutputSchema bool) string {
+	var sections []string
+	if forWorkflow {
+		workflow := `Workflow step:
+You are one step of an automated workflow. A program, not a person, reads your result and uses it as data.
+No preamble, no recap of how you worked, no offers of follow-up work.`
+		if !hasOutputSchema {
+			workflow += "\nPut exactly the result the task asks for inside <final_answer>; a format the task gives replaces the format above."
+		}
+		sections = append(sections, workflow)
+	}
+	if hasOutputSchema {
+		sections = append(sections, `Structured output:
+Deliver your result by calling the structured_output tool exactly once, with an object that matches its schema, when your work is done. That call is your answer and ends your run: do not write a final text answer or <final_answer>, whatever the format above says. If the call reports a schema mismatch, fix the object and call it again.`)
+	}
+	return swarm.JoinPromptSections(sections...)
+}
+
+// queryReasoningEffort is the effort a child's model calls ask for. Without an
+// override it is the configured effort, read when the child starts as it
+// always was. No provider has a "max" level: it asks for xhigh, the highest
+// any offers, which the client lowers to high for a model without xhigh.
+func queryReasoningEffort(override string) string {
+	switch override {
+	case "":
+		return config.Load().ReasoningEffort
+	case reasoningEffortMax:
+		return api.ReasoningEffortXHigh
+	default:
+		return override
+	}
 }
 
 // childSummary is the child's last reply, which the parent agent takes as its
@@ -984,11 +1255,12 @@ func executeToolCallsForSubagent(
 			results[index] = api.ToolResult{ToolCallID: call.ID, Output: err.Error(), IsError: true}
 			continue
 		}
-		if !subagentAllowsToolName(subagentType, normalized.Name) {
+		alwaysAllowed := childAlwaysMayCall(normalized.Name)
+		if !alwaysAllowed && !subagentAllowsToolName(subagentType, normalized.Name) {
 			results[index] = api.ToolResult{ToolCallID: normalized.ID, Output: fmt.Sprintf("tool %q is not allowed in the %s subagent", normalized.Name, subagentType), IsError: true}
 			continue
 		}
-		if rolePolicy != nil && !rolePolicy.allowsToolName(normalized.Name) {
+		if !alwaysAllowed && rolePolicy != nil && !rolePolicy.allowsToolName(normalized.Name) {
 			results[index] = api.ToolResult{ToolCallID: normalized.ID, Output: rolePolicy.toolDeniedMessage(normalized.Name), IsError: true}
 			continue
 		}
@@ -1006,7 +1278,7 @@ func executeToolCallsForSubagent(
 			results[index] = api.ToolResult{ToolCallID: normalized.ID, Output: err.Error(), IsError: true}
 			continue
 		}
-		if !subagentAllowsTool(subagentType, tool.Permission()) {
+		if !alwaysAllowed && !subagentAllowsTool(subagentType, tool.Permission()) {
 			results[index] = api.ToolResult{ToolCallID: normalized.ID, Output: fmt.Sprintf("tool %q is not allowed in the %s subagent", tool.Name(), subagentType), IsError: true}
 			continue
 		}
@@ -1079,6 +1351,16 @@ func subagentAllowsTool(subagentType string, permission toolpkg.PermissionLevel)
 	default:
 		return true
 	}
+}
+
+// childAlwaysMayCall reports whether a tool passes every per-child allowlist:
+// the subagent type's, a swarm role's, and the permission limit of the type.
+// structured_output is in none of them, since a child has it exactly when its
+// request set an output schema, and the child's own registry is what grants
+// it. A role or type that restricts tools must not stop a child from
+// delivering the result it was asked for.
+func childAlwaysMayCall(toolName string) bool {
+	return toolName == toolpkg.StructuredOutputToolName
 }
 
 func subagentAllowsToolName(subagentType string, toolName string) bool {

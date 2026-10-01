@@ -14,6 +14,7 @@ import type {
   ResumeSelectionResponsePayload,
   StreamEvent,
   UserInputImagePayload,
+  WorkflowStopPayload,
 } from "../protocol/types.js";
 import {
   parseEvent,
@@ -297,6 +298,12 @@ export function useEngine(enginePath: string, options: EngineOptions = {}) {
     [send],
   );
 
+  const sendWorkflowStop = useCallback(
+    (payload: WorkflowStopPayload) =>
+      send(createMessage("workflow_stop", payload)),
+    [send],
+  );
+
   return {
     ...state,
     sendInput,
@@ -316,5 +323,6 @@ export function useEngine(enginePath: string, options: EngineOptions = {}) {
     sendBackgroundAgentInspect,
     sendBackgroundAgentStop,
     sendSwarmDashboardInspect,
+    sendWorkflowStop,
   };
 }

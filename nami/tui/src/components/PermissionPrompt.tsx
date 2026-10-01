@@ -297,6 +297,10 @@ function buildQuestion(
     return "Allow shell command to run?";
   }
 
+  if (tool === "workflow") {
+    return "Allow this workflow to run in the background?";
+  }
+
   if (targetKind === "url" && targetValue.trim()) {
     return `Allow access to ${targetValue.trim()}?`;
   }
@@ -318,6 +322,8 @@ function buildDetailLabel(targetKind: string | undefined): string {
       return "Pattern";
     case "command":
       return "Command";
+    case "workflow":
+      return "Workflow";
     default:
       return "Target";
   }
@@ -339,6 +345,8 @@ function formatToolLabel(tool: string): string {
       return "Replace String In File";
     case "multi_replace_string_in_file":
       return "Multi Replace String In File";
+    case "workflow":
+      return "Workflow";
     default:
       return tool.replace(/_/g, " ");
   }

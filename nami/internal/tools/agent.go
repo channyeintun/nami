@@ -25,6 +25,20 @@ type AgentRunRequest struct {
 	WorkspaceStrategy string
 	SubagentType      string
 	Background        bool
+	// Model overrides the session's subagent model for this child only, as
+	// "provider/model" or a bare model id. Empty uses the session's choice.
+	Model string
+	// ReasoningEffort overrides the configured reasoning effort for this
+	// child only: low, medium, high, xhigh, or max. Empty uses the config.
+	ReasoningEffort string
+	// OutputSchema makes the child return a JSON object matching this JSON
+	// Schema by calling the structured_output tool. The object arrives in
+	// AgentRunResult.Structured.
+	OutputSchema json.RawMessage
+	// ForWorkflow marks a child run as one step of a workflow script. Its
+	// prompt is delivered whole instead of being archived into a brief, and
+	// it is told its final answer is data a program reads, not a message.
+	ForWorkflow bool
 }
 
 type ChildAgentMetadata struct {
@@ -63,6 +77,9 @@ type AgentRunResult struct {
 	OutputTokens   int                 `json:"output_tokens,omitempty"`
 	Tools          []string            `json:"tools,omitempty"`
 	Metadata       *ChildAgentMetadata `json:"metadata,omitempty"`
+	// Structured is the validated object a child returned through
+	// structured_output, when its request set OutputSchema.
+	Structured json.RawMessage `json:"structured,omitempty"`
 }
 
 type AgentRunner func(context.Context, AgentRunRequest) (AgentRunResult, error)

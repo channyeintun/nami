@@ -19,8 +19,10 @@ import {
 } from "silvery";
 import { useEngine } from "./hooks/useEngine.js";
 import {
+  describeWorkflowOutcome,
   isEngineNotice,
   useEvents,
+  workflowRunFromPayload,
   type UIArtifact,
   type UIMessage,
   type UISystemMessage,
@@ -37,6 +39,7 @@ import RewindSelectionPrompt from "./components/RewindSelectionPrompt.js";
 import ResumeSelectionPrompt from "./components/ResumeSelectionPrompt.js";
 import GoalProgress from "./components/GoalProgress.js";
 import WorkflowProgress from "./components/WorkflowProgress.js";
+import WorkflowsDialog from "./components/WorkflowsDialog.js";
 import StreamOutput from "./components/StreamOutput.js";
 import StatusBar from "./components/StatusBar.js";
 import TranscriptSearchPrompt from "./components/TranscriptSearchPrompt.js";
@@ -55,9 +58,12 @@ import type {
   BackgroundCommandUpdatedPayload,
   ErrorPayload,
   PermissionResponseDecision,
+  SavedWorkflowPayload,
   SwarmDashboardSnapshotPayload,
   StreamEvent,
   UserInputImagePayload,
+  WorkflowsRequestedPayload,
+  WorkflowUpdatedPayload,
 } from "./protocol/types.js";
 
 const THINKING_TOGGLE_SHORTCUT_LABEL = "Opt+T";
@@ -86,6 +92,14 @@ interface QueuedPrompt {
 
 interface PendingTaskNotification {
   id: number;
+  text: string;
+  kind: "command" | "workflow";
+  /** The session the engine was serving when the update arrived. */
+  sessionId: string | null;
+}
+
+interface WorkflowTaskNotification {
+  runId: string;
   text: string;
 }
 
@@ -117,6 +131,10 @@ const App: FC<AppProps> = ({ enginePath, model, mode, autoMode }) => {
     PendingTaskNotification[]
   >([]);
   const nextTaskNotificationIdRef = useRef(1);
+  // The model hears about each finished workflow run once, even if its final
+  // snapshot reaches the client again.
+  const notifiedWorkflowRunIdsRef = useRef(new Set<string>());
+  const latestSessionIdRef = useRef<string | null>(null);
   const [transcriptSearchActive, setTranscriptSearchActive] = useState(false);
   const [transcriptSearchQuery, setTranscriptSearchQuery] = useState("");
   const [transcriptSearchSelectedIndex, setTranscriptSearchSelectedIndex] =
@@ -131,6 +149,10 @@ const App: FC<AppProps> = ({ enginePath, model, mode, autoMode }) => {
   >({});
   const [swarmDashboardSnapshot, setSwarmDashboardSnapshot] =
     useState<SwarmDashboardSnapshotPayload | null>(null);
+  const [showWorkflows, setShowWorkflows] = useState(false);
+  const [savedWorkflows, setSavedWorkflows] = useState<SavedWorkflowPayload[]>(
+    [],
+  );
   const [showFooterHints, setShowFooterHints] = useState(false);
   const previousStreamingRef = useRef(false);
   const footerHintTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
@@ -158,6 +180,15 @@ const App: FC<AppProps> = ({ enginePath, model, mode, autoMode }) => {
     (event: StreamEvent) => {
       if (event.type === "background_tasks_requested") {
         setShowBackgroundTasks(true);
+      }
+
+      if (event.type === "workflows_requested") {
+        setSavedWorkflows(
+          savedWorkflowsFromPayload(
+            event.payload as WorkflowsRequestedPayload | undefined,
+          ),
+        );
+        setShowWorkflows(true);
       }
 
       if (event.type === "background_command_detail") {
@@ -195,19 +226,43 @@ const App: FC<AppProps> = ({ enginePath, model, mode, autoMode }) => {
         setSlashCommandInFlight(false);
       }
 
+      // Read straight off the event stream rather than from UI state, which
+      // React updates later: a run the engine re-announces right after
+      // switching sessions must be filed under the session it belongs to.
+      const switchedSessionId = sessionIdFromEvent(event);
+      if (switchedSessionId) {
+        latestSessionIdRef.current = switchedSessionId;
+      }
+
       handleEvent(event);
 
-      const taskNotification = buildBackgroundCommandTaskNotification(event);
-      if (!taskNotification) {
+      const queueTaskNotification = (
+        text: string,
+        kind: PendingTaskNotification["kind"],
+      ) => {
+        const id = nextTaskNotificationIdRef.current;
+        nextTaskNotificationIdRef.current += 1;
+        const sessionId = latestSessionIdRef.current;
+        setPendingTaskNotifications((current) => [
+          ...current,
+          { id, text, kind, sessionId },
+        ]);
+      };
+
+      const commandNotification = buildBackgroundCommandTaskNotification(event);
+      if (commandNotification) {
+        queueTaskNotification(commandNotification, "command");
         return;
       }
 
-      const id = nextTaskNotificationIdRef.current;
-      nextTaskNotificationIdRef.current += 1;
-      setPendingTaskNotifications((current) => [
-        ...current,
-        { id, text: taskNotification },
-      ]);
+      const workflowNotification = buildWorkflowTaskNotification(event);
+      if (
+        workflowNotification &&
+        !notifiedWorkflowRunIdsRef.current.has(workflowNotification.runId)
+      ) {
+        notifiedWorkflowRunIdsRef.current.add(workflowNotification.runId);
+        queueTaskNotification(workflowNotification.text, "workflow");
+      }
     },
     [handleEvent],
   );
@@ -256,24 +311,35 @@ const App: FC<AppProps> = ({ enginePath, model, mode, autoMode }) => {
   // Task notifications still queued when the user moves to another session
   // (/clear, /resume) are about work that session started; handing them to
   // the new conversation's model would ask it about commands it never ran.
+  // Each one names its own session, so a run the engine re-announces for the
+  // session just resumed survives the switch even when it arrived before
+  // this effect ran.
   const notifiedSessionIdRef = useRef(uiState.sessionId);
   useEffect(() => {
     if (
       notifiedSessionIdRef.current !== null &&
       notifiedSessionIdRef.current !== uiState.sessionId
     ) {
-      setPendingTaskNotifications([]);
+      setPendingTaskNotifications((current) =>
+        current.filter(
+          (notification) =>
+            notification.sessionId === null ||
+            notification.sessionId === uiState.sessionId,
+        ),
+      );
     }
     notifiedSessionIdRef.current = uiState.sessionId;
   }, [uiState.sessionId]);
 
   // A dead engine sends no turn_complete, so without this the turn would
-  // look busy forever. The Tasks dialog goes too: it would sit over the
-  // engine error, polling an engine that is gone.
+  // look busy forever. The Tasks and Workflows dialogs go too: they would
+  // sit over the engine error, showing and stopping work of an engine that
+  // is gone.
   useEffect(() => {
     if (engine.error) {
       endTurnOnEngineExit();
       setShowBackgroundTasks(false);
+      setShowWorkflows(false);
     }
   }, [endTurnOnEngineExit, engine.error]);
 
@@ -300,6 +366,7 @@ const App: FC<AppProps> = ({ enginePath, model, mode, autoMode }) => {
       uiState.pendingModelSelection ||
       uiState.pendingReasoningSelection ||
       showBackgroundTasks ||
+      showWorkflows ||
       uiState.pendingArtifactReview
     ) {
       focusManager.blur();
@@ -314,6 +381,7 @@ const App: FC<AppProps> = ({ enginePath, model, mode, autoMode }) => {
     uiState.pendingRewindSelection,
     uiState.pendingResumeSelection,
     showBackgroundTasks,
+    showWorkflows,
   ]);
 
   useEffect(() => {
@@ -391,6 +459,7 @@ const App: FC<AppProps> = ({ enginePath, model, mode, autoMode }) => {
         uiState,
         isEngineAvailable,
         slashCommandInFlight,
+        showWorkflows || showBackgroundTasks,
       )
     ) {
       return;
@@ -408,6 +477,8 @@ const App: FC<AppProps> = ({ enginePath, model, mode, autoMode }) => {
   }, [
     isEngineAvailable,
     pendingTaskNotifications,
+    showBackgroundTasks,
+    showWorkflows,
     slashCommandInFlight,
     submitTaskNotification,
     uiState.isStreaming,
@@ -426,6 +497,7 @@ const App: FC<AppProps> = ({ enginePath, model, mode, autoMode }) => {
         uiState,
         isEngineAvailable,
         slashCommandInFlight,
+        showWorkflows || showBackgroundTasks,
       )
     ) {
       return;
@@ -448,6 +520,8 @@ const App: FC<AppProps> = ({ enginePath, model, mode, autoMode }) => {
     isEngineAvailable,
     pendingTaskNotifications.length,
     queuedPrompts,
+    showBackgroundTasks,
+    showWorkflows,
     slashCommandInFlight,
     submitPrompt,
     uiState.isStreaming,
@@ -659,7 +733,12 @@ const App: FC<AppProps> = ({ enginePath, model, mode, autoMode }) => {
       return;
     }
     setQueuedPrompts([]);
-    setPendingTaskNotifications([]);
+    // A finished workflow sends its result once, so dropping its
+    // notification would leave the model never knowing the run ended.
+    // Interrupting an unrelated turn is not a reason to forget it.
+    setPendingTaskNotifications((current) =>
+      current.filter((notification) => notification.kind === "workflow"),
+    );
     setPasteWarning(null);
     cancelActiveTurn();
     engine.sendCancel();
@@ -670,6 +749,7 @@ const App: FC<AppProps> = ({ enginePath, model, mode, autoMode }) => {
     !!engine.error ||
     transcriptSearchActive ||
     showBackgroundTasks ||
+    showWorkflows ||
     uiState.pendingPermission !== null ||
     uiState.pendingAskUserQuestion !== null ||
     uiState.pendingArtifactReview !== null ||
@@ -692,6 +772,7 @@ const App: FC<AppProps> = ({ enginePath, model, mode, autoMode }) => {
     pendingRewindSelection: uiState.pendingRewindSelection !== null,
     pendingResumeSelection: uiState.pendingResumeSelection !== null,
     backgroundTasksOpen: showBackgroundTasks,
+    workflowsOpen: showWorkflows,
   });
   const promptActivityLabel = uiState.isStreaming
     ? activeTurnStatusLabel(
@@ -784,6 +865,18 @@ const App: FC<AppProps> = ({ enginePath, model, mode, autoMode }) => {
     [engine],
   );
 
+  const handleWorkflowsClose = useCallback(() => {
+    setShowWorkflows(false);
+  }, []);
+
+  const { sendWorkflowStop } = engine;
+  const handleWorkflowStop = useCallback(
+    (runId: string) => {
+      sendWorkflowStop({ run_id: runId });
+    },
+    [sendWorkflowStop],
+  );
+
   const handleBackgroundTaskStop = useCallback(
     (kind: "command" | "agent", id: string) => {
       if (kind === "command") {
@@ -833,6 +926,13 @@ const App: FC<AppProps> = ({ enginePath, model, mode, autoMode }) => {
       onClose={handleBackgroundTasksClose}
       onInspectTask={handleBackgroundTaskInspect}
       onStopTask={handleBackgroundTaskStop}
+    />
+  ) : showWorkflows ? (
+    <WorkflowsDialog
+      runs={uiState.workflowRuns}
+      saved={savedWorkflows}
+      onClose={handleWorkflowsClose}
+      onStopRun={handleWorkflowStop}
     />
   ) : null;
 
@@ -1034,9 +1134,7 @@ const App: FC<AppProps> = ({ enginePath, model, mode, autoMode }) => {
             {uiState.goalProgress && uiState.isStreaming ? (
               <GoalProgress progress={uiState.goalProgress} />
             ) : null}
-            {uiState.workflowRun && uiState.isStreaming ? (
-              <WorkflowProgress run={uiState.workflowRun} />
-            ) : null}
+            <WorkflowProgress runs={uiState.workflowRuns} />
             {transcriptSearchActive ? (
               <TranscriptSearchPrompt
                 query={transcriptSearchQuery}
@@ -1219,6 +1317,60 @@ function buildBackgroundCommandTaskSummary(
   }
 }
 
+/**
+ * The prompt that tells the model a workflow run has finished, or null for
+ * any other event. A stopped run gets none: whoever stopped it, the user or
+ * the model, already knows. The caller sends each run's notification once.
+ */
+function buildWorkflowTaskNotification(
+  event: StreamEvent,
+): WorkflowTaskNotification | null {
+  if (event.type !== "workflow_updated") {
+    return null;
+  }
+
+  const run = workflowRunFromPayload(
+    event.payload as WorkflowUpdatedPayload | undefined,
+    new Date().toISOString(),
+  );
+  if (!run || (run.status !== "completed" && run.status !== "failed")) {
+    return null;
+  }
+
+  const runId = escapeTaskNotificationText(run.runId);
+  const lines = [
+    "<task-notification>",
+    `  <task-id>${runId}</task-id>`,
+    `  <status>${escapeTaskNotificationText(run.status)}</status>`,
+    `  <summary>${escapeTaskNotificationText(describeWorkflowOutcome(run))}</summary>`,
+    `  <run-id>${runId}</run-id>`,
+  ];
+
+  if (run.resultPreview) {
+    lines.push(
+      `  <result>${escapeTaskNotificationText(run.resultPreview)}</result>`,
+    );
+  }
+
+  if (run.error) {
+    lines.push(`  <error>${escapeTaskNotificationText(run.error)}</error>`);
+  }
+
+  if (run.resultPath) {
+    lines.push(
+      `  <result-path>${escapeTaskNotificationText(run.resultPath)}</result-path>`,
+    );
+  }
+
+  lines.push("</task-notification>");
+  lines.push("");
+  lines.push(
+    `This is a workflow update, not a new user request. Call workflow_status with run_id "${runId}" if the result preview is not enough before replying.`,
+  );
+
+  return { runId: run.runId, text: lines.join("\n") };
+}
+
 function normalizeBackgroundCommandTaskStatus(
   status: string | undefined,
 ): string {
@@ -1326,14 +1478,30 @@ function selectStartupNotices(
   return notices;
 }
 
+/** The session an event moves the engine to, if it is one that does. */
+function sessionIdFromEvent(event: StreamEvent): string | null {
+  if (event.type !== "session_updated" && event.type !== "session_restored") {
+    return null;
+  }
+  const payload = event.payload as { session_id?: unknown } | undefined;
+  const sessionId =
+    typeof payload?.session_id === "string" ? payload.session_id.trim() : "";
+  return sessionId || null;
+}
+
+// A dialog that owns the keyboard holds queued turns back: a turn started
+// under it could raise a permission prompt that the dialog's keys would also
+// answer.
 function isQueuedPromptDispatchBlocked(
   uiState: ReturnType<typeof useEvents>["uiState"],
   isEngineAvailable: boolean,
   slashCommandInFlight: boolean,
+  dialogOpen: boolean,
 ): boolean {
   return (
     !isEngineAvailable ||
     slashCommandInFlight ||
+    dialogOpen ||
     uiState.isStreaming ||
     uiState.pendingPermission !== null ||
     uiState.pendingAskUserQuestion !== null ||
@@ -1432,6 +1600,7 @@ function getPromptBlockedReason({
   isEngineReady,
   engineError,
   backgroundTasksOpen,
+  workflowsOpen,
   pendingAskUserQuestion,
   pendingModelSelection,
   pendingReasoningSelection,
@@ -1443,6 +1612,7 @@ function getPromptBlockedReason({
   isEngineReady: boolean;
   engineError: string | null;
   backgroundTasksOpen: boolean;
+  workflowsOpen: boolean;
   pendingAskUserQuestion: boolean;
   pendingModelSelection: boolean;
   pendingReasoningSelection: boolean;
@@ -1475,6 +1645,9 @@ function getPromptBlockedReason({
   if (backgroundTasksOpen) {
     return "tasks open";
   }
+  if (workflowsOpen) {
+    return "workflows open";
+  }
   if (transcriptSearchActive) {
     return "search open";
   }
@@ -1486,4 +1659,38 @@ function getPromptBlockedReason({
 
 function backgroundTaskKey(kind: "command" | "agent", id: string): string {
   return `${kind}:${id}`;
+}
+
+// The saved workflows /workflows lists. An entry without a name or a path
+// could be neither shown nor told apart from the others.
+function savedWorkflowsFromPayload(
+  payload: WorkflowsRequestedPayload | undefined,
+): SavedWorkflowPayload[] {
+  if (!Array.isArray(payload?.saved)) {
+    return [];
+  }
+  return payload.saved.flatMap((entry) => {
+    const name = typeof entry?.name === "string" ? entry.name.trim() : "";
+    const path = typeof entry?.path === "string" ? entry.path.trim() : "";
+    if (!name || !path) {
+      return [];
+    }
+    return [
+      {
+        name,
+        path,
+        scope: entry.scope === "user" ? "user" : "project",
+        description: optionalTrimmed(entry.description),
+        when_to_use: optionalTrimmed(entry.when_to_use),
+      },
+    ];
+  });
+}
+
+function optionalTrimmed(value: unknown): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
 }

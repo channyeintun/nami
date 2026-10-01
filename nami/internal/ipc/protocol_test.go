@@ -14,6 +14,7 @@ func TestUnsetTimestampsAreLeftOut(t *testing.T) {
 		BackgroundCommandUpdatedPayload{CommandID: "c1", Status: "running"},
 		BackgroundCommandDetailPayload{CommandID: "c1", Status: "running"},
 		SwarmHandoffPayload{ID: "h1", Status: "pending"},
+		WorkflowUpdatedPayload{RunID: "wf_1", Status: "running"},
 	}
 	for _, payload := range payloads {
 		encoded, err := json.Marshal(payload)
